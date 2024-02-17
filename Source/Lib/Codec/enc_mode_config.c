@@ -155,7 +155,9 @@ uint8_t svt_aom_get_enable_me_16x16(EncMode enc_mode) {
 uint8_t svt_aom_get_gm_core_level(EncMode enc_mode, bool super_res_off) {
     uint8_t gm_level = 0;
     if (super_res_off) {
-        if (enc_mode <= ENC_MR)
+        if (enc_mode <= ENC_MRP)
+            gm_level = 1;
+        else if (enc_mode <= ENC_MR)
             gm_level = 2;
         else if (enc_mode <= ENC_M5)
             gm_level = 4;
@@ -191,7 +193,15 @@ static void set_hme_search_params(PictureParentControlSet *pcs, MeContext *me_ct
     me_ctx->num_hme_sa_w = 2;
     me_ctx->num_hme_sa_h = 2;
     // Set HME level 0 min and max search areas
-    if (pcs->enc_mode <= ENC_M1) {
+    if (pcs->enc_mode <= ENC_MRS) {
+        if (input_resolution < INPUT_SIZE_4K_RANGE) {
+            me_ctx->hme_l0_sa.sa_min = (SearchArea){128, 128};
+            me_ctx->hme_l0_sa.sa_max = (SearchArea){256, 256};
+        } else {
+            me_ctx->hme_l0_sa.sa_min = (SearchArea){240, 240};
+            me_ctx->hme_l0_sa.sa_max = (SearchArea){480, 480};
+        }
+    } else if (pcs->enc_mode <= ENC_M1) {
         if (input_resolution < INPUT_SIZE_4K_RANGE) {
             me_ctx->hme_l0_sa.sa_min = (SearchArea){32, 32};
             me_ctx->hme_l0_sa.sa_max = (SearchArea){192, 192};
@@ -755,7 +765,9 @@ void svt_aom_sig_deriv_me(SequenceControlSet *scs, PictureParentControlSet *pcs,
     }
     // Set pre-hme level (0-2)
     uint8_t prehme_level = 0;
-    if (sc_class1)
+    if (enc_mode <= ENC_MRS)
+        prehme_level = 1;
+    else if (sc_class1)
         prehme_level = rtc_tune ? 1 : 2;
     else if (flat_rtc) {
         if (enc_mode <= ENC_M8)
@@ -788,7 +800,9 @@ void svt_aom_sig_deriv_me(SequenceControlSet *scs, PictureParentControlSet *pcs,
 
     uint8_t me_ref_prune_level = 0;
 
-    if (sc_class1) {
+    if (enc_mode <= ENC_MRS)
+        me_ref_prune_level = 0;
+    else if (sc_class1) {
         if (enc_mode <= ENC_M2)
             me_ref_prune_level = 1;
         else if (enc_mode <= ENC_M7)
@@ -825,7 +839,9 @@ void svt_aom_sig_deriv_me(SequenceControlSet *scs, PictureParentControlSet *pcs,
     svt_aom_set_me_sr_adjustment_ctrls(me_ctx, me_sr_adj_lvl);
 
     uint8_t mv_sa_adj_level = 0;
-    if (enc_mode <= ENC_M0)
+    if (enc_mode <= ENC_MRS)
+        mv_sa_adj_level = 1;
+    else if (enc_mode <= ENC_M0)
         mv_sa_adj_level = 2;
     else
         mv_sa_adj_level = 0;
@@ -1683,7 +1699,9 @@ static void set_palette_level(PictureParentControlSet *pcs, uint8_t palette_leve
 uint16_t svt_aom_get_max_can_count(EncMode enc_mode) {
     //NOTE: this is a memory feature and not a speed feature. it should not be have any speed/quality impact.
     uint16_t mem_max_can_count;
-    if (enc_mode <= ENC_M1)
+    if (enc_mode <= ENC_MRS)
+        mem_max_can_count = 2500;
+    else if (enc_mode <= ENC_M1)
         mem_max_can_count = 1225;
     else if (enc_mode <= ENC_M2)
         mem_max_can_count = 1000;
@@ -3926,7 +3944,12 @@ uint8_t svt_aom_get_nic_level(SequenceControlSet *scs, EncMode enc_mode, uint8_t
                               uint8_t sc_class1) {
     uint8_t    nic_level;
     const bool flat_rtc = rtc_tune && scs->use_flat_ipp;
-    if (scs->allintra) {
+
+    if (enc_mode <= ENC_MRS)
+        nic_level = 0;
+    else if (enc_mode <= ENC_MRP)
+        nic_level = 1;
+    else if (scs->allintra) {
         if (scs->input_resolution <= INPUT_SIZE_1080p_RANGE) {
             if (enc_mode <= ENC_MR)
                 nic_level = 2;
@@ -6984,7 +7007,10 @@ void svt_aom_sig_deriv_enc_dec(SequenceControlSet *scs, PictureControlSet *pcs, 
     md_subpel_pme_controls(ctx, pme_subpel_level);
     uint8_t rate_est_level = 0;
     if (pd_pass == PD_PASS_0) {
-        rate_est_level = 2;
+        if (enc_mode <= ENC_MRP)
+            rate_est_level = 1;
+        else
+            rate_est_level = 2;
     } else {
         rate_est_level = 1;
     }
@@ -7004,6 +7030,9 @@ void svt_aom_sig_deriv_enc_dec(SequenceControlSet *scs, PictureControlSet *pcs, 
     if (pd_pass == PD_PASS_0) {
         intra_level                = 8;
         dist_based_ang_intra_level = 2;
+    } else if (enc_mode <= ENC_MRS) {
+        intra_level                = 1;
+        dist_based_ang_intra_level = 0;
     } else {
         intra_level                = pcs->intra_level;
         dist_based_ang_intra_level = pcs->dist_based_ang_intra_level;
@@ -7083,7 +7112,9 @@ bool svt_aom_get_disallow_8x8(EncMode enc_mode, bool allintra, bool rtc_tune, co
 uint8_t svt_aom_get_nsq_geom_level(bool allintra, ResolutionRange input_resolution, EncMode enc_mode,
                                    InputCoeffLvl coeff_lvl, bool rtc) {
     uint8_t nsq_geom_level;
-    if (allintra) {
+    if (enc_mode <= ENC_MRP) {
+        nsq_geom_level = 1;
+    } else if (allintra) {
         if (input_resolution <= INPUT_SIZE_1080p_RANGE) {
             if (enc_mode <= ENC_MR) {
                 if (coeff_lvl == HIGH_LVL)
@@ -7147,7 +7178,11 @@ uint8_t svt_aom_get_nsq_geom_level(bool allintra, ResolutionRange input_resoluti
 uint8_t svt_aom_get_nsq_search_level(PictureControlSet *pcs, EncMode enc_mode, InputCoeffLvl coeff_lvl, uint32_t qp) {
     int        nsq_search_level;
     const bool rtc_tune = pcs->scs->static_config.rtc;
-    if (pcs->scs->allintra) {
+    if (enc_mode <= ENC_MRS) {
+        nsq_search_level = 1;
+    } else if (enc_mode <= ENC_MRP) {
+        nsq_search_level = 2;
+    } else if (pcs->scs->allintra) {
         if (pcs->scs->input_resolution <= INPUT_SIZE_1080p_RANGE) {
             if (enc_mode <= ENC_MR) {
                 nsq_search_level = 3;
@@ -7202,6 +7237,10 @@ uint8_t svt_aom_get_nsq_search_level(PictureControlSet *pcs, EncMode enc_mode, I
     if (nsq_search_level == 0)
         return nsq_search_level;
 
+    // don't band if ENC_MRP or ENC_MRS
+    if (enc_mode <= ENC_MRP) {
+        return nsq_search_level;
+    }
 #define NSQ_MODULATION_MIN_LEVEL 8
     if (nsq_search_level > NSQ_MODULATION_MIN_LEVEL) {
         if (pcs->ppcs->r0_gen) {
@@ -7525,7 +7564,9 @@ static void set_pic_lpd0_lvl(PictureControlSet *pcs, EncMode enc_mode) {
 
 uint8_t get_inter_compound_level(EncMode enc_mode) {
     uint8_t comp_level;
-    if (enc_mode <= ENC_M0)
+    if (enc_mode <= ENC_MRS)
+        comp_level = 1;
+    else if (enc_mode <= ENC_M0)
         comp_level = 3;
     else if (enc_mode <= ENC_M2)
         comp_level = 4;
@@ -7557,7 +7598,9 @@ uint8_t get_filter_intra_level(SequenceControlSet *scs, EncMode enc_mode) {
 
 uint8_t svt_aom_get_inter_intra_level(EncMode enc_mode, uint8_t transition_present) {
     uint8_t inter_intra_level = 0;
-    if (enc_mode <= ENC_M1)
+    if (enc_mode <= ENC_MRS)
+        inter_intra_level = 1;
+    else if (enc_mode <= ENC_M1)
         inter_intra_level = 2;
     else if (enc_mode <= ENC_M8)
         inter_intra_level = transition_present ? 2 : 0;
@@ -7579,6 +7622,11 @@ uint8_t svt_aom_get_obmc_level(EncMode enc_mode, uint32_t qp, uint8_t seq_qp_mod
         obmc_level = 6;
     else
         obmc_level = 0;
+    // don't band if ENC_MRP or ENC_MRS
+    if (enc_mode <= ENC_MRP) {
+        return obmc_level;
+    }
+
     // QP-banding
     if (!(enc_mode <= ENC_M0) && obmc_level && seq_qp_mod) {
         if (enc_mode <= ENC_M3) {
@@ -7808,7 +7856,11 @@ void svt_aom_sig_deriv_mode_decision_config(SequenceControlSet *scs, PictureCont
 
     // Set the level for the txt search
     pcs->txt_level = 0;
-    if (allintra) {
+    if (enc_mode <= ENC_MRS) {
+        pcs->txt_level = 1;
+    } else if (enc_mode <= ENC_MRP) {
+        pcs->txt_level = 2;
+    } else if (allintra) {
         if (scs->input_resolution <= INPUT_SIZE_1080p_RANGE) {
             if (enc_mode <= ENC_M2)
                 pcs->txt_level = 2;
@@ -7902,7 +7954,9 @@ void svt_aom_sig_deriv_mode_decision_config(SequenceControlSet *scs, PictureCont
         pcs->rdoq_level = 0;
     // Set the level the interpolation search
     pcs->interpolation_search_level = 0;
-    if (enc_mode <= ENC_MR)
+    if (enc_mode <= ENC_MRS)
+        pcs->interpolation_search_level = 1;
+    else if (enc_mode <= ENC_MR)
         pcs->interpolation_search_level = 2;
     else if (enc_mode <= ENC_M7 || (!rtc_tune && !allintra && enc_mode <= ENC_M8))
         pcs->interpolation_search_level = 4;
@@ -8018,7 +8072,9 @@ void svt_aom_sig_deriv_mode_decision_config(SequenceControlSet *scs, PictureCont
     } else
         pcs->inter_intra_level = 0;
 
-    if (allintra) {
+    if (enc_mode <= ENC_MRP) {
+        pcs->txs_level = 1;
+    } else if (allintra) {
         if (scs->input_resolution <= INPUT_SIZE_1080p_RANGE) {
             if (enc_mode <= ENC_M3) {
                 pcs->txs_level = 2;
