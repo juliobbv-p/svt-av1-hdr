@@ -186,7 +186,9 @@ uint8_t svt_aom_get_gm_core_level(EncMode enc_mode, bool super_res_off) {
 #else
     uint8_t gm_level = 0;
     if (super_res_off) {
-        if (enc_mode <= ENC_MR) {
+        if (enc_mode <= ENC_MRP) {
+            gm_level = 1;
+        } else if (enc_mode <= ENC_MR) {
             gm_level = 2;
         } else if (enc_mode <= ENC_M4) {
             gm_level = 4;
@@ -227,7 +229,15 @@ static void set_hme_search_params(PictureParentControlSet* pcs, MeContext* me_ct
     me_ctx->num_hme_sa_w = 2;
     me_ctx->num_hme_sa_h = 2;
     // Set HME level 0 min and max search areas
-    if (enc_mode <= ENC_M1) {
+    if (enc_mode <= ENC_MRS) {
+        if (input_resolution < INPUT_SIZE_4K_RANGE) {
+            me_ctx->hme_l0_sa.sa_min = (SearchArea){128, 128};
+            me_ctx->hme_l0_sa.sa_max = (SearchArea){256, 256};
+        } else {
+            me_ctx->hme_l0_sa.sa_min = (SearchArea){240, 240};
+            me_ctx->hme_l0_sa.sa_max = (SearchArea){480, 480};
+        }
+    } else if (enc_mode <= ENC_M1) {
         if (input_resolution < INPUT_SIZE_4K_RANGE) {
             me_ctx->hme_l0_sa.sa_min = (SearchArea){32, 32};
             me_ctx->hme_l0_sa.sa_max = (SearchArea){192, 192};
@@ -731,7 +741,9 @@ void svt_aom_sig_deriv_me(SequenceControlSet* scs, PictureParentControlSet* pcs,
     me_ctx->reduce_hme_l0_sr_th_max = 0;
     // Set pre-hme level (0-2)
     uint8_t prehme_level = 0;
-    if (rtc_tune) {
+    if (enc_mode <= ENC_MRS) {
+        prehme_level = 1;
+    } else if (rtc_tune) {
         if (enc_mode <= ENC_M8) {
             prehme_level = 2;
         } else if (enc_mode <= ENC_M10 || (enc_mode == ENC_M11 && !use_flat_ipp)) {
@@ -758,7 +770,9 @@ void svt_aom_sig_deriv_me(SequenceControlSet* scs, PictureParentControlSet* pcs,
 
     uint8_t me_ref_prune_level = 0;
 
-    if (rtc_tune) {
+    if (enc_mode <= ENC_MRS) {
+        me_ref_prune_level = 0;
+    } else if (rtc_tune) {
         if (use_flat_ipp) {
             me_ref_prune_level = 6;
         } else {
@@ -794,7 +808,9 @@ void svt_aom_sig_deriv_me(SequenceControlSet* scs, PictureParentControlSet* pcs,
     svt_aom_set_me_sr_adjustment_ctrls(me_ctx, me_sr_adj_lvl);
 
     uint8_t mv_sa_adj_level = 0;
-    if (enc_mode <= ENC_M0) {
+    if (enc_mode <= ENC_MRS) {
+        mv_sa_adj_level = 1;
+    } else if (enc_mode <= ENC_M0) {
         mv_sa_adj_level = 2;
     } else {
         mv_sa_adj_level = 0;
@@ -1936,7 +1952,9 @@ static void set_palette_level(PictureParentControlSet* pcs, uint8_t palette_leve
 uint16_t svt_aom_get_max_can_count(EncMode enc_mode, bool rtc) {
     //NOTE: this is a memory feature and not a speed feature. it should not be have any speed/quality impact.
     uint16_t mem_max_can_count;
-    if (rtc) {
+    if (enc_mode <= ENC_MRS) {
+        mem_max_can_count = 2500;
+    } else if (rtc) {
         // RTC allocation upper bound: sized to cover the worst-case candidate injection count per preset
         // (up to 3L pred structure), with headroom for preset-boundary tuning (e.g. an Mn tool tested at Mn+1).
         if (enc_mode <= ENC_M7) {
@@ -4520,7 +4538,11 @@ void svt_aom_set_wm_controls(ModeDecisionContext* ctx, uint8_t wm_level) {
 // Get the nic_level used for each preset (to be passed to setting function: svt_aom_set_nic_controls())
 uint8_t svt_aom_get_nic_level_default(EncMode enc_mode, uint8_t is_base) {
     uint8_t nic_level;
-    if (enc_mode <= ENC_MR) {
+    if (enc_mode <= ENC_MRS) {
+        nic_level = 0;
+    } else if (enc_mode <= ENC_MRP) {
+        nic_level = 1;
+    } else if (enc_mode <= ENC_MR) {
         nic_level = is_base ? 1 : 2;
     } else if (enc_mode <= ENC_M0) {
         nic_level = is_base ? 2 : 4;
@@ -7998,6 +8020,10 @@ void svt_aom_sig_deriv_enc_dec_default(PictureControlSet* pcs, ModeDecisionConte
     // intra_level must be greater than 0 for I_SLICE
     uint8_t intra_level                = pcs->intra_level;
     uint8_t dist_based_ang_intra_level = pcs->dist_based_ang_intra_level;
+    if (enc_mode <= ENC_MRS) {
+        intra_level                = 1;
+        dist_based_ang_intra_level = 0;
+    }
     set_intra_ctrls(pcs, ctx, intra_level, dist_based_ang_intra_level);
 
     // Use Hadamard at MDS0
@@ -8240,7 +8266,9 @@ void svt_aom_sig_deriv_enc_dec_allintra(PictureControlSet* pcs, ModeDecisionCont
     ctx->parent_cost_bias = 995;
 
     uint8_t skip_sub_depth_lvl;
-    if (enc_mode <= ENC_M7) {
+    if (enc_mode <= ENC_MRS) {
+        skip_sub_depth_lvl = 0;
+    } else if (enc_mode <= ENC_M7) {
         skip_sub_depth_lvl = 1;
     } else {
         skip_sub_depth_lvl = 2;
@@ -8303,7 +8331,9 @@ bool svt_aom_get_disallow_8x8_allintra() {
 
 uint8_t svt_aom_get_nsq_geom_level_default(EncMode enc_mode, InputCoeffLvl coeff_lvl) {
     uint8_t nsq_geom_level;
-    if (enc_mode <= ENC_M0) {
+    if (enc_mode <= ENC_MRP) {
+        nsq_geom_level = 1;
+    } else if (enc_mode <= ENC_M0) {
         if (coeff_lvl == HIGH_LVL) {
             nsq_geom_level = 2;
         } else { // regular or low
@@ -8343,7 +8373,11 @@ uint8_t svt_aom_get_nsq_search_level_default(PictureControlSet* pcs, EncMode enc
                                              uint32_t qp) {
     int nsq_search_level;
 
-    if (enc_mode <= ENC_M0) {
+    if (enc_mode <= ENC_MRS) {
+        nsq_search_level = 1;
+    } else if (enc_mode <= ENC_MRP) {
+        nsq_search_level = 2;
+    } else if (enc_mode <= ENC_M0) {
         const uint8_t is_base = pcs->ppcs->temporal_layer_index == 0;
         nsq_search_level      = is_base ? 2 : 3;
     } else if (enc_mode <= ENC_M2) {
@@ -8850,7 +8884,9 @@ static void set_pic_pd0_lvl_allintra(PictureControlSet* pcs, EncMode enc_mode) {
 
 uint8_t get_inter_compound_level(EncMode enc_mode) {
     uint8_t comp_level;
-    if (enc_mode <= ENC_M0) {
+    if (enc_mode <= ENC_MRS) {
+        comp_level = 1;
+    } else if (enc_mode <= ENC_M0) {
         comp_level = 3;
     } else if (enc_mode <= ENC_M2) {
         comp_level = 4;
@@ -8895,7 +8931,9 @@ uint8_t get_filter_intra_level_allintra(EncMode enc_mode) {
 
 uint8_t svt_aom_get_inter_intra_level(EncMode enc_mode, uint8_t transition_present) {
     uint8_t inter_intra_level = 0;
-    if (enc_mode <= ENC_M1) {
+    if (enc_mode <= ENC_MRS) {
+        inter_intra_level = 1;
+    } else if (enc_mode <= ENC_M1) {
         inter_intra_level = 2;
     } else if (enc_mode <= ENC_M8) {
         inter_intra_level = transition_present ? 2 : 0;
@@ -8919,6 +8957,11 @@ uint8_t svt_aom_get_obmc_level(EncMode enc_mode, uint32_t qp, uint8_t seq_qp_mod
     } else {
         obmc_level = 0;
     }
+    // don't band if ENC_MRP or ENC_MRS
+    if (enc_mode <= ENC_MRP) {
+        return obmc_level;
+    }
+
     // QP-banding
     if (!(enc_mode <= ENC_M0) && obmc_level && seq_qp_mod) {
         if (enc_mode <= ENC_M3) {
@@ -9148,7 +9191,11 @@ void svt_aom_sig_deriv_mode_decision_config_default(SequenceControlSet* scs, Pic
 
     // Set the level for the txt search
     pcs->txt_level = 0;
-    if (enc_mode <= ENC_MR) {
+    if (enc_mode <= ENC_MRS) {
+        pcs->txt_level = 1;
+    } else if (enc_mode <= ENC_MRP) {
+        pcs->txt_level = 2;
+    } else if (enc_mode <= ENC_MR) {
         pcs->txt_level = is_base ? 2 : 3;
     } else if (enc_mode <= ENC_M2) {
         pcs->txt_level = is_base ? 2 : 5;
@@ -9174,7 +9221,9 @@ void svt_aom_sig_deriv_mode_decision_config_default(SequenceControlSet* scs, Pic
 
     // Set the level the interpolation search
     pcs->interpolation_search_level = 0;
-    if (enc_mode <= ENC_MR) {
+    if (enc_mode <= ENC_MRS) {
+        pcs->interpolation_search_level = 1;
+    } else if (enc_mode <= ENC_MR) {
         pcs->interpolation_search_level = 2;
     } else if (enc_mode <= ENC_M8) {
         pcs->interpolation_search_level = 4;
@@ -9268,7 +9317,9 @@ void svt_aom_sig_deriv_mode_decision_config_default(SequenceControlSet* scs, Pic
         pcs->inter_intra_level = 0;
     }
 
-    if (enc_mode <= ENC_M1) {
+    if (enc_mode <= ENC_MRP) {
+        pcs->txs_level = 1;
+    } else if (enc_mode <= ENC_M1) {
         pcs->txs_level = 2;
     } else if (enc_mode <= ENC_M8) {
         pcs->txs_level = is_base ? 3 : 0;
@@ -9278,10 +9329,13 @@ void svt_aom_sig_deriv_mode_decision_config_default(SequenceControlSet* scs, Pic
         pcs->txs_level = 0;
     }
 
-    // QP-banding
-    if (pcs->txs_level && scs->seq_qp_mod) {
-        if (sq_qp > 58 && (scs->seq_qp_mod == 1 || scs->seq_qp_mod == 2)) {
-            pcs->txs_level = pcs->txs_level == 1 ? pcs->txs_level : pcs->txs_level - 1;
+    // don't band if ENC_MRP or ENC_MRS
+    if (enc_mode > ENC_MRP) {
+        // QP-banding
+        if (pcs->txs_level && scs->seq_qp_mod) {
+            if (sq_qp > 58 && (scs->seq_qp_mod == 1 || scs->seq_qp_mod == 2)) {
+                pcs->txs_level = pcs->txs_level == 1 ? pcs->txs_level : pcs->txs_level - 1;
+            }
         }
     }
     // Set tx_mode for the frame header
@@ -10070,7 +10124,9 @@ void svt_aom_sig_deriv_mode_decision_config_allintra(SequenceControlSet* scs, Pi
     pcs->cand_reduction_level = 0;
 
     // Set the level for the txt search
-    if (enc_mode <= ENC_M3) {
+    if (enc_mode <= ENC_MRS) {
+        pcs->txt_level = 1;
+    } else if (enc_mode <= ENC_M3) {
         pcs->txt_level = 2;
     } else if (enc_mode <= ENC_M5) {
         pcs->txt_level = 3;
@@ -10126,7 +10182,9 @@ void svt_aom_sig_deriv_mode_decision_config_allintra(SequenceControlSet* scs, Pi
     pcs->nsq_search_level = svt_aom_get_nsq_search_level_allintra(pcs, enc_mode, scs->static_config.qp);
 
     //set the txs level
-    if (enc_mode <= ENC_M3) {
+    if (enc_mode <= ENC_MRP) {
+        pcs->txs_level = 1;
+    } else if (enc_mode <= ENC_M3) {
         pcs->txs_level = 2;
     } else if (enc_mode <= ENC_M7) {
         pcs->txs_level = 3;
