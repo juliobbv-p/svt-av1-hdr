@@ -41,7 +41,7 @@
 #endif
 
 #ifndef MIN_ENC_PRESET
-#define MIN_ENC_PRESET                      ENC_MR
+#define MIN_ENC_PRESET                      ENC_MRS
 #endif
 
 // When set to 1, EB_CPU_FLAGS_NEON is unconditionally set for all ARCH_AARCH64
