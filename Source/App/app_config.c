@@ -650,8 +650,8 @@ ConfigDescription config_entry_options[] = {
      "Do not print out progress, default is 0 [1: `" PROGRESS_TOKEN " 0`, 0: `" PROGRESS_TOKEN " 1`]"},
 
     {PRESET_TOKEN,
-     "Encoder preset, presets < 0 are for debugging. Higher presets means faster encodes, but with "
-     "a quality tradeoff, default is 8 [-1-13]"},
+     "Encoder preset, presets < 0 are for research purposes. Higher presets means faster encodes, but with "
+     "a quality tradeoff, default is 8 [-3-13]"},
 
     {SVTAV1_PARAMS, "colon separated list of key=value pairs of parameters with keys based on config file options"},
 
@@ -1953,8 +1953,8 @@ uint32_t get_passes(int32_t argc, char *const argv[], EncPass enc_pass[MAX_ENC_P
     }
     if (find_token(argc, argv, PRESET_TOKEN, config_string) == 0) {
         enc_mode = strtol(config_string, NULL, 0);
-        if (enc_mode > MAX_ENC_PRESET || enc_mode < -1) {
-            fprintf(stderr, "Error: EncoderMode must be in the range of [-1-%d]\n", MAX_ENC_PRESET);
+        if (enc_mode > MAX_ENC_PRESET || enc_mode < -3) {
+            fprintf(stderr, "Error: EncoderMode must be in the range of [-3-%d]\n", MAX_ENC_PRESET);
             return 0;
         }
     }

@@ -42,6 +42,8 @@ extern "C" {
 #endif
 #endif /* ATTRIBUTE_PACKED */
 typedef enum ATTRIBUTE_PACKED {
+    ENC_MRS        = -3, // Highest quality research mode (slowest)
+    ENC_MRP        = -2, // Previous research mode with quality/speed tradeoffs found in v1.8.0
     ENC_MR         = -1, //Research mode with higher quality than M0
     ENC_M0         = 0,
     ENC_M1         = 1,
@@ -205,11 +207,11 @@ typedef struct SvtAv1SFramePositions {
 typedef struct EbSvtAv1EncConfiguration {
     /**
      * @brief Encoder preset used.
-     * -2 and -1 are for debug purposes and should not be used.
+     * -3, -2 and -1 are for research purposes and are extremely slow.
      * 0 is the highest quality mode but is the slowest,
      * 13 is the fastest mode but is not as high quality.
      *
-     * Min value is -2.
+     * Min value is -3.
      * Max value is 13.
      * Default is 12.
      */
