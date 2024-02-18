@@ -1657,7 +1657,7 @@ static bool check_long(const ConfigDescription *cfg_entry, const ConfigDescripti
 }
 
 static void print_options(const char *title, const ConfigDescription *options) {
-    printf("\n%s:\n", title);
+    printf("\n\x1b[1;4m%s\x1b[0m:\n", title);
 
     for (const ConfigDescription *index = options; index->token; ++index) {
         // this only works if short and long token are one after another
@@ -1698,9 +1698,9 @@ uint32_t get_help(int32_t argc, char *const argv[]) {
         return 0;
 
     printf(
-        "Usage: SvtAv1EncApp <options> <-b dst_filename> -i src_filename\n"
+        "\x1b[1;4mUsage\x1b[0m: SvtAv1EncApp <options> <-b dst_filename> -i src_filename\n"
         "\n"
-        "Examples:\n"
+        "\x1b[1;4mExamples\x1b[0m:\n"
         "Multi-pass encode (VBR):\n"
         "    SvtAv1EncApp <--stats svtav1_2pass.log> --passes 2 --rc 1 --tbr 1000 -b dst_filename "
         "-i src_filename\n"
