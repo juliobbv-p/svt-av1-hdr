@@ -9,10 +9,40 @@
 # PATENTS file, you can obtain it at https://www.aomedia.org/license/patent-license.
 #
 
+cmake_minimum_required(VERSION 3.5...3.28)
+
 # APP Directory CMakeLists.txt
 
 # Include Subdirectories
 include_directories(${PROJECT_SOURCE_DIR}/Source/API/)
+find_package(PkgConfig)
+if(NOT PkgConfig_FOUND)
+  message(WARNING "PkgConfig not found; disabled building with dovi & hdr10plus.")
+endif()
+
+# libdovi detection & preprocessor macro
+option(LIBDOVI_FOUND "Use the dovi library" OFF)
+if(LIBDOVI_FOUND)
+  if(PKG_CONFIG_FOUND)
+  pkg_check_modules(PC_LIBDOVI dovi QUIET)
+  endif()
+
+  find_library(LIBDOVI_LIBRARY NAMES dovi libdovi
+                               PATHS ${PC_LIBDOVI_LIBDIR})
+  if(NOT LIBDOVI_LIBRARY)
+  message(FATAL_ERROR "dovi library not found!")
+  endif()
+
+  find_path(LIBDOVI_INCLUDE_DIR NAMES libdovi/rpu_parser.h
+                                PATHS ${PC_LIBDOVI_INCLUDEDIR})
+
+  set(LIBDOVI_INCLUDE_DIRS ${LIBDOVI_INCLUDE_DIR})
+  set(LIBDOVI_LIBRARIES ${LIBDOVI_LIBRARY})
+  add_definitions(-DLIBDOVI_FOUND=1)
+  execute_process(COMMAND ${CMAKE_COMMAND} -E echo_append "-- Building with dovi support - Yes\n")
+else()
+  execute_process(COMMAND ${CMAKE_COMMAND} -E echo_append "-- Building with dovi support - No\n")
+endif()
 
 set(all_files
     ../API/EbConfigMacros.h
@@ -46,6 +76,6 @@ endif()
 
 #********** SET COMPILE FLAGS************
 # Link the Encoder App
-target_link_libraries(SvtAv1EncApp PRIVATE SvtAv1Enc)
+target_link_libraries(SvtAv1EncApp PRIVATE SvtAv1Enc ${LIBDOVI_LIBRARY})
 
 install(TARGETS SvtAv1EncApp RUNTIME COMPONENT Runtime DESTINATION ${CMAKE_INSTALL_BINDIR})

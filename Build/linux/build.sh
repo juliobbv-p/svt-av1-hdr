@@ -77,6 +77,8 @@ For each enable-*, there is a disable-* option, and vice versa.
     disable-avx512
     --enable-lto,       Enable link time optimization
     enable-lto
+    --enable-dovi,   Enable support for Dolby Vision RPUs (if dovi lib is found)
+    enable-dovi
     --disable-native,   Disable the use of -march=native
     disable-native
     --enable-pgo,       Enable profile guided optimization
@@ -117,6 +119,7 @@ For each enable-*, there is a disable-* option, and vice versa.
 Example usage:
     build.sh -xi debug test
     build.sh jobs=8 all cc=clang cxx=clang++
+    build.sh jobs=8 all cc=clang cxx=clang++ enable-avx512 enable-lto enable-dovi asm=nasm static native verbose
     build.sh -j 4 all -t "https://gist.githubusercontent.com/peterspackman/8cf73f7f12ba270aa8192d6911972fe8/raw/mingw-w64-x86_64.cmake"
     build.sh generator=Xcode cc=clang
 
@@ -299,6 +302,7 @@ parse_options() {
                 none) PGO_COMPILE_STAGE=all ;;
                 esac
                 ;;
+            dovi) CMAKE_EXTRA_FLAGS="$CMAKE_EXTRA_FLAGS -DLIBDOVI_FOUND=1" ;;
             *) print_message "Unknown option: $1" ;;
             esac
             shift

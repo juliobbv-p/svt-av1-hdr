@@ -14,6 +14,9 @@
 
 #include <stdio.h>
 #include <stdbool.h>
+#ifdef LIBDOVI_FOUND
+#include <libdovi/rpu_parser.h>
+#endif
 
 #include "EbSvtAv1Enc.h"
 
@@ -187,6 +190,9 @@ typedef struct EbConfig {
 
     FILE         *roi_map_file;
     SvtAv1RoiMap *roi_map;
+#ifdef LIBDOVI_FOUND
+    const DoviRpuOpaqueList *dovi_rpus;
+#endif
 
     char *fgs_table_path;
 } EbConfig;
