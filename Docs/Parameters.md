@@ -368,6 +368,7 @@ Other options such as updating the Bitrate and resolution during the encoding se
 | **ChromaSamplePosition**           | --chroma-sample-position     | any string   | unknown       | Chroma sample position ['unknown', 'vertical'/'left', 'colocated'/'topleft']                                                               |
 | **MasteringDisplay**               | --mastering-display          | any string   | none          | Mastering display metadata in the format of "G(x,y)B(x,y)R(x,y)WP(x,y)L(max,min)", refer to the user guide Appendix A.2 for full details   |
 | **ContentLightLevel**              | --content-light              | any string   | none          | Set content light level in the format of "max_cll,max_fall", refer to the user guide Appendix A.2 for full details                         |
+| **DolbyVisionRpu**                 | --dolby-vision-rpu           | any string   | none          | Set the path to a Dolby Vision RPU for encoding Dolby Vision video. Encoder needs to be built with the `enable-libdovi` flag               |
 
 ## Appendix A Encoder Parameters
 
