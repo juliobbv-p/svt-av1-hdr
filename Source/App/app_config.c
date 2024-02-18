@@ -1678,7 +1678,7 @@ static bool check_long(const ConfigDescription *cfg_entry, const ConfigDescripti
 }
 
 static void print_options(const char *title, const ConfigDescription *options) {
-    printf("\n%s:\n", title);
+    printf("\n\x1b[1;4m%s\x1b[0m:\n", title);
 
     for (const ConfigDescription *index = options; index->token; ++index) {
         // this only works if short and long token are one after another
@@ -1699,7 +1699,7 @@ int get_version(int argc, char *argv[]) {
 #endif
     if (find_token(argc, argv, VERSION_TOKEN, NULL))
         return 0;
-    printf("SVT-AV1 %s (%s)\n", svt_av1_get_version(), debug_build ? "release" : "debug");
+    printf("SVT-AV1-PSY %s (%s)\n", svt_av1_get_version(), debug_build ? "release" : "debug");
     return 1;
 }
 
@@ -1709,9 +1709,9 @@ uint32_t get_help(int32_t argc, char *const argv[]) {
         return 0;
 
     printf(
-        "Usage: SvtAv1EncApp <options> <-b dst_filename> -i src_filename\n"
+        "\x1b[1;4mUsage\x1b[0m: SvtAv1EncApp <options> <-b dst_filename> -i src_filename\n"
         "\n"
-        "Examples:\n"
+        "\x1b[1;4mExamples:\n"
         "Multi-pass encode (VBR):\n"
         "    SvtAv1EncApp <--stats svtav1_2pass.log> --passes 2 --rc 1 --tbr 1000 -b dst_filename "
         "-i src_filename\n"
@@ -1727,7 +1727,7 @@ uint32_t get_help(int32_t argc, char *const argv[]) {
     print_options("GOP size and type Options", config_entry_intra_refresh);
     print_options("AV1 Specific Options", config_entry_specific);
     print_options("Color Description Options", config_entry_color_description);
-    print_options("Variance Boost Options", config_entry_variance_boost);
+    print_options("Psychovisual Options", config_entry_variance_boost);
 
     return 1;
 }
