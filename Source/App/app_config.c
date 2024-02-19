@@ -707,7 +707,7 @@ ConfigDescription config_entry_global_options[] = {
     {FRAME_RATE_TOKEN, "Input video frame rate, integer values only, inferred if y4m, default is 60 [1-240]"},
     {FRAME_RATE_NUMERATOR_TOKEN, "Input video frame rate numerator, default is 60000 [0-2^32-1]"},
     {FRAME_RATE_DENOMINATOR_TOKEN, "Input video frame rate denominator, default is 1000 [0-2^32-1]"},
-    {INPUT_DEPTH_TOKEN, "Input video file and output bitstream bit-depth, default is 8 [8, 10]"},
+    {INPUT_DEPTH_TOKEN, "Input video file and output bitstream bit-depth, default is 10 [8, 10]"},
     // Latency
     {INJECTOR_TOKEN, "Inject pictures to the library at defined frame rate, default is 0 [0-1]"},
     {INJECTOR_FRAMERATE_TOKEN, "Set injector frame rate, only applicable with `--inj 1`, default is 60 [0-240]"},
@@ -801,8 +801,8 @@ ConfigDescription config_entry_rc[] = {
     {VBR_MAX_SECTION_PCT_TOKEN,
      "GOP max bitrate (expressed as a percentage of the target rate), default is 2000 [0-10000]"},
 #if CONFIG_ENABLE_QUANT_MATRIX
-    {ENABLE_QM_TOKEN, "Enable quantisation matrices, default is 0 [0-1]"},
-    {MIN_QM_LEVEL_TOKEN, "Min quant matrix flatness, default is 8 [0-15]"},
+    {ENABLE_QM_TOKEN, "Enable quantisation matrices, default is 1 [0-1]"},
+    {MIN_QM_LEVEL_TOKEN, "Min quant matrix flatness, default is 0 [0-15]"},
     {MAX_QM_LEVEL_TOKEN, "Max quant matrix flatness, default is 15 [0-15]"},
     {MIN_CHROMA_QM_LEVEL_TOKEN, "Min chroma quant matrix flatness, default is 8 [0-15]"},
     {MAX_CHROMA_QM_LEVEL_TOKEN, "Max chroma quant matrix flatness, default is 15 [0-15]"},
