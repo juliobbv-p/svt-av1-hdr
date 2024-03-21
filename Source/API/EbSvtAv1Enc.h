@@ -930,6 +930,12 @@ typedef struct EbSvtAv1EncConfiguration {
      */
     bool avif;
 
+    /* @brief Q index for extended CRF support
+     * Value is internally determined by CRF parameter value
+     * Default is 0 if CRF is an integer
+     */
+    uint8_t extended_crf_qindex_offset;
+
     /**
      * @brief Min chroma quant matrix flatness. Applicable when enable_qm is true.
      * Min value is 0.
