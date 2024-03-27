@@ -204,6 +204,8 @@
 #define LOSSLESS_TOKEN "--lossless"
 #define AVIF_TOKEN "--avif"
 #define RTC_TOKEN "--rtc"
+#define QP_SCALE_COMPRESS_STRENGTH_TOKEN "--qp-scale-compress-strength"
+
 static EbErrorType validate_error(EbErrorType err, const char *token, const char *value) {
     switch (err) {
     case EB_ErrorNone: return EB_ErrorNone;
@@ -965,6 +967,8 @@ ConfigDescription config_entry_variance_boost[] = {
     {VARIANCE_BOOST_STRENGTH_TOKEN, "Variance boost strength, default is 2 [1-4]"},
     {VARIANCE_OCTILE_TOKEN, "Octile for variance boost, default is 6 [1-8]"},
     {VARIANCE_BOOST_CURVE_TOKEN, "Curve for variance boost, default is 0 [0-2]"},
+    // QP scale compress
+    {QP_SCALE_COMPRESS_STRENGTH_TOKEN, "[PSY] QP scale compress strength, default is 1 [0-3]"},
     // Termination
     {NULL, NULL}};
 
@@ -1165,6 +1169,9 @@ ConfigEntry config_entry[] = {
     {AVIF_TOKEN, "Avif", set_cfg_generic_token},
     // Real-time Coding
     {RTC_TOKEN, "RealTime", set_cfg_generic_token},
+    // QP scale compression
+    {QP_SCALE_COMPRESS_STRENGTH_TOKEN, "QpScaleCompressStrength", set_cfg_generic_token},
+
     // Termination
     {NULL, NULL, NULL}};
 
