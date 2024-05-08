@@ -2032,7 +2032,8 @@ static void recode_loop_decision_maker(PictureControlSet* pcs, SequenceControlSe
 
         // adjust SB qindex based on variance
         if (scs->static_config.enable_variance_boost) {
-            svt_av1_variance_adjust_qp(pcs);
+            // Don't readjust base qindex to make it play nice with the recode loop quality bookkeeping logic
+            svt_av1_variance_adjust_qp(pcs, false);
         }
 
         // 2pass QPM with tpl_la

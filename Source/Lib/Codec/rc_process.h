@@ -234,7 +234,7 @@ struct SequenceControlSet;
 
 // AQ
 void svt_av1_rc_init_sb_qindex(struct PictureControlSet* pcs, struct SequenceControlSet* scs);
-void svt_av1_variance_adjust_qp(struct PictureControlSet* pcs);
+void svt_av1_variance_adjust_qp(struct PictureControlSet* pcs, bool readjust_base_q_idx);
 void svt_aom_sb_qp_derivation_tpl_la(struct PictureControlSet* pcs);
 void svt_av1_normalize_sb_delta_q(struct PictureControlSet* pcs);
 
