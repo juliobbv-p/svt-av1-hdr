@@ -20,7 +20,8 @@ set -- \
     ':!test/vectors/video_src.cfg' \
     ':!*.png' \
     ':!*.PNG' \
-    ':!*.pdf'
+    ':!*.pdf' \
+    ':!*.avif'
 
 git config --global --add safe.directory "$REPO_DIR" || true
 
