@@ -971,6 +971,13 @@ typedef struct EbSvtAv1EncConfiguration {
      */
     uint8_t qp_scale_compress_strength;
 
+    /* @brief Limit transform sizes to a maximum of 32x32 pixels
+     * 0: disabled, use transform sizes up to 64x64 pixels
+     * 1: enabled, use transform sizes up to 32x32 pixels
+     * Default is 0
+     */
+    bool max_32_tx_size;
+
     // clang-format off
     /*Add 128 Byte Padding to Struct to avoid changing the size of the public configuration struct*/
     uint8_t padding[128 - (sizeof(uint8_t) * 2)
