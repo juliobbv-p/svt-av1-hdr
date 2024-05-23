@@ -206,6 +206,8 @@
 #define RTC_TOKEN "--rtc"
 #define QP_SCALE_COMPRESS_STRENGTH_TOKEN "--qp-scale-compress-strength"
 
+#define MAX_32_TX_SIZE_TOKEN "--max-32-tx-size"
+
 static EbErrorType validate_error(EbErrorType err, const char *token, const char *value) {
     switch (err) {
     case EB_ErrorNone: return EB_ErrorNone;
@@ -969,6 +971,8 @@ ConfigDescription config_entry_variance_boost[] = {
     {VARIANCE_BOOST_CURVE_TOKEN, "Curve for variance boost, default is 0 [0-2]"},
     // QP scale compress
     {QP_SCALE_COMPRESS_STRENGTH_TOKEN, "[PSY] QP scale compress strength, default is 1 [0-3]"},
+    // Max 32 tx size
+    {MAX_32_TX_SIZE_TOKEN, "[PSY] Limits the allowed transform sizes to a maximum of 32x32, default is 0 [0-1]"},
     // Termination
     {NULL, NULL}};
 
@@ -1171,6 +1175,9 @@ ConfigEntry config_entry[] = {
     {RTC_TOKEN, "RealTime", set_cfg_generic_token},
     // QP scale compression
     {QP_SCALE_COMPRESS_STRENGTH_TOKEN, "QpScaleCompressStrength", set_cfg_generic_token},
+
+    // Max 32 tx size
+    {MAX_32_TX_SIZE_TOKEN, "Max32TxSize", set_cfg_generic_token},
 
     // Termination
     {NULL, NULL, NULL}};

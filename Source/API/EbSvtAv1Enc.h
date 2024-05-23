@@ -949,6 +949,13 @@ typedef struct EbSvtAv1EncConfiguration {
      */
     uint8_t qp_scale_compress_strength;
 
+    /* @brief Limit transform sizes to a maximum of 32x32 pixels
+     * 0: disabled, use transform sizes up to 64x64 pixels
+     * 1: enabled, use transform sizes up to 32x32 pixels
+     * Default is 0
+     */
+    bool max_32_tx_size;
+
     /**
      * @brief Min chroma quant matrix flatness. Applicable when enable_qm is true.
      * Min value is 0.
