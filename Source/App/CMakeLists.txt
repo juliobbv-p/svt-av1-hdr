@@ -44,6 +44,30 @@ else()
   execute_process(COMMAND ${CMAKE_COMMAND} -E echo_append "-- Building with dovi support - No\n")
 endif()
 
+# libhdr10plus detection & preprocessor macro
+option(LIBHDR10PLUS_RS_FOUND "Use the hdr10plus library" OFF)
+if(LIBHDR10PLUS_RS_FOUND)
+  if(PKG_CONFIG_FOUND)
+  pkg_check_modules(PC_LIBHDR10PLUS_RS hdr10plus-rs QUIET)
+  endif()
+
+  find_library(LIBHDR10PLUS_RS_LIBRARY NAMES hdr10plus-rs libhdr10plus-rs
+                               PATHS ${PC_LIBHDR10PLUS_RS_LIBDIR})
+  if(NOT LIBHDR10PLUS_RS_LIBRARY)
+  message(FATAL_ERROR "hdr10plus library not found!")
+  endif()
+
+  find_path(LIBHDR10PLUS_RS_INCLUDE_DIR NAMES libhdr10plus-rs/hdr10plus.h
+                                PATHS ${PC_LIBHDR10PLUS_RS_INCLUDEDIR})
+
+  set(LIBHDR10PLUS_RS_INCLUDE_DIRS ${LIBHDR10PLUS_RS_INCLUDE_DIR})
+  set(LIBHDR10PLUS_RS_LIBRARIES ${LIBHDR10PLUS_RS_LIBRARY})
+  add_definitions(-DLIBHDR10PLUS_RS_FOUND=1)
+  execute_process(COMMAND ${CMAKE_COMMAND} -E echo_append "-- Building with hdr10plus support - Yes\n")
+else()
+  execute_process(COMMAND ${CMAKE_COMMAND} -E echo_append "-- Building with hdr10plus support - No\n")
+endif()
+
 set(all_files
     ../API/EbConfigMacros.h
     ../API/EbDebugMacros.h
@@ -76,6 +100,6 @@ endif()
 
 #********** SET COMPILE FLAGS************
 # Link the Encoder App
-target_link_libraries(SvtAv1EncApp PRIVATE SvtAv1Enc ${LIBDOVI_LIBRARY})
+target_link_libraries(SvtAv1EncApp PRIVATE SvtAv1Enc ${LIBDOVI_LIBRARY} ${LIBHDR10PLUS_RS_LIBRARY})
 
 install(TARGETS SvtAv1EncApp RUNTIME COMPONENT Runtime DESTINATION ${CMAKE_INSTALL_BINDIR})
