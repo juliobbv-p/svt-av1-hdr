@@ -864,6 +864,16 @@ EbErrorType svt_av1_verify_settings(SequenceControlSet *scs) {
             "--tile-columns 1 if you are targeting a high quality encode and a multi-core "
             "high-performance decoder HW\n");
     }
+    if (config->enable_qm > 2) {
+        SVT_ERROR("Instance %u: Enable quant matrix must be [0, 1, 2]\n",
+                  channel_number + 1);
+        return_error = EB_ErrorBadParameter;
+    }
+
+    if (config->enable_qm == 2) {
+        SVT_WARN("Experimental content-aware quant matrices algorithm enabled, please use with caution.\n");
+    }
+
     if (config->enable_qm && config->min_qm_level > config->max_qm_level) {
         SVT_ERROR("Instance %u:  Min quant matrix level must not greater than max quant matrix level\n",
                   channel_number + 1);
@@ -2078,6 +2088,7 @@ EB_API EbErrorType svt_av1_enc_parse_parameter(EbSvtAv1EncConfiguration *config_
         {"resize-mode", &config_struct->resize_mode},
         {"resize-denom", &config_struct->resize_denom},
         {"resize-kf-denom", &config_struct->resize_kf_denom},
+        {"enable-qm", &config_struct->enable_qm},
         {"qm-min", &config_struct->min_qm_level},
         {"qm-max", &config_struct->max_qm_level},
         {"use-fixed-qindex-offsets", &config_struct->use_fixed_qindex_offsets},
@@ -2190,7 +2201,6 @@ EB_API EbErrorType svt_av1_enc_parse_parameter(EbSvtAv1EncConfiguration *config_
         {"fast-decode", &config_struct->fast_decode},
 #endif
         {"enable-force-key-frames", &config_struct->force_key_frames},
-        {"enable-qm", &config_struct->enable_qm},
         {"enable-dg", &config_struct->enable_dg},
         {"gop-constraint-rc", &config_struct->gop_constraint_rc},
         {"enable-variance-boost", &config_struct->enable_variance_boost},

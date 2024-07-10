@@ -973,7 +973,7 @@ ConfigEntry config_entry_rc[] = {
      VBR_MAX_SECTION_PCT_TOKEN,
      "GOP max bitrate (expressed as a percentage of the target rate), default is 2000 [0-10000]",
      set_cfg_generic_token},
-    {SINGLE_INPUT, ENABLE_QM_TOKEN, "Enable quantisation matrices, default is 1 [0-1]", set_cfg_generic_token},
+    {SINGLE_INPUT, ENABLE_QM_TOKEN, "Enable quantisation matrices, default is 1 [0-2]", set_cfg_generic_token},
     {SINGLE_INPUT, MIN_QM_LEVEL_TOKEN, "Min quant matrix flatness, default is 0 [0-15]", set_cfg_generic_token},
     {SINGLE_INPUT, MAX_QM_LEVEL_TOKEN, "Max quant matrix flatness, default is 15 [0-15]", set_cfg_generic_token},
     {SINGLE_INPUT,

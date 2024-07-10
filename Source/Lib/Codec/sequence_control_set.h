@@ -301,6 +301,8 @@ typedef struct SequenceControlSet {
     // Enable low latency KF coding for RTC
     bool          low_latency_kf;
     List0OnlyBase list0_only_base_ctrls;
+    // If true, calculate and store the 16x16 LF and HF energy stats
+    Bool calculate_energy;
 } SequenceControlSet;
 typedef struct EbSequenceControlSetInstance {
     EbDctor             dctor;

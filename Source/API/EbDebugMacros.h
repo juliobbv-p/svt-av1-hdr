@@ -78,6 +78,7 @@ extern "C" {
 
 // Quantization matrices
 #define DEBUG_QM_LEVEL          0
+#define DEBUG_QM_2_LEVEL        0
 #define DEBUG_STARTUP_MG_SIZE   0
 #define DEBUG_SEGMENT_QP        0
 #define DEBUG_ROI               0

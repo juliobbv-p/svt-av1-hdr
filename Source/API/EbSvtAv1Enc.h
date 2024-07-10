@@ -867,9 +867,9 @@ typedef struct EbSvtAv1EncConfiguration {
     /**
      * @brief Signal to the library to enable quantisation matrices
      *
-     * Default is true in SVT-AV1-PSY.
+     * Default is 1 in SVT-AV1-PSY.
      */
-    Bool enable_qm;
+    uint8_t enable_qm;
     /**
      * @brief Min quant matrix flatness. Applicable when enable_qm is true.
      * Min value is 0.

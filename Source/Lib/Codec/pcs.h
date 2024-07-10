@@ -820,6 +820,8 @@ typedef struct PictureParentControlSet {
     uint16_t       **variance;
     uint32_t         pre_assignment_buffer_count;
     uint16_t         pic_avg_variance;
+    int32_t          **lf_energy;
+    int32_t          **hf_energy;
 
     uint32_t ***picture_histogram;
     uint64_t    average_intensity_per_region[MAX_NUMBER_OF_REGIONS_IN_WIDTH][MAX_NUMBER_OF_REGIONS_IN_HEIGHT];
@@ -1225,6 +1227,7 @@ typedef struct PictureControlSetInitData {
     uint8_t frame_luma_bias;
     Bool    max_32_tx_size;
     Bool    adaptive_film_grain;
+    Bool    calculate_energy;
 } PictureControlSetInitData;
 
 typedef struct Av1Comp {

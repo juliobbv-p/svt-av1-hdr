@@ -327,6 +327,97 @@ void svt_compute_interm_var_four8x8_c(uint8_t *input_samples, uint16_t input_str
         input_samples + block_index, input_stride, 8, 8);
 }
 
+/*
+// indices for coefficients that are considered "low-frequency" by the energy-bucketing algorithm
+static const int32_t lf_idx[] =  {       1,   2,   3,   4,   5,   6,   7,   8,   9,  10,  11,  12,  13,  14,  15,
+                                   16,  17,  18,  19,  20,  21,  22,  23,  24,  25,  26,  27,  28,  29,  30,
+                                   32,  33,  34,  35,  36,  37,  38,  39,  40,  41,  42,  43,  44,  45,
+                                   48,  49,  50,  51,  52,  53,  54,  55,  56,  57,  58,  59,  60,
+                                   64,  65,  66,  67,  68,  69,  70,  71,  72,  73,  74,  75,
+                                   80,  81,  82,  83,  84,  85,  86,  87,  88,  89,  90,
+                                   96,  97,  98,  99, 100, 101, 102, 103, 104, 105,
+                                  112, 113, 114, 115, 116, 117, 118, 119, 120,
+                                  128, 129, 130, 131, 132, 133, 134, 135,
+                                  144, 145, 146, 147, 148, 149, 150,
+                                  160, 161, 162, 163, 164, 165,
+                                  176, 177, 178, 179, 180,
+                                  192, 193, 194, 195,
+                                  208, 209, 210,
+                                  224, 225,
+                                  240};*/
+
+// indices for coefficients that are considered "low-frequency" by the energy-bucketing algorithm
+static const int32_t lf_idx[] =  {       1,   2,   3,   4,   5,   6,   7,   8,   9,  10,  11,
+                                   16,  17,  18,  19,  20,  21,  22,  23,  24,  25,  26,
+                                   32,  33,  34,  35,  36,  37,  38,  39,  40,  41,
+                                   48,  49,  50,  51,  52,  53,  54,  55,  56,
+                                   64,  65,  66,  67,  68,  69,  70,  71,
+                                   80,  81,  82,  83,  84,  85,  86,
+                                   96,  97,  98,  99, 100, 101,
+                                  112, 113, 114, 115, 116,
+                                  128, 129, 130, 131,
+                                  144, 145, 146,
+                                  160, 161,
+                                  176 };
+
+/*******************************************
+* compute_energy
+*   computes low-frequency and high-frequency energy values
+*******************************************/
+static void compute_energy(
+    PictureParentControlSet *ppcs,
+    EbPictureBufferDesc     *input_padded_pic,
+    uint32_t                 sb_index,
+    uint32_t                 input_luma_origin_index)
+{
+    int16_t input_luma_block_16[16 * 16];
+    int32_t coeffs[16 * 16];
+
+    uint8_t* input_luma_superblock_row = input_padded_pic->buffer_y + input_luma_origin_index;
+
+    // loop over 16 16x16 subblocks (4 horz, 4 vert) in 64x64 superblock
+    for (int32_t subb_y = 0; subb_y < 4; subb_y++) {
+        for (int32_t subb_x = 0; subb_x < 4; subb_x++) {
+            // copy 8-bit luma values from padded pic to 16-bit block buffer (required for SVT hadamard functions)
+            for (int32_t y = 0; y < 16; y++) {
+                for (int32_t x = 0; x < 16; x++) {
+                    input_luma_block_16[y * 16 + x] = (int16_t)input_luma_superblock_row[subb_x * 16 + x];
+                }
+                input_luma_superblock_row += input_padded_pic->stride_y;
+            }
+
+            // perform the 16x16 DCT transform
+            svt_av1_fwd_txfm2d_16x16(input_luma_block_16, coeffs, 16, DCT_DCT, 8);
+            // perform the 16x16 Hadamard transform
+            //svt_aom_hadamard_16x16(input_luma_block_16, 16, coeffs);
+
+            // calculate total energy
+            int32_t total_energy = 0;
+
+            //printf("Energy coeffs\n");
+            for (int32_t y = 0; y < 16; y++) {
+                for (int32_t x = 0; x < 16; x++) {
+                    if (x != 0 || y != 0) { // ignore DC component
+                        total_energy += abs(coeffs[y * 16 + x]);
+                    }
+                    //printf("%6d ", abs(coeffs[y * 16 + x]));
+                }
+                //printf("\n");
+            }
+
+            // calculate low-frequency energy
+            ppcs->lf_energy[sb_index][subb_y * 4 + subb_x] = 0;
+
+            for (int32_t idx = 0; idx < (int32_t)(sizeof(lf_idx) / sizeof(lf_idx[0])); idx++) {
+                ppcs->lf_energy[sb_index][subb_y * 4 + subb_x] += abs(coeffs[lf_idx[idx]]);
+            }
+
+            // calculate high-frequency energy (i.e. total - low-freq)
+            ppcs->hf_energy[sb_index][subb_y * 4 + subb_x] = total_energy - ppcs->lf_energy[sb_index][subb_y * 4 + subb_x];
+        }
+    }
+}
+
 /*******************************************
 * compute_block_mean_compute_variance
 *   computes the variance and the block mean of all CUs inside the tree block
@@ -1572,6 +1663,11 @@ static void compute_picture_spatial_statistics(SequenceControlSet *scs, PictureP
             input_padded_pic->org_x + b64_origin_x;
 
         compute_block_mean_compute_variance(scs, pcs, input_padded_pic, b64_idx, input_luma_origin_index);
+
+        if (scs->calculate_energy) { // compute 16x16 energy stats, for content-aware quantization matrix selection
+            compute_energy(pcs, input_padded_pic, b64_idx, input_luma_origin_index);
+        }
+
         pic_tot_variance += (pcs->variance[b64_idx][RASTER_SCAN_CU_INDEX_64x64]);
     }
 

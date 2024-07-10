@@ -1557,6 +1557,7 @@ EB_API EbErrorType svt_av1_enc_init(EbComponentType *svt_enc_component)
         input_data.frame_luma_bias = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.frame_luma_bias;
         input_data.max_32_tx_size = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.max_32_tx_size;
         input_data.adaptive_film_grain = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.adaptive_film_grain;
+        input_data.calculate_energy = enc_handle_ptr->scs_instance_array[instance_index]->scs->calculate_energy;
         input_data.static_config = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config;
 
         EB_NEW(
@@ -4220,6 +4221,11 @@ static void set_param_based_on_input(SequenceControlSet *scs)
         scs->calculate_variance = 1;
     else
         scs->calculate_variance = 0;
+
+    // HF/LF energy calculation is required for context-aware quantization matrices
+    if (scs->static_config.enable_qm == 2) {
+        scs->calculate_energy = 1;
+    }
 
     scs->resize_pending_params.resize_state = ORIG;
     scs->resize_pending_params.resize_denom = SCALE_NUMERATOR;

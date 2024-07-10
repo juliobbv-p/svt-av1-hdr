@@ -190,6 +190,140 @@ static INLINE int psy_get_qmlevel(int qindex, int first, int last, bool chroma) 
     return rint(first + (pow((double)(qindex), sigmoid_qm_func(qindex)) * (last + 1 - first)) / pow(QINDEX_RANGE, sigmoid_qm_func(qindex)));
 }
 
+static const float LOW_HFLF_RATIO = 0.1;  // blurry or coarsely-textured image
+static const float HIGH_HFLF_RATIO = 0.5; // sharp or finely-textured image
+
+static const uint16_t MIN_BASE_QM_LEVEL = 2;
+static const uint16_t MAX_BASE_QM_LEVEL = 8;
+
+// Table that establishes a base QM level (empirically tested), where lower QM levels than specified often result in *both*:
+//   1) worse subjective and objective quality
+//   2) higher file sizes (significantly increased use of smaller transforms to compensate poorer HF resolution)
+// ...so they're not even worth considering
+// ToDo juliobbv: get more exact base qmlevels
+static const uint16_t base_qmlevel_table[4][8] = { { 4, 4, 4, 3, 3, 3, 2, 2 },   // most blurry
+                                                   { 5, 5, 5, 4, 4, 3, 3, 2 },
+                                                   { 7, 6, 6, 5, 5, 4, 4, 3 },
+                                                   { 8, 7, 7, 6, 6, 5, 5, 4 } }; // sharpest
+
+// Compute a "content-aware" qmlevel that considers:
+// - picture blurriness: the more blurry, the lower the qmlevel
+// - qindex: the lower the qindex, the higher the qmlevel
+static int svt_get_content_aware_qmlevel(PictureParentControlSet *ppcs, int qindex, int min, int max) {
+    uint16_t b64_total_count  = ppcs->b64_total_count;
+    int32_t valid_block_count = 0;
+    float hflf_sum_ratio = 0.0f;
+
+#if DEBUG_QM_2_LEVEL
+    printf("HF/LF ratio, frame %llu, temp. level %i\n", ppcs->picture_number, ppcs->temporal_layer_index);
+#endif
+    for (uint16_t b64_idx = 0; b64_idx < b64_total_count; ++b64_idx) {
+        int32_t sb_hf_energy = 0;
+        int32_t sb_lf_energy = 0;
+
+        for (uint32_t subblock = 0; subblock < 16; subblock++) {
+            sb_lf_energy += abs(ppcs->lf_energy[b64_idx][subblock]);
+            sb_hf_energy += abs(ppcs->hf_energy[b64_idx][subblock]);
+        }
+
+        if (sb_lf_energy == 0 && sb_hf_energy == 0) {
+            // completely solid block (no AC coefficients), skip from analysis
+#if DEBUG_QM_2_LEVEL
+            printf("   N/A");
+#endif
+        } else {
+            // compute high-frequency/low-frequency ratio
+            // clamp ratio to 1.0 so all blocks can get a fair representation of overall frequency
+            float ratio = AOMMIN((float)sb_hf_energy / (float)sb_lf_energy, 1.0f);
+            hflf_sum_ratio += ratio;
+#if DEBUG_QM_2_LEVEL
+            printf(" % 2.2f", ratio);
+#endif
+            valid_block_count++;
+        }
+#if DEBUG_QM_2_LEVEL
+        B64Geom *b64_geom = &ppcs->b64_geom[b64_idx];
+        if (ppcs->frame_width <= (b64_geom->org_x + 64)) {
+            printf("\n");
+        }
+#endif
+    }
+
+#if DEBUG_QM_2_LEVEL
+    printf("LF energy stats, frame %llu, temp. level %i\n", ppcs->picture_number, ppcs->temporal_layer_index);
+    for (uint16_t b64_idx = 0; b64_idx < b64_total_count; ++b64_idx) {
+        B64Geom *b64_geom = &ppcs->b64_geom[b64_idx];
+        int32_t sb_lf_energy = 0;
+
+        for (uint32_t subblock = 0; subblock < 16; subblock++) {
+            sb_lf_energy += abs(ppcs->lf_energy[b64_idx][subblock]);
+        }
+
+        printf("%6d ", sb_lf_energy);
+        if (ppcs->frame_width <= (b64_geom->org_x + 64)) {
+            printf("\n");
+        }
+    }
+
+    printf("HF energy stats, frame %llu, temp. level %i\n", ppcs->picture_number, ppcs->temporal_layer_index);
+    for (uint16_t b64_idx = 0; b64_idx < b64_total_count; ++b64_idx) {
+        B64Geom *b64_geom = &ppcs->b64_geom[b64_idx];
+        int32_t sb_hf_energy = 0;
+
+        for (uint32_t subblock = 0; subblock < 16; subblock++) {
+            sb_hf_energy += abs(ppcs->hf_energy[b64_idx][subblock]);
+        }
+
+        printf("%6d ", sb_hf_energy);
+        if (ppcs->frame_width <= (b64_geom->org_x + 64)) {
+            printf("\n");
+        }
+    }
+#endif
+    // if all blocks are solid, pick the min qm level
+    if (valid_block_count == 0) {
+        return min;
+    }
+
+    float avg_hflf_ratio = hflf_sum_ratio / valid_block_count;
+
+    // clip average HF/LF ratio to non-extreme values
+    avg_hflf_ratio = CLIP3(LOW_HFLF_RATIO, HIGH_HFLF_RATIO, avg_hflf_ratio);
+
+#if DEBUG_QM_2_LEVEL
+    printf("Normalized avg HF/LF ratio: %2.2f\n", avg_hflf_ratio);
+#endif
+
+    float sharpness_ratio = (avg_hflf_ratio - LOW_HFLF_RATIO) / (HIGH_HFLF_RATIO - LOW_HFLF_RATIO); // 0: very blurry, 1: very sharp
+    uint16_t sharpness_idx = AOMMIN((int)(sharpness_ratio * 4), 3);  // partition sharpness range into 4 buckets (max value: 3)
+    uint16_t qindex_idx = qindex / 32;                               // partition qindex range into 8 buckets (max value: int 255/32 = 7)
+
+#if DEBUG_QM_2_LEVEL
+    printf("Sharpness index: %i, qindex index: %i\n", sharpness_idx, qindex_idx);
+#endif
+
+    int32_t base_qmlevel = base_qmlevel_table[sharpness_idx][qindex_idx];
+    // make sure the base qm level we got from the table is consistent with the min and max base limits
+    assert(base_qmlevel >= MIN_BASE_QM_LEVEL && base_qmlevel <= MAX_BASE_QM_LEVEL);
+
+    if (min == MIN_BASE_QM_LEVEL && max == MAX_BASE_QM_LEVEL) {
+        // if min and max match actual specified base levels, there's no need to rescale
+        return AOMMIN(base_qmlevel, min);
+    }
+
+    int32_t scaled_qmlevel = base_qmlevel;
+
+    if (max > MAX_BASE_QM_LEVEL) {
+        // scale base qm level proportionally towards the max qm level
+        float scale_factor = (float)max / MAX_BASE_QM_LEVEL;
+
+        scaled_qmlevel = (int32_t)rint(base_qmlevel * scale_factor);
+    }
+
+    scaled_qmlevel = CLIP3(min, max, scaled_qmlevel);
+    return scaled_qmlevel;
+}
+
 void svt_av1_qm_init(PictureParentControlSet *pcs) {
     const uint8_t num_planes = 3; // MAX_MB_PLANE;// NM- No monochroma
     uint8_t       q, c, t;
@@ -221,12 +355,23 @@ void svt_av1_qm_init(PictureParentControlSet *pcs) {
         const int32_t max_qmlevel = pcs->scs->static_config.max_qm_level;
         const int32_t base_qindex = pcs->frm_hdr.quantization_params.base_q_idx;
 
-        pcs->frm_hdr.quantization_params.qm[AOM_PLANE_Y] = pcs->scs->static_config.tune == 3 ? psy_get_qmlevel(base_qindex, min_qmlevel, max_qmlevel, 0) : aom_get_qmlevel(base_qindex, min_qmlevel, max_qmlevel);
-        //Chroma always seem to suffer too much with steep quantization matrices, so we're temporarily
-        //forcing not very steep quantization matrices for chroma channels
-        //Will enable for tune 3 and ideally within a range in the near future
-        pcs->frm_hdr.quantization_params.qm[AOM_PLANE_U] = pcs->scs->static_config.tune == 3 ? psy_get_qmlevel(base_qindex + pcs->frm_hdr.quantization_params.delta_q_ac[AOM_PLANE_U], min_qmlevel, max_qmlevel, 1) : aom_get_qmlevel(base_qindex + pcs->frm_hdr.quantization_params.delta_q_ac[AOM_PLANE_U], min_qmlevel, max_qmlevel);
-        pcs->frm_hdr.quantization_params.qm[AOM_PLANE_V] = pcs->scs->static_config.tune == 3 ? psy_get_qmlevel(base_qindex + pcs->frm_hdr.quantization_params.delta_q_ac[AOM_PLANE_V], min_qmlevel, max_qmlevel, 1) : aom_get_qmlevel(base_qindex + pcs->frm_hdr.quantization_params.delta_q_ac[AOM_PLANE_V], min_qmlevel, max_qmlevel);
+        if (pcs->scs->static_config.enable_qm == 2) {
+            int32_t y_qmlevel = svt_get_content_aware_qmlevel(pcs, base_qindex, min_qmlevel, max_qmlevel);
+            // chroma planes get flatter quantization matrices to compensate from 4:2:0 chroma subsampling
+            int32_t u_qmlevel = AOMMIN(y_qmlevel + 6, max_qmlevel);
+            int32_t v_qmlevel = AOMMIN(y_qmlevel + 6, max_qmlevel);
+
+            pcs->frm_hdr.quantization_params.qm[AOM_PLANE_Y] = y_qmlevel;
+            pcs->frm_hdr.quantization_params.qm[AOM_PLANE_U] = u_qmlevel;
+            pcs->frm_hdr.quantization_params.qm[AOM_PLANE_V] = v_qmlevel;
+        } else {
+            pcs->frm_hdr.quantization_params.qm[AOM_PLANE_Y] = pcs->scs->static_config.tune == 3 ? psy_get_qmlevel(base_qindex, min_qmlevel, max_qmlevel, 0) : aom_get_qmlevel(base_qindex, min_qmlevel, max_qmlevel);
+            //Chroma always seem to suffer too much with steep quantization matrices, so we're temporarily
+            //forcing not very steep quantization matrices for chroma channels
+            //Will enable for tune 3 and ideally within a range in the near future
+            pcs->frm_hdr.quantization_params.qm[AOM_PLANE_U] = pcs->scs->static_config.tune == 3 ? psy_get_qmlevel(base_qindex + pcs->frm_hdr.quantization_params.delta_q_ac[AOM_PLANE_U], min_qmlevel, max_qmlevel, 1) : aom_get_qmlevel(base_qindex + pcs->frm_hdr.quantization_params.delta_q_ac[AOM_PLANE_U], min_qmlevel, max_qmlevel);
+            pcs->frm_hdr.quantization_params.qm[AOM_PLANE_V] = pcs->scs->static_config.tune == 3 ? psy_get_qmlevel(base_qindex + pcs->frm_hdr.quantization_params.delta_q_ac[AOM_PLANE_V], min_qmlevel, max_qmlevel, 1) : aom_get_qmlevel(base_qindex + pcs->frm_hdr.quantization_params.delta_q_ac[AOM_PLANE_V], min_qmlevel, max_qmlevel);
+        }
 #if DEBUG_QM_LEVEL
         SVT_LOG("\n[svt_av1_qm_init] Frame %d - qindex %d, qmlevel %d %d %d\n",
                 (int)pcs->picture_number,
