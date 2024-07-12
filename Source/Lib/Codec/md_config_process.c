@@ -191,7 +191,7 @@ static INLINE int psy_get_qmlevel(int qindex, int first, int last, bool chroma) 
 }
 
 static const float LOW_HFLF_RATIO = 0.1;  // blurry or coarsely-textured image
-static const float HIGH_HFLF_RATIO = 0.5; // sharp or finely-textured image
+static const float HIGH_HFLF_RATIO = 0.4; // sharp or finely-textured image
 
 static const uint16_t MIN_BASE_QM_LEVEL = 2;
 static const uint16_t MAX_BASE_QM_LEVEL = 8;
@@ -201,10 +201,10 @@ static const uint16_t MAX_BASE_QM_LEVEL = 8;
 //   2) higher file sizes (significantly increased use of smaller transforms to compensate poorer HF resolution)
 // ...so they're not even worth considering
 // ToDo juliobbv: get more exact base qmlevels
-static const uint16_t base_qmlevel_table[4][8] = { { 4, 4, 4, 3, 3, 3, 2, 2 },   // most blurry
-                                                   { 5, 5, 5, 4, 4, 3, 3, 2 },
-                                                   { 7, 6, 6, 5, 5, 4, 4, 3 },
-                                                   { 8, 7, 7, 6, 6, 5, 5, 4 } }; // sharpest
+static const uint16_t base_qmlevel_table[4][8] = { { 4, 3, 3, 3, 3, 3, 2, 2 },   // most blurry
+                                                   { 5, 4, 4, 4, 4, 4, 3, 2 },
+                                                   { 7, 6, 6, 6, 6, 5, 4, 3 },
+                                                   { 8, 7, 7, 7, 7, 6, 4, 3 } }; // sharpest
 
 // Compute a "content-aware" qmlevel that considers:
 // - picture blurriness: the more blurry, the lower the qmlevel
@@ -221,7 +221,7 @@ static int svt_get_content_aware_qmlevel(PictureParentControlSet *ppcs, int qind
         int32_t sb_hf_energy = 0;
         int32_t sb_lf_energy = 0;
 
-        for (uint32_t subblock = 0; subblock < 16; subblock++) {
+        for (uint32_t subblock = 0; subblock < ENERGY_NUM_BLOCKS_PER_SB; subblock++) {
             sb_lf_energy += abs(ppcs->lf_energy[b64_idx][subblock]);
             sb_hf_energy += abs(ppcs->hf_energy[b64_idx][subblock]);
         }
@@ -255,7 +255,7 @@ static int svt_get_content_aware_qmlevel(PictureParentControlSet *ppcs, int qind
         B64Geom *b64_geom = &ppcs->b64_geom[b64_idx];
         int32_t sb_lf_energy = 0;
 
-        for (uint32_t subblock = 0; subblock < 16; subblock++) {
+        for (uint32_t subblock = 0; subblock < ENERGY_NUM_BLOCKS_PER_SB; subblock++) {
             sb_lf_energy += abs(ppcs->lf_energy[b64_idx][subblock]);
         }
 
@@ -270,7 +270,7 @@ static int svt_get_content_aware_qmlevel(PictureParentControlSet *ppcs, int qind
         B64Geom *b64_geom = &ppcs->b64_geom[b64_idx];
         int32_t sb_hf_energy = 0;
 
-        for (uint32_t subblock = 0; subblock < 16; subblock++) {
+        for (uint32_t subblock = 0; subblock < ENERGY_NUM_BLOCKS_PER_SB; subblock++) {
             sb_hf_energy += abs(ppcs->hf_energy[b64_idx][subblock]);
         }
 
@@ -314,10 +314,8 @@ static int svt_get_content_aware_qmlevel(PictureParentControlSet *ppcs, int qind
     int32_t scaled_qmlevel = base_qmlevel;
 
     if (max > MAX_BASE_QM_LEVEL) {
-        // scale base qm level proportionally towards the max qm level
-        float scale_factor = (float)max / MAX_BASE_QM_LEVEL;
-
-        scaled_qmlevel = (int32_t)rint(base_qmlevel * scale_factor);
+        // scale base qm level towards the max qm level
+        scaled_qmlevel = base_qmlevel + (max - MAX_BASE_QM_LEVEL);
     }
 
     scaled_qmlevel = CLIP3(min, max, scaled_qmlevel);

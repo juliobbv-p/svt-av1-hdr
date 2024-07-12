@@ -13422,6 +13422,21 @@ static const QmVal iwt_matrix_ref[NUM_QM_LEVELS][2][QM_TOTAL_SIZE] = {
   },
 };
 
+// indices for 8x8 coefficients that are considered "low-frequency" by the content-aware QM algorithm
+static const int32_t lf_idx[] =  {  0,  1,  1,  1,  1,  1,  0,  0,
+                                    1,  1,  1,  1,  1,  0,  0,  0,
+                                    1,  1,  1,  1,  0,  0,  0,  0,
+                                    1,  1,  1,  0,  0,  0,  0,  0,
+                                    1,  1,  0,  0,  0,  0,  0,  0,
+                                    1,  0,  0,  0,  0,  0,  0,  0,
+                                    0,  0,  0,  0,  0,  0,  0,  0,
+                                    0,  0,  0,  0,  0,  0,  0,  0 };
+
+static const int32_t ENERGY_BLOCK_SIZE         = 8;
+static const int32_t ENERGY_BLOCK_COEFF_COUNT  = ENERGY_BLOCK_SIZE * ENERGY_BLOCK_SIZE;
+static const int32_t ENERGY_NUM_BLOCKS_PER_DIM = 8;
+static const int32_t ENERGY_NUM_BLOCKS_PER_SB  = ENERGY_NUM_BLOCKS_PER_DIM * ENERGY_NUM_BLOCKS_PER_DIM;
+
 #ifdef __cplusplus
 }
 #endif

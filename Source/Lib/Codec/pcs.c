@@ -20,6 +20,7 @@
 #include "resource_coordination_process.h"
 #include "md_config_process.h"
 #include "enc_mode_config.h"
+#include "q_matrices.h"
 
 void svt_aom_set_tile_info(PictureParentControlSet *pcs);
 
@@ -1314,9 +1315,9 @@ static EbErrorType picture_parent_control_set_ctor(PictureParentControlSet *obje
         EB_MALLOC_2D(object_ptr->variance, object_ptr->b64_total_count, block_count);
     }
     if (init_data_ptr->calculate_energy) {
-        // allocate 16 16x16 values per 64x64 superblock
-        EB_MALLOC_2D(object_ptr->lf_energy, object_ptr->b64_total_count, 16);
-        EB_MALLOC_2D(object_ptr->hf_energy, object_ptr->b64_total_count, 16);
+        // allocate 64 8x8 values per 64x64 superblock
+        EB_MALLOC_2D(object_ptr->lf_energy, object_ptr->b64_total_count, ENERGY_NUM_BLOCKS_PER_SB);
+        EB_MALLOC_2D(object_ptr->hf_energy, object_ptr->b64_total_count, ENERGY_NUM_BLOCKS_PER_SB);
     }
     if (init_data_ptr->calc_hist) {
         EB_ALLOC_PTR_ARRAY(object_ptr->picture_histogram, MAX_NUMBER_OF_REGIONS_IN_WIDTH);
