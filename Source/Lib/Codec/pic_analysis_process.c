@@ -340,20 +340,23 @@ static void compute_energy(
 {
     int16_t input_luma_block[ENERGY_BLOCK_COEFF_COUNT];
     int32_t coeffs[ENERGY_BLOCK_COEFF_COUNT];
-
-    uint8_t* input_luma_superblock_row = input_padded_pic->buffer_y + input_luma_origin_index;
+    uint8_t* input_luma_superblock_start = input_padded_pic->buffer_y + input_luma_origin_index;
 
     // loop over 64 8x8 subblocks (8 horz, 8 vert) in 64x64 superblock
     for (int32_t subb_y = 0; subb_y < ENERGY_NUM_BLOCKS_PER_DIM; subb_y++) {
+        uint8_t* input_luma_subblock_start = input_luma_superblock_start + subb_y * ENERGY_BLOCK_SIZE * input_padded_pic->stride_y;
+
         for (int32_t subb_x = 0; subb_x < ENERGY_NUM_BLOCKS_PER_DIM; subb_x++) {
+            uint8_t* input_luma_subblock_row = input_luma_subblock_start;
+
             // copy 8-bit luma values from padded pic to 16-bit block buffer
             for (int32_t y = 0; y < ENERGY_BLOCK_SIZE; y++) {
                 for (int32_t x = 0; x < ENERGY_BLOCK_SIZE; x++) {
-                    input_luma_block[y * ENERGY_BLOCK_SIZE + x] = (int16_t)input_luma_superblock_row[subb_x * ENERGY_BLOCK_SIZE + x];
+                    input_luma_block[y * ENERGY_BLOCK_SIZE + x] = (int16_t)input_luma_subblock_row[subb_x * ENERGY_BLOCK_SIZE + x];
                 }
-                input_luma_superblock_row += input_padded_pic->stride_y;
-            }
 
+                input_luma_subblock_row += input_padded_pic->stride_y;
+            }
             // perform the 8x8 DCT transform
             svt_av1_fwd_txfm2d_8x8(input_luma_block, coeffs, ENERGY_BLOCK_SIZE, DCT_DCT, 8);
 

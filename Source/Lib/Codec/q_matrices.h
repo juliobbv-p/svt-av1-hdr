@@ -13432,10 +13432,10 @@ static const int32_t lf_idx[] =  {  0,  1,  1,  1,  1,  1,  0,  0,
                                     0,  0,  0,  0,  0,  0,  0,  0,
                                     0,  0,  0,  0,  0,  0,  0,  0 };
 
-static const int32_t ENERGY_BLOCK_SIZE         = 8;
-static const int32_t ENERGY_BLOCK_COEFF_COUNT  = ENERGY_BLOCK_SIZE * ENERGY_BLOCK_SIZE;
-static const int32_t ENERGY_NUM_BLOCKS_PER_DIM = 8;
-static const int32_t ENERGY_NUM_BLOCKS_PER_SB  = ENERGY_NUM_BLOCKS_PER_DIM * ENERGY_NUM_BLOCKS_PER_DIM;
+#define ENERGY_BLOCK_SIZE         8
+#define ENERGY_BLOCK_COEFF_COUNT  ENERGY_BLOCK_SIZE * ENERGY_BLOCK_SIZE
+#define ENERGY_NUM_BLOCKS_PER_DIM 8
+#define ENERGY_NUM_BLOCKS_PER_SB  ENERGY_NUM_BLOCKS_PER_DIM * ENERGY_NUM_BLOCKS_PER_DIM
 
 #ifdef __cplusplus
 }
