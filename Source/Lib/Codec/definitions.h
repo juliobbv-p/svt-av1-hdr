@@ -2662,6 +2662,9 @@ typedef enum {
     SSIM_LVL_3 = 3   // for both product_full_mode_decision() and tx_type_search()
 } SsimLevel;
 
+#define QM2_MIN_BASE_QM_LEVEL 2
+#define QM2_MAX_BASE_QM_LEVEL 8
+
 #define MAX_U32 0xFFFFFFFF
 
 #ifdef __cplusplus

@@ -1071,8 +1071,8 @@ EbErrorType svt_av1_set_default_params(EbSvtAv1EncConfiguration *config_ptr) {
 
     // Quant Matrices (QM)
     config_ptr->enable_qm    = 1;
-    config_ptr->min_qm_level = 0;
-    config_ptr->max_qm_level = 15;
+    config_ptr->min_qm_level = 0;  // Unused value - will be set by str_to_qm_mode()
+    config_ptr->max_qm_level = 15; // Unused value - will be set by str_to_qm_mode()
 
     config_ptr->startup_mg_size                   = 0;
     config_ptr->frame_scale_evts.evt_num          = 0;
@@ -1926,6 +1926,23 @@ static EbErrorType str_to_resz_denoms(const char *nptr, SvtAv1FrameScaleEvts *ev
     return parse_list_u32(nptr, evts->resize_denoms, param_count);
 }
 
+static EbErrorType str_to_qm_mode(const char *nptr, EbSvtAv1EncConfiguration *config_struct) {
+    uint32_t qm_mode = 0;
+    EbErrorType return_error;
+
+    return_error = str_to_uint(nptr, &qm_mode, NULL);
+
+    if (return_error == EB_ErrorBadParameter)
+        return return_error;
+
+    config_struct->enable_qm    = qm_mode;
+    config_struct->min_qm_level = 0;
+    // Regular (enable-qm 1) and content-aware quantization matrices (enable-qm 2) have different qm-max defaults
+    config_struct->max_qm_level = config_struct->enable_qm == 2 ? QM2_MAX_BASE_QM_LEVEL : 15;
+
+    return EB_ErrorNone;
+}
+
 #define COLOR_OPT(par, opt)                                          \
     do {                                                             \
         if (!strcmp(name, par)) {                                    \
@@ -1968,6 +1985,9 @@ EB_API EbErrorType svt_av1_enc_parse_parameter(EbSvtAv1EncConfiguration *config_
 
     if (!strcmp(name, "rc"))
         return str_to_rc_mode(value, &config_struct->rate_control_mode, &config_struct->enable_adaptive_quantization);
+
+    if (!strcmp(name, "enable-qm"))
+        return str_to_qm_mode(value, config_struct);
 
     // custom enum fields
     if (!strcmp(name, "profile"))
@@ -2088,7 +2108,6 @@ EB_API EbErrorType svt_av1_enc_parse_parameter(EbSvtAv1EncConfiguration *config_
         {"resize-mode", &config_struct->resize_mode},
         {"resize-denom", &config_struct->resize_denom},
         {"resize-kf-denom", &config_struct->resize_kf_denom},
-        {"enable-qm", &config_struct->enable_qm},
         {"qm-min", &config_struct->min_qm_level},
         {"qm-max", &config_struct->max_qm_level},
         {"use-fixed-qindex-offsets", &config_struct->use_fixed_qindex_offsets},

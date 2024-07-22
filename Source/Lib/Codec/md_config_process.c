@@ -190,11 +190,8 @@ static INLINE int psy_get_qmlevel(int qindex, int first, int last, bool chroma) 
     return rint(first + (pow((double)(qindex), sigmoid_qm_func(qindex)) * (last + 1 - first)) / pow(QINDEX_RANGE, sigmoid_qm_func(qindex)));
 }
 
-static const float LOW_HFLF_RATIO = 0.1;  // blurry or coarsely-textured image
-static const float HIGH_HFLF_RATIO = 0.4; // sharp or finely-textured image
-
-static const uint16_t MIN_BASE_QM_LEVEL = 2;
-static const uint16_t MAX_BASE_QM_LEVEL = 8;
+static const float QM2_LOW_HFLF_RATIO = 0.1;  // blurry or coarsely-textured image
+static const float QM2_HIGH_HFLF_RATIO = 0.4; // sharp or finely-textured image
 
 // Table that establishes a base QM level (empirically tested), where lower QM levels than specified often result in *both*:
 //   1) worse subjective and objective quality
@@ -273,13 +270,13 @@ static int svt_get_content_aware_qmlevel(PictureParentControlSet *ppcs, int qind
     float avg_hflf_ratio = hflf_sum_ratio / valid_block_count;
 
     // clip average HF/LF ratio to non-extreme values
-    avg_hflf_ratio = CLIP3(LOW_HFLF_RATIO, HIGH_HFLF_RATIO, avg_hflf_ratio);
+    avg_hflf_ratio = CLIP3(QM2_LOW_HFLF_RATIO, QM2_HIGH_HFLF_RATIO, avg_hflf_ratio);
 
 #if DEBUG_QM_2_LEVEL
     printf("Normalized avg HF/LF ratio: %2.2f\n", avg_hflf_ratio);
 #endif
 
-    float sharpness_ratio = (avg_hflf_ratio - LOW_HFLF_RATIO) / (HIGH_HFLF_RATIO - LOW_HFLF_RATIO); // 0: very blurry, 1: very sharp
+    float sharpness_ratio = (avg_hflf_ratio - QM2_LOW_HFLF_RATIO) / (QM2_HIGH_HFLF_RATIO - QM2_LOW_HFLF_RATIO); // 0: very blurry, 1: very sharp
     uint16_t sharpness_idx = AOMMIN((int)(sharpness_ratio * 4), 3);  // partition sharpness range into 4 buckets (max value: 3)
     uint16_t qindex_idx = qindex / 32;                               // partition qindex range into 8 buckets (max value: int 255/32 = 7)
 
@@ -289,18 +286,18 @@ static int svt_get_content_aware_qmlevel(PictureParentControlSet *ppcs, int qind
 
     int32_t base_qmlevel = base_qmlevel_table[sharpness_idx][qindex_idx];
     // make sure the base qm level we got from the table is consistent with the min and max base limits
-    assert(base_qmlevel >= MIN_BASE_QM_LEVEL && base_qmlevel <= MAX_BASE_QM_LEVEL);
+    assert(base_qmlevel >= QM2_MIN_BASE_QM_LEVEL && base_qmlevel <= QM2_MAX_BASE_QM_LEVEL);
 
-    if (min == MIN_BASE_QM_LEVEL && max == MAX_BASE_QM_LEVEL) {
+    if (min == QM2_MIN_BASE_QM_LEVEL && max == QM2_MAX_BASE_QM_LEVEL) {
         // if min and max match actual specified base levels, there's no need to rescale
-        return AOMMIN(base_qmlevel, min);
+        return base_qmlevel;
     }
 
     int32_t scaled_qmlevel = base_qmlevel;
 
-    if (max > MAX_BASE_QM_LEVEL) {
+    if (max > QM2_MAX_BASE_QM_LEVEL) {
         // scale base qm level towards the max qm level
-        scaled_qmlevel = base_qmlevel + (max - MAX_BASE_QM_LEVEL);
+        scaled_qmlevel = base_qmlevel + (max - QM2_MAX_BASE_QM_LEVEL);
     }
 
     scaled_qmlevel = CLIP3(min, max, scaled_qmlevel);
