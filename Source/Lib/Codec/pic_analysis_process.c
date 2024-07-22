@@ -342,6 +342,9 @@ static void compute_energy(
     int32_t coeffs[ENERGY_BLOCK_COEFF_COUNT];
     uint8_t* input_luma_superblock_start = input_padded_pic->buffer_y + input_luma_origin_index;
 
+    int32_t lf_energy = 0;
+    int32_t hf_energy = 0;
+
     // loop over 64 8x8 subblocks (8 horz, 8 vert) in 64x64 superblock
     for (int32_t subb_y = 0; subb_y < ENERGY_NUM_BLOCKS_PER_DIM; subb_y++) {
         uint8_t* input_luma_subblock_start = input_luma_superblock_start + subb_y * ENERGY_BLOCK_SIZE * input_padded_pic->stride_y;
@@ -368,9 +371,6 @@ static void compute_energy(
                 printf("\n");
             }*/
 
-            int32_t lf_energy = 0;
-            int32_t hf_energy = 0;
-
             // calculate low-freq and high-freq energy values
             // coeff_idx starts at 1 to avoid counting the DC coefficient
             for (int32_t coeff_idx = 1; coeff_idx < ENERGY_BLOCK_COEFF_COUNT; coeff_idx++) {
@@ -380,11 +380,11 @@ static void compute_energy(
                     hf_energy += abs(coeffs[coeff_idx]);
                 }
             }
-
-            ppcs->lf_energy[sb_index][subb_y * 8 + subb_x] = lf_energy;
-            ppcs->hf_energy[sb_index][subb_y * 8 + subb_x] = hf_energy;
         }
     }
+
+    ppcs->lf_energy[sb_index] = lf_energy;
+    ppcs->hf_energy[sb_index] = hf_energy;
 }
 
 /*******************************************

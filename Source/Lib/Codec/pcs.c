@@ -1127,10 +1127,10 @@ static void picture_parent_control_set_dctor(EbPtr ptr) {
         EB_FREE_2D(obj->variance);
 
     if (obj->lf_energy)
-        EB_FREE_2D(obj->lf_energy);
+        EB_FREE_ARRAY(obj->lf_energy);
 
     if (obj->hf_energy)
-        EB_FREE_2D(obj->hf_energy);
+        EB_FREE_ARRAY(obj->hf_energy);
 
     if (obj->picture_histogram) {
         for (int region_in_picture_width_index = 0; region_in_picture_width_index < MAX_NUMBER_OF_REGIONS_IN_WIDTH;
@@ -1315,9 +1315,8 @@ static EbErrorType picture_parent_control_set_ctor(PictureParentControlSet *obje
         EB_MALLOC_2D(object_ptr->variance, object_ptr->b64_total_count, block_count);
     }
     if (init_data_ptr->calculate_energy) {
-        // allocate 64 8x8 values per 64x64 superblock
-        EB_MALLOC_2D(object_ptr->lf_energy, object_ptr->b64_total_count, ENERGY_NUM_BLOCKS_PER_SB);
-        EB_MALLOC_2D(object_ptr->hf_energy, object_ptr->b64_total_count, ENERGY_NUM_BLOCKS_PER_SB);
+        EB_MALLOC_ARRAY(object_ptr->lf_energy, object_ptr->b64_total_count);
+        EB_MALLOC_ARRAY(object_ptr->hf_energy, object_ptr->b64_total_count);
     }
     if (init_data_ptr->calc_hist) {
         EB_ALLOC_PTR_ARRAY(object_ptr->picture_histogram, MAX_NUMBER_OF_REGIONS_IN_WIDTH);

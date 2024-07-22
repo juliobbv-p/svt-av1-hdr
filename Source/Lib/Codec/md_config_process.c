@@ -200,7 +200,7 @@ static const uint16_t MAX_BASE_QM_LEVEL = 8;
 //   1) worse subjective and objective quality
 //   2) higher file sizes (significantly increased use of smaller transforms to compensate poorer HF resolution)
 // ...so they're not even worth considering
-// ToDo juliobbv: get more exact base qmlevels
+// Note: these values can further be tuned
 static const uint16_t base_qmlevel_table[4][8] = { { 4, 3, 3, 3, 3, 3, 2, 2 },   // most blurry
                                                    { 5, 4, 4, 4, 4, 4, 3, 2 },
                                                    { 7, 6, 6, 6, 6, 5, 4, 3 },
@@ -218,13 +218,8 @@ static int svt_get_content_aware_qmlevel(PictureParentControlSet *ppcs, int qind
     printf("HF/LF ratio, frame %llu, temp. level %i\n", ppcs->picture_number, ppcs->temporal_layer_index);
 #endif
     for (uint16_t b64_idx = 0; b64_idx < b64_total_count; ++b64_idx) {
-        int32_t sb_hf_energy = 0;
-        int32_t sb_lf_energy = 0;
-
-        for (uint32_t subblock = 0; subblock < ENERGY_NUM_BLOCKS_PER_SB; subblock++) {
-            sb_lf_energy += abs(ppcs->lf_energy[b64_idx][subblock]);
-            sb_hf_energy += abs(ppcs->hf_energy[b64_idx][subblock]);
-        }
+        int32_t sb_hf_energy = ppcs->hf_energy[b64_idx];
+        int32_t sb_lf_energy = ppcs->lf_energy[b64_idx];
 
         if (sb_lf_energy == 0 && sb_hf_energy == 0) {
             // completely solid block (no AC coefficients), skip from analysis
@@ -253,13 +248,8 @@ static int svt_get_content_aware_qmlevel(PictureParentControlSet *ppcs, int qind
     printf("LF energy stats, frame %llu, temp. level %i\n", ppcs->picture_number, ppcs->temporal_layer_index);
     for (uint16_t b64_idx = 0; b64_idx < b64_total_count; ++b64_idx) {
         B64Geom *b64_geom = &ppcs->b64_geom[b64_idx];
-        int32_t sb_lf_energy = 0;
 
-        for (uint32_t subblock = 0; subblock < ENERGY_NUM_BLOCKS_PER_SB; subblock++) {
-            sb_lf_energy += abs(ppcs->lf_energy[b64_idx][subblock]);
-        }
-
-        printf("%6d ", sb_lf_energy);
+        printf("%6d ", ppcs->lf_energy[b64_idx]);
         if (ppcs->frame_width <= (b64_geom->org_x + 64)) {
             printf("\n");
         }
@@ -268,13 +258,8 @@ static int svt_get_content_aware_qmlevel(PictureParentControlSet *ppcs, int qind
     printf("HF energy stats, frame %llu, temp. level %i\n", ppcs->picture_number, ppcs->temporal_layer_index);
     for (uint16_t b64_idx = 0; b64_idx < b64_total_count; ++b64_idx) {
         B64Geom *b64_geom = &ppcs->b64_geom[b64_idx];
-        int32_t sb_hf_energy = 0;
 
-        for (uint32_t subblock = 0; subblock < ENERGY_NUM_BLOCKS_PER_SB; subblock++) {
-            sb_hf_energy += abs(ppcs->hf_energy[b64_idx][subblock]);
-        }
-
-        printf("%6d ", sb_hf_energy);
+        printf("%6d ", ppcs->hf_energy[b64_idx]);
         if (ppcs->frame_width <= (b64_geom->org_x + 64)) {
             printf("\n");
         }
