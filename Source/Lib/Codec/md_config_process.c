@@ -338,8 +338,9 @@ void svt_av1_qm_init(PictureParentControlSet *pcs) {
         if (pcs->scs->static_config.enable_qm == 2) {
             int32_t y_qmlevel = svt_get_content_aware_qmlevel(pcs, base_qindex, min_qmlevel, max_qmlevel);
             // chroma planes get flatter quantization matrices to compensate from 4:2:0 chroma subsampling
-            int32_t u_qmlevel = AOMMIN(y_qmlevel + 6, max_qmlevel);
-            int32_t v_qmlevel = AOMMIN(y_qmlevel + 6, max_qmlevel);
+            // and they're not clamped to the qm-max parameter
+            int32_t u_qmlevel = AOMMIN(y_qmlevel + 6, 15);
+            int32_t v_qmlevel = AOMMIN(y_qmlevel + 6, 15);
 
             pcs->frm_hdr.quantization_params.qm[AOM_PLANE_Y] = y_qmlevel;
             pcs->frm_hdr.quantization_params.qm[AOM_PLANE_U] = u_qmlevel;
