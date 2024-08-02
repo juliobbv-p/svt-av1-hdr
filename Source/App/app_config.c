@@ -766,7 +766,7 @@ ConfigDescription config_entry_rc[] = {
     {QP_LONG_TOKEN, "Initial QP level value, default is 35 [1-63]"},
     {CRF_LONG_TOKEN,
      "Constant Rate Factor value, setting this value is equal to `--rc 0 --aq-mode 2 --qp "
-     "x`, default is 35 [1-63]"},
+     "x`, default is 35 [1-70]"},
 
     {TARGET_BIT_RATE_TOKEN,
      "Target Bitrate (kbps), only applicable for VBR and CBR encoding, default is 7000 [1-100000]"},
