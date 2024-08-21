@@ -537,6 +537,9 @@ static EbErrorType picture_control_set_ctor(PictureControlSet *object_ptr, EbPtr
     sb_origin_x = 0;
     sb_origin_y = 0;
 
+    object_ptr->vb_min_sb_qindex = -1;
+    object_ptr->vb_max_sb_qindex = -1;
+
     const uint16_t picture_sb_w = (uint16_t)((init_data_ptr->picture_width + init_data_ptr->sb_size - 1) /
                                              init_data_ptr->sb_size);
     const uint16_t picture_sb_h = (uint16_t)((init_data_ptr->picture_height + init_data_ptr->sb_size - 1) /

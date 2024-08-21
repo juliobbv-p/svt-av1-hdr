@@ -441,6 +441,10 @@ typedef struct PictureControlSet {
     // different with input frame when reference scaling is enabled
     EbPictureBufferDesc *scaled_input_pic;
     bool                 rtc_tune;
+
+    // min and max SB qindex values, adjusted by variance boost (-1 means unset)
+    int16_t  vb_min_sb_qindex;
+    int16_t  vb_max_sb_qindex;
 } PictureControlSet;
 
 // To optimize based on the max input size

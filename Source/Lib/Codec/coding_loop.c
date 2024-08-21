@@ -28,6 +28,7 @@
 #include "full_loop.h"
 #include "pack_unpack_c.h"
 #include "enc_inter_prediction.h"
+#include "segmentation.h"
 
 void               svt_aom_get_recon_pic(PictureControlSet *pcs, EbPictureBufferDesc **recon_ptr, Bool is_highbd);
 void               aom_av1_set_ssim_rdmult(struct ModeDecisionContext *ctx, PictureControlSet *pcs, const int mi_row,
@@ -311,7 +312,8 @@ static void av1_encode_loop(PictureControlSet *pcs, EncDecContext *ed_ctx, Super
                             EbPictureBufferDesc *coeff_samples_sb, // sb based
                             EbPictureBufferDesc *residual16bit, // no basis/offset
                             EbPictureBufferDesc *transform16bit, // no basis/offset
-                            EbPictureBufferDesc *inverse_quant_buffer, uint32_t component_mask, uint16_t *eob)
+                            EbPictureBufferDesc *inverse_quant_buffer,
+                            uint32_t component_mask, uint16_t *eob, bool do_still_image_seg_comp)
 
 {
     ModeDecisionContext *md_ctx        = ed_ctx->md_ctx;
@@ -327,9 +329,14 @@ static void av1_encode_loop(PictureControlSet *pcs, EncDecContext *ed_ctx, Super
     const uint32_t round_origin_y = (org_y >> 3) << 3; // for Chroma blocks with size of 4
     const uint8_t  tx_org_x       = blk_geom->tx_org_x[is_inter][blk_ptr->tx_depth][ed_ctx->txb_itr];
     const uint8_t  tx_org_y       = blk_geom->tx_org_y[is_inter][blk_ptr->tx_depth][ed_ctx->txb_itr];
-    const int32_t  seg_qp         = pcs->ppcs->frm_hdr.segmentation_params.segmentation_enabled
-                 ? pcs->ppcs->frm_hdr.segmentation_params.feature_data[ed_ctx->blk_ptr->segment_id][SEG_LVL_ALT_Q]
-                 : 0;
+
+    //printf("do_still_image_seg_comp: %i\n", do_still_image_seg_comp);
+    if (do_still_image_seg_comp) {
+        psy_still_image_apply_segmentation_based_quantization(blk_geom, pcs, sb_ptr, ed_ctx->blk_ptr);
+    }
+    const int32_t seg_qp  = pcs->ppcs->frm_hdr.segmentation_params.segmentation_enabled
+                            ? pcs->ppcs->frm_hdr.segmentation_params.feature_data[ed_ctx->blk_ptr->segment_id][SEG_LVL_ALT_Q]
+                            : 0;
 
     uint32_t input_luma_offset, input_cb_offset, input_cr_offset;
     uint32_t pred_luma_offset, pred_cb_offset, pred_cr_offset;
@@ -707,7 +714,7 @@ void svt_aom_store16bit_input_src(EbPictureBufferDesc *input_sample16bit_buffer,
 }
 void        svt_aom_update_mi_map_enc_dec(BlkStruct *blk_ptr, ModeDecisionContext *ctx, PictureControlSet *pcs);
 static void perform_intra_coding_loop(PictureControlSet *pcs, SuperBlock *sb_ptr, uint32_t sb_addr, BlkStruct *blk_ptr,
-                                      EncDecContext *ed_ctx) {
+                                      EncDecContext *ed_ctx, bool do_still_image_seg_comp) {
     Bool                 is_16bit  = ed_ctx->is_16bit;
     uint32_t             bit_depth = ed_ctx->bit_depth;
     uint8_t              is_inter  = 0; // set to 0 b/c this is the intra path
@@ -872,7 +879,8 @@ static void perform_intra_coding_loop(PictureControlSet *pcs, SuperBlock *sb_ptr
                         transform_buffer,
                         inverse_quant_buffer,
                         PICTURE_BUFFER_DESC_LUMA_MASK,
-                        eobs[ed_ctx->txb_itr]);
+                        eobs[ed_ctx->txb_itr],
+                        do_still_image_seg_comp);
         av1_encode_generate_recon(ed_ctx,
                                   txb_origin_x,
                                   txb_origin_y,
@@ -1139,7 +1147,8 @@ static void perform_intra_coding_loop(PictureControlSet *pcs, SuperBlock *sb_ptr
                         transform_buffer,
                         inverse_quant_buffer,
                         PICTURE_BUFFER_DESC_CHROMA_MASK,
-                        eobs[ed_ctx->txb_itr]);
+                        eobs[ed_ctx->txb_itr],
+                        false);
         av1_encode_generate_recon(ed_ctx,
                                   txb_origin_x,
                                   txb_origin_y,
@@ -1477,7 +1486,8 @@ static void perform_inter_coding_loop(SequenceControlSet *scs, PictureControlSet
                             transform_buffer,
                             inverse_quant_buffer,
                             blk_geom->has_uv && uv_pass ? PICTURE_BUFFER_DESC_FULL_MASK : PICTURE_BUFFER_DESC_LUMA_MASK,
-                            eobs[ctx->txb_itr]);
+                            eobs[ctx->txb_itr],
+                            false);
         }
 
         //inter mode
@@ -1758,7 +1768,7 @@ EB_EXTERN void svt_aom_encode_decode(SequenceControlSet *scs, PictureControlSet 
                 // *Note - Transforms are the same size as predictions
                 // Transform partitioning path (INTRA Luma/Chroma)
                 if (blk_ptr->use_intrabc == 0) {
-                    perform_intra_coding_loop(pcs, sb_ptr, sb_addr, blk_ptr, ctx);
+                    perform_intra_coding_loop(pcs, sb_ptr, sb_addr, blk_ptr, ctx, true);
                 } else {
                     perform_inter_coding_loop(scs, pcs, ctx, sb_ptr, sb_addr);
                     // Update Recon Samples-INTRA-

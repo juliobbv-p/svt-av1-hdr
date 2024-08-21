@@ -121,8 +121,79 @@ static void roi_map_apply_segmentation_based_quantization(const BlockGeom *blk_g
            0);
 }
 
+void psy_still_image_apply_segmentation_based_quantization(const BlockGeom *blk_geom, PictureControlSet *pcs,
+                                                           SuperBlock *sb_ptr, BlkStruct *blk_ptr) {
+    // Find start of 8x8 variance values
+    uint16_t  *variance_ptr = pcs->ppcs->variance[sb_ptr->index] + ME_TIER_ZERO_PU_8x8_0;
+    bool any_high_variance = false;
+    uint32_t cu_width = 0;
+    uint32_t cu_height = 0;
+    uint32_t cu_x_start = 0;
+    uint32_t cu_y_start = 0;
+
+    bool low_qindex_sb = sb_ptr->qindex <= ((pcs->vb_max_sb_qindex + pcs->vb_min_sb_qindex) / 2);
+
+    // SB has a higher qindex than average frame qindex, do not perform any adjustment
+    if (!low_qindex_sb) {
+        blk_ptr->segment_id = 0;
+        return;
+    }
+
+    // Get dimensions and bounds for CU in multiples of 8x8 blocks
+    if (blk_geom->bheight == 4 || blk_geom->bwidth == 4) {
+        // 4x4, 4x8, 4x16, 8x4, 16x4 CUs
+        cu_width = blk_geom->bwidth == 16 ? 2 : 1;
+        cu_height = blk_geom->bheight == 16 ? 2 : 1;
+        cu_x_start = blk_geom->org_x & ~7;
+        cu_y_start = blk_geom->org_y & ~7;
+    } else {
+        // All other CUs
+        cu_width = blk_geom->bwidth >> 3;
+        cu_height = blk_geom->bheight >> 3;
+        cu_x_start = blk_geom->org_x >> 3;
+        cu_y_start = blk_geom->org_y >> 3;
+    }
+
+    printf("sb org_x %i, org_y: %i ,", sb_ptr->org_x, sb_ptr->org_y);
+    printf("cu bwidth: %i, bheight: %i, width: %i, height: %i, cu_x_start %i, cu_y_start %i\n", blk_geom->bwidth, blk_geom->bheight, cu_width, cu_height, cu_x_start, cu_y_start);
+
+    printf("variances\n");
+    for (uint32_t y = cu_y_start; y < cu_y_start + cu_height; y++) {
+        for (uint32_t x = cu_x_start; x < cu_x_start + cu_width; x++) {
+            uint16_t var = variance_ptr[y * 8 + x];
+            printf("%5i ", var);
+            any_high_variance |= var >= 256;
+        }
+        printf("\n");
+    }
+
+    printf("any high variance = %i\n", any_high_variance);
+    if (any_high_variance) {
+        // Find best segment id to adjust for too low of a parent SB qindex
+        SegmentationParams *segmentation_params           = &pcs->ppcs->frm_hdr.segmentation_params;
+        blk_ptr->segment_id = 0;
+
+        for (int seg_id = 1; seg_id <= segmentation_params->last_active_seg_id; seg_id++) {
+            uint8_t delta_q = pcs->vb_max_sb_qindex - sb_ptr->qindex;
+
+            if (delta_q >= segmentation_params->feature_data[seg_id][SEG_LVL_ALT_Q]) {
+                blk_ptr->segment_id = seg_id;
+            }
+        }
+    }
+    else {
+        // No high-variance 8x8 blocks were found, do not perform any adjustment
+        blk_ptr->segment_id = 0;
+    }
+}
+
 void svt_aom_apply_segmentation_based_quantization(const BlockGeom *blk_geom, PictureControlSet *pcs,
                                                    SuperBlock *sb_ptr, BlkStruct *blk_ptr) {
+    if (pcs->ppcs->scs->static_config.tune == 4 && pcs->ppcs->scs->static_config.enable_variance_boost) {
+        // Tune 4 (still image) with variance boost has its own segment-based mode: psy_still_image_apply_segmentation_based_quantization()
+        // application is deferred to happen at enc-dec time (skipping all MD stages), so we exit early here
+        return;
+    }
     if (pcs->ppcs->roi_map_evt != NULL) {
         roi_map_apply_segmentation_based_quantization(blk_geom, pcs, sb_ptr, blk_ptr);
         return;
@@ -213,7 +284,77 @@ static void roi_map_setup_segmentation(PictureControlSet *pcs, SequenceControlSe
     calculate_segmentation_data(segmentation_params);
 }
 
+static void psy_still_image_setup_segmentation(PictureControlSet *pcs, SequenceControlSet *scs) {
+    UNUSED(scs);
+    SegmentationParams *segmentation_params           = &pcs->ppcs->frm_hdr.segmentation_params;
+    segmentation_params->segmentation_enabled         = true;
+    segmentation_params->segmentation_update_data     = true;
+    segmentation_params->segmentation_update_map      = true;
+    segmentation_params->segmentation_temporal_update = false;
+
+    // Segment 0 has no adjustments, and inherit values (qindex, LF) from the parent superblock
+    segmentation_params->feature_enabled[0][SEG_LVL_ALT_Q]      = 0;
+    segmentation_params->feature_data[0][SEG_LVL_ALT_Q]         = 0;
+    segmentation_params->feature_enabled[0][SEG_LVL_ALT_LF_Y_V] = 0;
+    segmentation_params->feature_enabled[0][SEG_LVL_ALT_LF_Y_H] = 0;
+    segmentation_params->feature_enabled[0][SEG_LVL_ALT_LF_U]   = 0;
+    segmentation_params->feature_enabled[0][SEG_LVL_ALT_LF_V]   = 0;
+
+    if (pcs->vb_max_sb_qindex - pcs->vb_min_sb_qindex >= 2) {
+        // Corrective segment id 1
+        segmentation_params->feature_enabled[1][SEG_LVL_ALT_Q]      = 1;
+        segmentation_params->feature_data[1][SEG_LVL_ALT_Q]         = (pcs->vb_max_sb_qindex - pcs->vb_min_sb_qindex) / 2;
+    } else {
+        segmentation_params->feature_enabled[1][SEG_LVL_ALT_Q]      = 0;
+        segmentation_params->feature_data[1][SEG_LVL_ALT_Q]         = 0;
+    }
+    segmentation_params->feature_enabled[1][SEG_LVL_ALT_LF_Y_V] = 0;
+    segmentation_params->feature_enabled[1][SEG_LVL_ALT_LF_Y_H] = 0;
+    segmentation_params->feature_enabled[1][SEG_LVL_ALT_LF_U]   = 0;
+    segmentation_params->feature_enabled[1][SEG_LVL_ALT_LF_V]   = 0;
+
+    if (pcs->vb_max_sb_qindex - pcs->vb_min_sb_qindex >= 4) {
+        // Corrective segment id 2
+        segmentation_params->feature_enabled[2][SEG_LVL_ALT_Q]      = 1;
+        segmentation_params->feature_data[2][SEG_LVL_ALT_Q]         = (pcs->vb_max_sb_qindex - pcs->vb_min_sb_qindex) * 3 / 4;
+    } else {
+        segmentation_params->feature_enabled[2][SEG_LVL_ALT_Q]      = 0;
+        segmentation_params->feature_data[2][SEG_LVL_ALT_Q]         = 0;
+    }
+
+    segmentation_params->feature_enabled[2][SEG_LVL_ALT_LF_Y_V] = 0;
+    segmentation_params->feature_enabled[2][SEG_LVL_ALT_LF_Y_H] = 0;
+    segmentation_params->feature_enabled[2][SEG_LVL_ALT_LF_U]   = 0;
+    segmentation_params->feature_enabled[2][SEG_LVL_ALT_LF_V]   = 0;
+
+    printf("alt_q s0: %i, s1: %i, s2: %i\n",
+        segmentation_params->feature_data[0][SEG_LVL_ALT_Q],
+        segmentation_params->feature_data[1][SEG_LVL_ALT_Q],
+        segmentation_params->feature_data[2][SEG_LVL_ALT_Q]);
+
+    // setup loop filter data
+    /*int32_t filter_level[4];
+    uint8_t qindex = pcs->ppcs->frm_hdr.quantization_params.base_q_idx;
+    svt_av1_pick_filter_level_by_q(pcs, qindex, filter_level);
+    for (int i = 1; i <= 2; i++) {
+        uint8_t qindex_seg = CLIP3(0, 255, qindex + segmentation_params->feature_data[i][SEG_LVL_ALT_Q]);
+        int32_t filter_level_seg[4];
+        svt_av1_pick_filter_level_by_q(pcs, qindex_seg, filter_level_seg);
+        if (segmentation_params->feature_enabled[i][SEG_LVL_ALT_LF_Y_V]) {
+            segmentation_params->feature_data[i][SEG_LVL_ALT_LF_Y_V] = filter_level_seg[0] - filter_level[0];
+        }
+        if (segmentation_params->feature_enabled[i][SEG_LVL_ALT_LF_Y_H]) {
+            segmentation_params->feature_data[i][SEG_LVL_ALT_LF_Y_H] = filter_level_seg[1] - filter_level[1];
+        }
+    }*/
+    calculate_segmentation_data(segmentation_params);
+}
+
 void svt_aom_setup_segmentation(PictureControlSet *pcs, SequenceControlSet *scs) {
+    if (scs->static_config.tune == 4 && scs->static_config.enable_variance_boost) {
+        psy_still_image_setup_segmentation(pcs, scs);
+        return;
+    }
     if (pcs->ppcs->roi_map_evt != NULL) {
         roi_map_setup_segmentation(pcs, scs);
         return;

@@ -1591,6 +1591,9 @@ void svt_variance_adjust_qp(PictureControlSet *pcs, bool readjust_base_q_idx) {
 #endif
         sb_ptr->qindex = normalized_qindex;
     }
+
+    pcs->vb_max_sb_qindex = max_qindex;
+    pcs->vb_min_sb_qindex = min_qindex;
 }
 
 /******************************************************
@@ -3430,7 +3433,11 @@ void *svt_aom_rate_control_kernel(void *input_ptr) {
                             svt_aom_crf_assign_max_rate(pcs->ppcs);
                     }
                     pcs->ppcs->picture_qp = pcs->picture_qp;
-                    svt_aom_setup_segmentation(pcs, scs);
+
+                    // todo juliobbv: find out if this can be unconditionally moved after AQ (VB, TPL) adjustment
+                    if (!(scs->static_config.tune == 4 && scs->static_config.enable_variance_boost)) {
+                        svt_aom_setup_segmentation(pcs, scs);
+                    }
                 } else {
                     // ***Rate Control***
                     int32_t new_qindex;
@@ -3621,6 +3628,11 @@ void *svt_aom_rate_control_kernel(void *input_ptr) {
             {
                 // adjust delta q res and normalize superblock delta q values to reduce signaling overhead
                 normalize_sb_delta_q(pcs);
+            }
+
+            // todo juliobbv: find out if this can be unconditionally moved after AQ (VB, TPL) adjustment
+            if (scs->static_config.tune == 4 && scs->static_config.enable_variance_boost) {
+                svt_aom_setup_segmentation(pcs, scs);
             }
 
             if (scs->static_config.rate_control_mode && !is_superres_recode_task) {
