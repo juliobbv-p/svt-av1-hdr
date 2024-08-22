@@ -190,8 +190,7 @@ void psy_still_image_apply_segmentation_based_quantization(const BlockGeom *blk_
 void svt_aom_apply_segmentation_based_quantization(const BlockGeom *blk_geom, PictureControlSet *pcs,
                                                    SuperBlock *sb_ptr, BlkStruct *blk_ptr) {
     if (pcs->ppcs->scs->static_config.tune == 4 && pcs->ppcs->scs->static_config.enable_variance_boost) {
-        // Tune 4 (still image) with variance boost has its own segment-based mode: psy_still_image_apply_segmentation_based_quantization()
-        // application is deferred to happen at enc-dec time (skipping all MD stages), so we exit early here
+        psy_still_image_apply_segmentation_based_quantization(blk_geom, pcs, sb_ptr, blk_ptr);
         return;
     }
     if (pcs->ppcs->roi_map_evt != NULL) {

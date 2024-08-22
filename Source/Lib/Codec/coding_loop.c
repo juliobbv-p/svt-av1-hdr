@@ -330,10 +330,6 @@ static void av1_encode_loop(PictureControlSet *pcs, EncDecContext *ed_ctx, Super
     const uint8_t  tx_org_x       = blk_geom->tx_org_x[is_inter][blk_ptr->tx_depth][ed_ctx->txb_itr];
     const uint8_t  tx_org_y       = blk_geom->tx_org_y[is_inter][blk_ptr->tx_depth][ed_ctx->txb_itr];
 
-    //printf("do_still_image_seg_comp: %i\n", do_still_image_seg_comp);
-    if (do_still_image_seg_comp) {
-        psy_still_image_apply_segmentation_based_quantization(blk_geom, pcs, sb_ptr, ed_ctx->blk_ptr);
-    }
     const int32_t seg_qp  = pcs->ppcs->frm_hdr.segmentation_params.segmentation_enabled
                             ? pcs->ppcs->frm_hdr.segmentation_params.feature_data[ed_ctx->blk_ptr->segment_id][SEG_LVL_ALT_Q]
                             : 0;
