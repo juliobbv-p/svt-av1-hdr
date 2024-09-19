@@ -612,8 +612,14 @@ EbErrorType svt_av1_verify_settings(SequenceControlSet *scs) {
     // Block the use of M4 or lower for resolutions higher than 4K, unless allintra coding is used (due to memory constraints)
     if (!scs->allintra && (uint64_t)(scs->max_input_luma_width * scs->max_input_luma_height) > INPUT_SIZE_4K_TH &&
         config->enc_mode <= ENC_M4) {
-        SVT_ERROR("8k+ resolution support is limited to M5 and faster presets.\n");
-        return_error = EB_ErrorBadParameter;
+        if (config->enc_mode >= ENC_M2) {
+            SVT_WARN(
+                "8K+ resolution support below M5 isn't officially supported. 64 GB of available memory are "
+                "recommended.\n");
+        } else {
+            SVT_ERROR("8K+ resolution support is limited to M2 and faster presets.\n");
+            return_error = EB_ErrorBadParameter;
+        }
     }
     if (config->pass > 0 && scs->static_config.enable_overlays) {
         SVT_ERROR(
