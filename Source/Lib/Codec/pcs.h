@@ -1192,6 +1192,7 @@ typedef struct PictureControlSetInitData {
     bool    allintra;
     uint8_t qp_scale_compress_strength;
     bool    max_32_tx_size;
+    uint8_t    noise_norm_strength;
 } PictureControlSetInitData;
 
 /**************************************
