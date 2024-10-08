@@ -1186,6 +1186,7 @@ typedef struct PictureControlSetInitData {
     uint8_t max_tx_size;
     double  ac_bias;
     bool    use_flat_ipp;
+    uint8_t noise_norm_strength;
 } PictureControlSetInitData;
 
 /**************************************
