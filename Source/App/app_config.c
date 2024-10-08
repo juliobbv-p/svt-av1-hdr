@@ -205,6 +205,7 @@
 #define ADAPTIVE_FILM_GRAIN_TOKEN "--adaptive-film-grain"
 #define MAX_TX_SIZE_TOKEN "--max-tx-size"
 #define AC_BIAS_TOKEN "--ac-bias"
+#define NOISE_NORM_STRENGTH_TOKEN "--noise-norm-strength"
 
 static EbErrorType validate_error(EbErrorType err, const char *token, const char *value) {
     switch (err) {
@@ -948,6 +949,8 @@ ConfigDescription config_entry_psychovisual[] = {
     {MAX_TX_SIZE_TOKEN, "Limits the allowed transform sizes to the specified, default is 64 [32,64]"},
     //AC-Bias
     {AC_BIAS_TOKEN, "Strength of AC bias in rate distortion, default is 1.0 [0.0-8.0]"},
+    // Noise normalization strength
+    {NOISE_NORM_STRENGTH_TOKEN, "Noise normalization strength, default is 1 [0-4]"},
     // Termination
     {NULL, NULL}};
 
@@ -1157,6 +1160,9 @@ ConfigEntry config_entry[] = {
 
     // Psy rd strength
     {AC_BIAS_TOKEN, "AcBias", set_cfg_generic_token},
+
+    // Noise normalization strength
+    {NOISE_NORM_STRENGTH_TOKEN, "NoiseNormStrength", set_cfg_generic_token},
 
     // Termination
     {NULL, NULL, NULL}};
