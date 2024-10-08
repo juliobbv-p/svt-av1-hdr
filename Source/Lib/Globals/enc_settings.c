@@ -850,6 +850,11 @@ EbErrorType svt_av1_verify_settings(SequenceControlSet* scs) {
         return_error = EB_ErrorBadParameter;
     }
 
+    if (config->noise_norm_strength > 4) {
+        SVT_ERROR("Noise normalization strength must be between 0 and 4\n");
+        return_error = EB_ErrorBadParameter;
+    }
+
     return return_error;
 }
 
@@ -1011,6 +1016,7 @@ EbErrorType svt_av1_set_default_params(EbSvtAv1EncConfiguration* config_ptr) {
     config_ptr->max_tx_size                       = 64;
     config_ptr->extended_crf_qindex_offset        = 0;
     config_ptr->ac_bias                           = 1.0;
+    config_ptr->noise_norm_strength               = 1;
     return return_error;
 }
 
@@ -1171,6 +1177,10 @@ void svt_av1_print_lib_params(SequenceControlSet* scs) {
 
         if (config->ac_bias) {
             SVT_INFO("SVT [config]: AC Bias Strength \t\t\t\t\t\t: %.2f\n", config->ac_bias);
+        }
+
+        if (config->noise_norm_strength > 0) {
+            SVT_INFO("SVT [config]: Noise Normalization Strength \t\t\t\t\t: %d\n", config->noise_norm_strength);
         }
     }
 #if DEBUG_BUFFERS
@@ -2213,6 +2223,7 @@ EB_API EbErrorType svt_av1_enc_parse_parameter(EbSvtAv1EncConfiguration* config_
         {"enable-tf", &config_struct->enable_tf},
         {"tf-strength", &config_struct->tf_strength},
         {"max-tx-size", &config_struct->max_tx_size},
+        {"noise-norm-strength", &config_struct->noise_norm_strength},
     };
 
     const size_t uint8_opts_size = sizeof(uint8_opts) / sizeof(uint8_opts[0]);

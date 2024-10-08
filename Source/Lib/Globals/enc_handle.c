@@ -1333,6 +1333,7 @@ EB_API EbErrorType svt_av1_enc_init(EbComponentType* svt_enc_component) {
         input_data.rtc_tune            = scs->static_config.rtc;
         input_data.variance_octile     = scs->static_config.variance_octile;
         input_data.adaptive_film_grain = scs->static_config.adaptive_film_grain;
+        input_data.noise_norm_strength = scs->static_config.noise_norm_strength;
         input_data.static_config       = scs->static_config;
         input_data.allintra            = scs->allintra;
         input_data.use_flat_ipp        = scs->use_flat_ipp;
@@ -4477,6 +4478,9 @@ static void copy_api_from_app(SequenceControlSet* scs, EbSvtAv1EncConfiguration*
 
     // AC bias
     scs->static_config.ac_bias = config_struct->ac_bias;
+
+    // Noise normalization strength
+    scs->static_config.noise_norm_strength = config_struct->noise_norm_strength;
 
     // Override settings for Still IQ tune
     if (scs->static_config.tune == TUNE_IQ) {
