@@ -978,6 +978,15 @@ typedef struct EbSvtAv1EncConfiguration {
      */
     bool max_32_tx_size;
 
+    /**
+     * @brief Noise normalization strength; modifies the encoder's willingness
+     * to boost AC coefficients in low-noise blocks.
+     * Min value is 0.
+     * Max value is 4.
+     * Default is 3.
+     */
+    uint8_t noise_norm_strength;
+
     // clang-format off
     /*Add 128 Byte Padding to Struct to avoid changing the size of the public configuration struct*/
     uint8_t padding[128 - (sizeof(uint8_t) * 2)

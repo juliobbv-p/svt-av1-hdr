@@ -211,6 +211,8 @@
 
 #define MAX_32_TX_SIZE_TOKEN "--max-32-tx-size"
 
+#define NOISE_NORM_STRENGTH_TOKEN "--noise-norm-strength"
+
 static EbErrorType validate_error(EbErrorType err, const char *token, const char *value) {
     switch (err) {
     case EB_ErrorNone: return EB_ErrorNone;
@@ -995,6 +997,7 @@ ConfigDescription config_entry_variance_boost[] = {
     {QP_SCALE_COMPRESS_STRENGTH_TOKEN, "[PSY] QP scale compress strength, default is 1 [0-3]"},
     // Max 32 tx size
     {MAX_32_TX_SIZE_TOKEN, "[PSY] Limits the allowed transform sizes to a maximum of 32x32, default is 0 [0-1]"},
+    {NOISE_NORM_STRENGTH_TOKEN, "[PSY] Noise normalization strength, default is 3 [0-4]"},
     // Termination
     {NULL, NULL}};
 
@@ -1200,9 +1203,8 @@ ConfigEntry config_entry[] = {
     {RTC_TOKEN, "RealTime", set_cfg_generic_token},
     // QP scale compression
     {QP_SCALE_COMPRESS_STRENGTH_TOKEN, "QpScaleCompressStrength", set_cfg_generic_token},
-
-    // Max 32 tx size
-    {MAX_32_TX_SIZE_TOKEN, "Max32TxSize", set_cfg_generic_token},
+    // Noise normalization strength
+    {NOISE_NORM_STRENGTH_TOKEN, "NoiseNormStrength", set_cfg_generic_token},
 
     // Termination
     {NULL, NULL, NULL}};
