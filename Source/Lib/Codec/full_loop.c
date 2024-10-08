@@ -1416,6 +1416,117 @@ uint8_t svt_av1_compute_cul_level_c(const int16_t *const scan, const int32_t *co
     return (uint8_t)cul_level;
 }
 
+void svt_av1_perform_noise_normalization(MacroblockPlane *p, QuantParam *qparam, TranLow *coeff_ptr,
+                                         TranLow *qcoeff_ptr, TranLow *dqcoeff_ptr, TxSize tx_size, TxType tx_type,
+                                         uint16_t *eob, PictureControlSet *pcs) {
+    const int              shift              = av1_get_tx_scale_tab[tx_size];
+    const int              width              = get_txb_wide_tab[tx_size];
+    const int              height             = get_txb_high_tab[tx_size];
+    const ScanOrder *const scan_order         = get_scan_order(tx_size, tx_type);
+    const int16_t         *scan               = scan_order->scan;
+    const uint8_t          noisenorm_strength = pcs->scs->static_config.noise_norm_strength;
+
+    // If block is too small, terminate early
+    if (width == 4 && height == 4) {
+        return;
+    }
+
+    // If noisenorm_strength is 0, terminate early
+    if (noisenorm_strength < 1) {
+        return;
+    }
+
+    int     best_si                  = -1;
+    int     best_smallest_energy_gap = INT_MAX;
+    TranLow best_qc_low;
+    TranLow best_dqc_low;
+    int     thresh;
+
+    // Determine threshold based on user-configurable noisenorm_strength
+    switch (noisenorm_strength) {
+    case 1: thresh = 9; break;
+    case 2: thresh = 8; break;
+    case 3: thresh = 6; break;
+    default: thresh = 4; break;
+    }
+
+    if (*eob > 1) {
+        // Textured block, boost the most suitable AC coefficient within the EOB range
+        for (int si = 1; si < *eob; si++) {
+            const int     ci   = scan[si];
+            const TranLow tqc  = coeff_ptr[ci];
+            const TranLow qc   = qcoeff_ptr[ci];
+            const TranLow dqc  = dqcoeff_ptr[ci];
+            const int     sign = (tqc < 0) ? 1 : 0;
+
+            // Found candidate coefficient to boost (that's not being rounded up)
+            if (dqc != 0 && (abs(tqc) - abs(dqc)) > 0) {
+                const int dqv = get_dqv(p->dequant_qtx, ci, qparam->iqmatrix);
+                TranLow   qc_low;
+                TranLow   dqc_low;
+
+                TranLow abs_qc = (abs(qc) + 1) + 1; // add 1 as get_qc_dqc_low() expects it
+                get_qc_dqc_low(abs_qc, sign, dqv, shift, &qc_low, &dqc_low);
+
+                // Find energy gap and ratio
+                int energy_gap   = abs(dqc_low - tqc);
+                int dq_step_size = abs(dqc_low - dqc);
+                int ratio        = ((dq_step_size - energy_gap) << 4) / dq_step_size;
+
+                // Found coefficient with smaller energy gap, store it and continue
+                // "Energy gain/quant step size" ratio should be at least 6/16 to avoid boosting picked coeffs too much
+                // But we'll let users decide the threshold with the parameter
+                if (ratio >= thresh) {
+                    best_si      = si;
+                    best_qc_low  = qc_low;
+                    best_dqc_low = dqc_low;
+                }
+            }
+        }
+    } else if (*eob == 1) {
+        // Flat block, try to revive the most suitable AC coefficient not too far from DC
+        for (int si = 1; si < (width * height / 16); si++) {
+            const int     ci   = scan[si];
+            const TranLow tqc  = coeff_ptr[ci];
+            const TranLow dqc  = dqcoeff_ptr[ci];
+            const int     sign = (tqc < 0) ? 1 : 0;
+
+            if (dqc == 0 && tqc != 0) {
+                // Found candidate coefficient (got quantized to 0)
+                const int dqv = get_dqv(p->dequant_qtx, ci, qparam->iqmatrix);
+                TranLow   qc_low;
+                TranLow   dqc_low;
+
+                TranLow abs_qc = 1 + 1; // add 1 as get_qc_dqc_low() expects it
+                get_qc_dqc_low(abs_qc, sign, dqv, shift, &qc_low, &dqc_low);
+
+                // Find energy gap and ratio
+                int energy_gap   = abs(dqc_low - tqc);
+                int dq_step_size = abs(dqc_low - dqc);
+                int ratio        = ((dq_step_size - energy_gap) << 4) / dq_step_size;
+
+                // Found coefficient with smaller energy gap, store it and continue
+                // "Energy gain/quant step size" ratio should be at least 6/16 to avoid boosting picked coeffs too much
+                // But we'll let users decide the threshold with the parameter
+                if (ratio >= thresh && energy_gap < best_smallest_energy_gap) {
+                    best_smallest_energy_gap = energy_gap;
+                    best_si                  = si;
+                    best_qc_low              = qc_low;
+                    best_dqc_low             = dqc_low;
+                }
+            }
+        }
+    }
+
+    if (best_si > 0) {
+        int best_ci          = scan[best_si];
+        qcoeff_ptr[best_ci]  = best_qc_low;
+        dqcoeff_ptr[best_ci] = best_dqc_low;
+
+        *eob = (best_si >= *eob) ? (best_si + 1) : *eob;
+    }
+}
+
 uint8_t svt_aom_quantize_inv_quantize(PictureControlSet *pcs, ModeDecisionContext *ctx, int32_t *coeff,
                                       int32_t *quant_coeff, int32_t *recon_coeff, uint32_t qindex,
                                       int32_t segmentation_qp_offset, TxSize txsize, uint16_t *eob,
@@ -1664,6 +1775,18 @@ uint8_t svt_aom_quantize_inv_quantize(PictureControlSet *pcs, ModeDecisionContex
                            lambda,
                            (component_type == COMPONENT_LUMA) ? 0 : 1,
                            light_rdoq);
+    }
+
+    if (is_encode_pass && *eob != 0 && tx_type != IDTX && (component_type == COMPONENT_LUMA)) {
+        svt_av1_perform_noise_normalization(&candidate_plane,
+                                            &qparam,
+                                            (TranLow *)coeff,
+                                            quant_coeff,
+                                            (TranLow *)recon_coeff,
+                                            txsize,
+                                            tx_type,
+                                            eob,
+                                            pcs);
     }
 
     if (!ctx->rate_est_ctrls.update_skip_ctx_dc_sign_ctx)

@@ -1011,6 +1011,15 @@ typedef struct EbSvtAv1EncConfiguration {
      */
     uint8_t extended_crf_qindex_offset;
 
+    /**
+     * @brief Noise normalization strength; modifies the encoder's willingness
+     * to boost AC coefficients in low-noise blocks.
+     * Min value is 0.
+     * Max value is 4.
+     * Default is 1.
+     */
+    uint8_t noise_norm_strength;
+
     // clang-format off
     /**
      * @brief Strength of the internal RD metric to bias toward high-frequency error (helps with texture preservation and film grain retention)
