@@ -80,6 +80,7 @@ For more information on valid values for specific keys, refer to the [EbEncSetti
 | **Tune**                         | --tune                      | [0-4]                          | 2           | Optimize the encoding process for different desired outcomes [0 = VQ, 1 = PSNR, 2 = SSIM, 3 = Subjective SSIM, 4 = Still Picture]                                                    |
 | **Sharpness**                    | --sharpness                 | [-7-7]                         | 0           | Bias towards block sharpness in rate-distortion optimization of transform coefficients                                                                               |
 | **Max32TxSize**                  | --max-32-tx-size            | [0-1]                          | 0           | Restricts use of block transform sizes to a maximum of 32x32 pixels (disabled: use max of 64x64 pixels)      |
+| **NoiseNormStrength**            |  --noise-norm-strength      | [0-4]                          | 0           | Selectively boost AC coefficients to improve fine detail retention in certain circumstances                  |
 
 ## Rate Control Options
 
