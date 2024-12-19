@@ -4597,7 +4597,7 @@ static void tx_type_search(PictureControlSet *pcs, ModeDecisionContext *ctx, Mod
                     cand_bf->pred->stride_y,
                     cropped_tx_width,
                     cropped_tx_height);
-                txb_full_distortion_txt[DIST_SSD][tx_type][DIST_CALC_RESIDUAL] = get_svt_psy_full_dist(
+                txb_full_distortion_txt[DIST_SSD][tx_type][DIST_CALC_PREDICTION] += get_svt_psy_full_dist(
                     input_pic->buffer_y,
                     input_txb_origin_index,
                     input_pic->stride_y,
@@ -5548,16 +5548,16 @@ static void perform_dct_dct_tx(PictureControlSet *pcs, ModeDecisionContext *ctx,
                                                                                        cand_bf->pred->stride_y,
                                                                                        cropped_tx_width,
                                                                                        cropped_tx_height);
-        y_full_distortion[DIST_SSD][DIST_CALC_PREDICTION] = get_svt_psy_full_dist(input_pic->buffer_y,
-                                                                                  input_txb_origin_index,
-                                                                                  input_pic->stride_y,
-                                                                                  cand_bf->pred->buffer_y,
-                                                                                  (int32_t)txb_origin_index,
-                                                                                  cand_bf->pred->stride_y,
-                                                                                  cropped_tx_width,
-                                                                                  cropped_tx_height,
-                                                                                  ctx->hbd_md,
-                                                                                  pcs->scs->static_config.psy_rd);
+        y_full_distortion[DIST_SSD][DIST_CALC_PREDICTION] += get_svt_psy_full_dist(input_pic->buffer_y,
+                                                                                   input_txb_origin_index,
+                                                                                   input_pic->stride_y,
+                                                                                   cand_bf->pred->buffer_y,
+                                                                                   (int32_t)txb_origin_index,
+                                                                                   cand_bf->pred->stride_y,
+                                                                                   cropped_tx_width,
+                                                                                   cropped_tx_height,
+                                                                                   ctx->hbd_md,
+                                                                                   pcs->scs->static_config.psy_rd);
         y_full_distortion[DIST_SSD][DIST_CALC_RESIDUAL]   = spatial_full_dist_type_fun(input_pic->buffer_y,
                                                                                      input_txb_origin_index,
                                                                                      input_pic->stride_y,
@@ -5566,16 +5566,16 @@ static void perform_dct_dct_tx(PictureControlSet *pcs, ModeDecisionContext *ctx,
                                                                                      cand_bf->recon->stride_y,
                                                                                      cropped_tx_width,
                                                                                      cropped_tx_height);
-        y_full_distortion[DIST_SSD][DIST_CALC_RESIDUAL] = get_svt_psy_full_dist(input_pic->buffer_y,
-                                                                                input_txb_origin_index,
-                                                                                input_pic->stride_y,
-                                                                                recon_ptr->buffer_y,
-                                                                                (int32_t)txb_origin_index,
-                                                                                cand_bf->recon->stride_y,
-                                                                                cropped_tx_width,
-                                                                                cropped_tx_height,
-                                                                                ctx->hbd_md,
-                                                                                pcs->scs->static_config.psy_rd);
+        y_full_distortion[DIST_SSD][DIST_CALC_RESIDUAL] += get_svt_psy_full_dist(input_pic->buffer_y,
+                                                                                 input_txb_origin_index,
+                                                                                 input_pic->stride_y,
+                                                                                 recon_ptr->buffer_y,
+                                                                                 (int32_t)txb_origin_index,
+                                                                                 cand_bf->recon->stride_y,
+                                                                                 cropped_tx_width,
+                                                                                 cropped_tx_height,
+                                                                                 ctx->hbd_md,
+                                                                                 pcs->scs->static_config.psy_rd);
         y_full_distortion[DIST_SSD][DIST_CALC_PREDICTION] <<= 4;
         y_full_distortion[DIST_SSD][DIST_CALC_RESIDUAL] <<= 4;
     } else {
@@ -7681,7 +7681,7 @@ static void calc_scr_to_recon_dist_per_quadrant(ModeDecisionContext *ctx, EbPict
                 recon_ptr->stride_y,
                 (uint32_t)quadrant_size,
                 (uint32_t)quadrant_size);
-            ctx->rec_dist_per_quadrant[c + (r << 1)] = get_svt_psy_full_dist(
+            ctx->rec_dist_per_quadrant[c + (r << 1)] += get_svt_psy_full_dist(
                 input_pic->buffer_y,
                 input_origin_index + c * quadrant_size + (r * quadrant_size) * input_pic->stride_y,
                 input_pic->stride_y,
