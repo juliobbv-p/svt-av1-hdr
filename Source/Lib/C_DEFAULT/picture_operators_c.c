@@ -9,12 +9,14 @@
 * PATENTS file, you can obtain it at https://www.aomedia.org/license/patent-license.
 */
 
+#include "aom_dsp_rtcd.h"
 #include "picture_operators_c.h"
 #include <stdint.h>
 #include <stdio.h>
 #include "utility.h"
 #include "common_dsp_rtcd.h"
 #include "ac_bias.h"
+#include "block_structures.h"
 /*********************************
 * Picture Average
 *********************************/
