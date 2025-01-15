@@ -215,6 +215,7 @@
 #define KF_TF_STRENGTH_FILTER_TOKEN "--kf-tf-strength"
 
 #define PSY_RD_TOKEN "--psy-rd"
+#define SPY_RD_TOKEN "--spy-rd"
 
 static EbErrorType validate_error(EbErrorType err, const char *token, const char *value) {
     switch (err) {
@@ -1006,6 +1007,8 @@ ConfigDescription config_entry_variance_boost[] = {
     {KF_TF_STRENGTH_FILTER_TOKEN, "[PSY] Adjust TF strength on keyframes, default is 1 (4x weaker than mainline) [0-4]"},
     //Psy-rd
     {PSY_RD_TOKEN, "[PSY] Psychovisual rate distortion strength, default is 0 [0.0-6.0]"},
+    //Spy-rd
+    {SPY_RD_TOKEN, "[PSY] Alternative psychovisual rate distortion, default is 0 [0-1]"},
     // Termination
     {NULL, NULL}};
 
@@ -1219,6 +1222,9 @@ ConfigEntry config_entry[] = {
 
     // Psy rd strength
     {PSY_RD_TOKEN, "PsyRd", set_cfg_generic_token},
+
+    // Spy rd
+    {SPY_RD_TOKEN, "SpyRd", set_cfg_generic_token},
 
     // Termination
     {NULL, NULL, NULL}};

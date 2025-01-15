@@ -1530,6 +1530,7 @@ EB_API EbErrorType svt_av1_enc_init(EbComponentType *svt_enc_component)
         input_data.noise_norm_strength = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.noise_norm_strength;
         input_data.kf_tf_strength = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.kf_tf_strength;
         input_data.psy_rd = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.psy_rd;
+        input_data.spy_rd = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.spy_rd;
         input_data.static_config = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config;
         input_data.allintra = enc_handle_ptr->scs_instance_array[instance_index]->scs->allintra;
         EB_NEW(
@@ -4665,6 +4666,9 @@ static void copy_api_from_app(
 
     // Psy rd
     scs->static_config.psy_rd = config_struct->psy_rd;
+
+    // Spy rd
+    scs->static_config.spy_rd = config_struct->spy_rd;
 
     // Override settings for Still Picture tune
     if (scs->static_config.tune == 4) {
