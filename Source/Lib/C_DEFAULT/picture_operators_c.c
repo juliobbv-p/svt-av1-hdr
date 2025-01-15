@@ -17,6 +17,7 @@
 #include "common_dsp_rtcd.h"
 #include "picture_operators_c.h"
 #include "utility.h"
+#include "block_structures.h"
 
 /*********************************
 * Picture Copy Kernel
