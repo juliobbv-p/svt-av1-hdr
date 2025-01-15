@@ -1539,6 +1539,7 @@ EB_API EbErrorType svt_av1_enc_init(EbComponentType *svt_enc_component)
         input_data.alt_lambda_factors = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.alt_lambda_factors;
         input_data.sharp_tx = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.sharp_tx;
         input_data.hbd_mds = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.hbd_mds;
+        input_data.tx_bias = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.tx_bias;
         input_data.static_config = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config;
         input_data.allintra = enc_handle_ptr->scs_instance_array[instance_index]->scs->allintra;
         EB_NEW(
@@ -4825,6 +4826,9 @@ static void copy_api_from_app(SequenceControlSet *scs, EbSvtAv1EncConfiguration 
     // HBD-MD
     scs->static_config.hbd_mds = config_struct->hbd_mds;
 
+    // TX bias
+    scs->static_config.tx_bias = config_struct->tx_bias;
+
     // Override settings for Still IQ tune
     if (scs->static_config.tune == TUNE_IQ) {
         SVT_WARN("Tune IQ overrides: sharpness, Var. Boost strength/curve, enable-qm and min/max level, max TX size and SCM\n");
@@ -4844,11 +4848,12 @@ static void copy_api_from_app(SequenceControlSet *scs, EbSvtAv1EncConfiguration 
     // Override settings for Film Grain tune
     if (scs->static_config.tune == TUNE_FILM_GRAIN) {
         SVT_WARN("Tune 3: Film Grain is opinionated! Works best with 1080p, 4k and 8k content.\n");
-        SVT_WARN("Tune 3: Film Grain turns off: TF, CDEF, restoration filtering and enables strong AC bias.\n");
+        SVT_WARN("Tune 3: Film Grain turns off: TF, CDEF, restoration filtering, and enables TX bias and strong AC bias.\n");
         scs->static_config.enable_tf = 0;
         scs->static_config.cdef_level = 0;
         scs->static_config.enable_restoration_filtering = 0;
         scs->static_config.ac_bias = 4.0;
+        scs->static_config.tx_bias = 1;
     }
 
     // Override Variance Boost curve for PQ transfer

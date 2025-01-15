@@ -218,6 +218,7 @@
 #define ALT_LAMBDA_FACTORS_TOKEN "--alt-lambda-factors"
 #define SHARP_TX_TOKEN "--sharp-tx"
 #define HBD_MDS_TOKEN "--hbd-mds"
+#define TX_BIAS_TOKEN "--tx-bias"
 
 static EbErrorType validate_error(EbErrorType err, const char *token, const char *value) {
     switch (err) {
@@ -1005,6 +1006,9 @@ ConfigDescription config_entry_psychovisual[] = {
     //HBD Mode Decisions
     {HBD_MDS_TOKEN,
      "High Bit-Depth Mode Decision, default is 0 [0: preset-determined, 1 = 10-bit, 2 = hybrid 8/10-bit]"},
+    // TX bias
+    {TX_BIAS_TOKEN,
+     "Transform size/type bias type, default is 0 [0-3]; 1 = full, 2, transform size only, 3 = interpolation only"},
     // Termination
     {NULL, NULL}};
 
@@ -1239,6 +1243,9 @@ ConfigEntry config_entry[] = {
 
     // HBD MDS
     {HBD_MDS_TOKEN, "HBDMDS", set_cfg_generic_token},
+
+    // TX bias
+    {TX_BIAS_TOKEN, "TxBias", set_cfg_generic_token},
 
     // Termination
     {NULL, NULL, NULL}};
