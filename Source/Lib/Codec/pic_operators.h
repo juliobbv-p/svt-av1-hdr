@@ -18,12 +18,27 @@
 #include "pic_buffer_desc.h"
 #include "svt_log.h"
 #include "common_dsp_rtcd.h"
+#include "block_structures.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
 void svt_aom_picture_full_distortion32_bits_single(int32_t *coeff, int32_t *recon_coeff, uint32_t stride,
                                                    uint32_t bwidth, uint32_t bheight, uint64_t *distortion,
                                                    uint32_t cnt_nz_coeff);
+
+void svt_aom_picture_full_distortion32_bits_single_facade(int32_t *coeff, int32_t *recon_coeff, uint32_t stride,
+                                                          uint32_t bwidth, uint32_t bheight, uint32_t area_width,
+                                                          uint32_t area_height, uint64_t *distortion,
+                                                          uint32_t cnt_nz_coeff, BlockModeInfo *block_mi,
+                                                          bool is_chroma, uint8_t temporal_layer_index, double ac_bias,
+                                                          uint8_t tx_bias);
+
+uint64_t svt_spatial_full_distortion_kernel_facade(uint8_t *input, uint32_t input_offset, uint32_t input_stride,
+                                                   uint8_t *recon, int32_t recon_offset, uint32_t recon_stride,
+                                                   uint32_t area_width, uint32_t area_height, bool hbd_md,
+                                                   BlockModeInfo *block_mi, bool is_chroma,
+                                                   uint8_t temporal_layer_index, double ac_bias, uint8_t tx_bias);
+
 //Residual Data
 
 void svt_aom_compressed_pack_sb(uint8_t *in8_bit_buffer, uint32_t in8_stride, uint8_t *inn_bit_buffer,

@@ -2219,6 +2219,17 @@ static void interpolation_filter_search(PictureControlSet *pcs, ModeDecisionCont
                 tmp_rd = (tmp_rd * ifs_smooth_bias[pcs->picture_qp]) / 100;
         }
 
+        // TX bias: bias RD towards picking sharper interpolation filters
+        if (scs->static_config.tx_bias > 0) {
+            // SHARP filter on either x or y axis
+            if (filter_sets[i][0] == 2 || filter_sets[i][1] == 2)
+                tmp_rd = (tmp_rd * 75) / 100;
+
+            // REG filter on either x or y axis
+            if (filter_sets[i][0] == 0 || filter_sets[i][1] == 0)
+                tmp_rd = (tmp_rd * 80) / 100;
+        }
+
         // Update best interpoaltion filter
         if (tmp_rd < rd) {
             rd              = tmp_rd;
