@@ -1004,6 +1004,15 @@ typedef struct EbSvtAv1EncConfiguration {
      */
      double psy_rd;
 
+    /**
+     * @brief Enable spy-rd, an alternate RD metric that biases towards sharpness/detail retention,
+     * at the possible expense of increased blocking and banding
+     * 0: disabled
+     * 1: enabled
+     * Default is 0
+     */
+    bool spy_rd;
+
     /*Add 128 Byte Padding to Struct to avoid changing the size of the public configuration struct*/
     uint8_t padding[128 - (sizeof(uint8_t) * 2)
         - sizeof(bool)
