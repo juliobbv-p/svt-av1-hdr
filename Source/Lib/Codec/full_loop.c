@@ -1975,6 +1975,7 @@ void svt_aom_full_loop_chroma_light_pd1(PictureControlSet *pcs, ModeDecisionCont
                                                       get_uv_mode_cfl_aware(cand_bf->cand->block_mi.uv_mode),
                                                       cand_bf->cand->block_mi.interinter_comp.type,
                                                       pcs->temporal_layer_index,
+                                                      pcs->scs->static_config.psy_rd,
                                                       pcs->scs->static_config.spy_rd);
         cb_full_distortion[DIST_CALC_RESIDUAL]   = RIGHT_SIGNED_SHIFT(cb_full_distortion[DIST_CALC_RESIDUAL],
                                                                     chroma_shift);
@@ -2062,6 +2063,7 @@ void svt_aom_full_loop_chroma_light_pd1(PictureControlSet *pcs, ModeDecisionCont
                                                       get_uv_mode_cfl_aware(cand_bf->cand->block_mi.uv_mode),
                                                       cand_bf->cand->block_mi.interinter_comp.type,
                                                       pcs->temporal_layer_index,
+                                                      pcs->scs->static_config.psy_rd,
                                                       pcs->scs->static_config.spy_rd);
 
         cr_full_distortion[DIST_CALC_RESIDUAL]   = RIGHT_SIGNED_SHIFT(cr_full_distortion[DIST_CALC_RESIDUAL],
@@ -2295,6 +2297,7 @@ void svt_aom_full_loop_uv(PictureControlSet *pcs, ModeDecisionContext *ctx, Mode
                     get_uv_mode_cfl_aware(cand_bf->cand->block_mi.uv_mode),
                     cand_bf->cand->block_mi.interinter_comp.type,
                     pcs->temporal_layer_index,
+                    pcs->scs->static_config.psy_rd,
                     pcs->scs->static_config.spy_rd);
                 txb_full_distortion[DIST_SSD][1][DIST_CALC_PREDICTION] += get_svt_psy_full_dist(
                     input_pic->buffer_cb,
@@ -2321,6 +2324,7 @@ void svt_aom_full_loop_uv(PictureControlSet *pcs, ModeDecisionContext *ctx, Mode
                     get_uv_mode_cfl_aware(cand_bf->cand->block_mi.uv_mode),
                     cand_bf->cand->block_mi.interinter_comp.type,
                     pcs->temporal_layer_index,
+                    pcs->scs->static_config.psy_rd,
                     pcs->scs->static_config.spy_rd);
                 txb_full_distortion[DIST_SSD][1][DIST_CALC_RESIDUAL] += get_svt_psy_full_dist(
                     input_pic->buffer_cb,
@@ -2361,6 +2365,7 @@ void svt_aom_full_loop_uv(PictureControlSet *pcs, ModeDecisionContext *ctx, Mode
                     get_uv_mode_cfl_aware(cand_bf->cand->block_mi.uv_mode),
                     cand_bf->cand->block_mi.interinter_comp.type,
                     pcs->temporal_layer_index,
+                    pcs->scs->static_config.psy_rd,
                     pcs->scs->static_config.spy_rd);
 
                 TxSize        tx_size      = ctx->blk_geom->txsize_uv[tx_depth];
@@ -2516,6 +2521,7 @@ void svt_aom_full_loop_uv(PictureControlSet *pcs, ModeDecisionContext *ctx, Mode
                     get_uv_mode_cfl_aware(cand_bf->cand->block_mi.uv_mode),
                     cand_bf->cand->block_mi.interinter_comp.type,
                     pcs->temporal_layer_index,
+                    pcs->scs->static_config.psy_rd,
                     pcs->scs->static_config.spy_rd);
                 txb_full_distortion[DIST_SSD][2][DIST_CALC_PREDICTION] += get_svt_psy_full_dist(
                     input_pic->buffer_cr,
@@ -2542,6 +2548,7 @@ void svt_aom_full_loop_uv(PictureControlSet *pcs, ModeDecisionContext *ctx, Mode
                     get_uv_mode_cfl_aware(cand_bf->cand->block_mi.uv_mode),
                     cand_bf->cand->block_mi.interinter_comp.type,
                     pcs->temporal_layer_index,
+                    pcs->scs->static_config.psy_rd,
                     pcs->scs->static_config.spy_rd);
                 txb_full_distortion[DIST_SSD][2][DIST_CALC_RESIDUAL] += get_svt_psy_full_dist(
                     input_pic->buffer_cr,
@@ -2582,6 +2589,7 @@ void svt_aom_full_loop_uv(PictureControlSet *pcs, ModeDecisionContext *ctx, Mode
                     get_uv_mode_cfl_aware(cand_bf->cand->block_mi.uv_mode),
                     cand_bf->cand->block_mi.interinter_comp.type,
                     pcs->temporal_layer_index,
+                    pcs->scs->static_config.psy_rd,
                     pcs->scs->static_config.spy_rd);
 
                 TxSize        tx_size      = ctx->blk_geom->txsize_uv[tx_depth];
