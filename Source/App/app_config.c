@@ -208,6 +208,7 @@
 #define NOISE_NORM_STRENGTH_TOKEN "--noise-norm-strength"
 #define KF_TF_STRENGTH_FILTER_TOKEN "--kf-tf-strength"
 #define ALT_LAMBDA_FACTORS_TOKEN "--alt-lambda-factors"
+#define SHARP_TX_TOKEN "--sharp-tx"
 
 static EbErrorType validate_error(EbErrorType err, const char *token, const char *value) {
     switch (err) {
@@ -957,6 +958,8 @@ ConfigDescription config_entry_psychovisual[] = {
     {KF_TF_STRENGTH_FILTER_TOKEN, "Adjust TF strength on keyframes, default is 1 (4x weaker than mainline) [0-4]"},
     // Alt lambda factors
     {ALT_LAMBDA_FACTORS_TOKEN, "Use alternative RDO lambda factors (from SVT-AV1 3.0.2), default is 1 [0-1]"},
+    //Sharp-tx
+    {SHARP_TX_TOKEN, "Sharp transform optimization, default is 1 [0-1]"},
     // Termination
     {NULL, NULL}};
 
@@ -1175,6 +1178,9 @@ ConfigEntry config_entry[] = {
 
     // Alt lambda factors
     {ALT_LAMBDA_FACTORS_TOKEN, "AltLambdaFactors", set_cfg_generic_token},
+
+    // Sharp TX
+    {SHARP_TX_TOKEN, "SharpTX", set_cfg_generic_token},
 
     // Termination
     {NULL, NULL, NULL}};
