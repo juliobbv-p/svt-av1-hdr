@@ -210,6 +210,7 @@
 #define ALT_LAMBDA_FACTORS_TOKEN "--alt-lambda-factors"
 #define SHARP_TX_TOKEN "--sharp-tx"
 #define ALT_SSIM_TUNING_TOKEN "--alt-ssim-tuning"
+#define HBD_MDS_TOKEN "--hbd-mds"
 
 static EbErrorType validate_error(EbErrorType err, const char *token, const char *value) {
     switch (err) {
@@ -963,6 +964,9 @@ ConfigDescription config_entry_psychovisual[] = {
     {SHARP_TX_TOKEN, "Sharp transform optimization, default is 1 [0-1]"},
     // Alternative SSIM tuning
     {ALT_SSIM_TUNING_TOKEN, "Alternative SSIM tuning methods for tune 2, default is 0 [0-1]"},
+    //HBD Mode Decisions
+    {HBD_MDS_TOKEN,
+     "High Bit-Depth Mode Decision, default is 0 [0: preset-determined, 1 = 10-bit, 2 = hybrid 8/10-bit]"},
     // Termination
     {NULL, NULL}};
 
@@ -1187,6 +1191,9 @@ ConfigEntry config_entry[] = {
 
     // Alternative SSIM tuning
     {ALT_SSIM_TUNING_TOKEN, "AltSSIMTuning", set_cfg_generic_token},
+
+    // HBD MDS
+    {HBD_MDS_TOKEN, "HBDMDS", set_cfg_generic_token},
 
     // Termination
     {NULL, NULL, NULL}};

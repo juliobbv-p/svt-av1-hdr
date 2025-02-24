@@ -870,6 +870,11 @@ EbErrorType svt_av1_verify_settings(SequenceControlSet *scs) {
         return_error = EB_ErrorBadParameter;
     }
 
+    if (config->hbd_mds > 2) {
+        SVT_ERROR("Hbd-mds must be between 0 and 2\n");
+        return_error = EB_ErrorBadParameter;
+    }
+
     return return_error;
 }
 
@@ -1034,6 +1039,7 @@ EbErrorType svt_av1_set_default_params(EbSvtAv1EncConfiguration *config_ptr) {
     config_ptr->alt_lambda_factors                = 1;
     config_ptr->sharp_tx                          = 1;
     config_ptr->alt_ssim_tuning                   = false;
+    config_ptr->hbd_mds                           = 0;
     return return_error;
 }
 
@@ -2131,6 +2137,7 @@ EB_API EbErrorType svt_av1_enc_parse_parameter(EbSvtAv1EncConfiguration *config_
         {"noise-norm-strength", &config_struct->noise_norm_strength},
         {"kf-tf-strength", &config_struct->kf_tf_strength},
         {"sharp-tx", &config_struct->sharp_tx},
+        {"hbd-mds", &config_struct->hbd_mds},
     };
     const size_t uint8_opts_size = sizeof(uint8_opts) / sizeof(uint8_opts[0]);
 

@@ -1346,6 +1346,7 @@ EB_API EbErrorType svt_av1_enc_init(EbComponentType *svt_enc_component)
         input_data.alt_lambda_factors = scs->static_config.alt_lambda_factors;
         input_data.sharp_tx = scs->static_config.sharp_tx;
         input_data.alt_ssim_tuning = scs->static_config.alt_ssim_tuning;
+        input_data.hbd_mds = scs->static_config.hbd_mds;
         input_data.static_config = scs->static_config;
         input_data.allintra = scs->allintra;
         input_data.use_flat_ipp = scs->use_flat_ipp;
@@ -4435,6 +4436,9 @@ static void copy_api_from_app(SequenceControlSet *scs, EbSvtAv1EncConfiguration 
 
     // Sharp TX
     scs->static_config.sharp_tx = config_struct->sharp_tx;
+
+    // HBD-MD
+    scs->static_config.hbd_mds = config_struct->hbd_mds;
 
     // Alternative SSIM tuning
     scs->static_config.alt_ssim_tuning = config_struct->alt_ssim_tuning;

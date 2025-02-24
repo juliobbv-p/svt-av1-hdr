@@ -2143,7 +2143,8 @@ static void aom_av1_set_mb_ssim_rdmult_scaling(PictureParentControlSet *pcs) {
     Av1Common *cm       = pcs->av1_cm;
     const int  y_stride = pcs->enhanced_pic->stride_y;
     uint8_t   *y_buffer = pcs->enhanced_pic->buffer_y + pcs->enhanced_pic->org_x + pcs->enhanced_pic->org_y * y_stride;
-    const int  block_size = BLOCK_16X16;
+
+    const int block_size = BLOCK_16X16;
 
     const int num_mi_w = mi_size_wide[block_size];
     const int num_mi_h = mi_size_high[block_size];
