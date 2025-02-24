@@ -1201,6 +1201,7 @@ typedef struct PictureControlSetInitData {
     uint8_t kf_tf_strength;
     uint8_t alt_lambda_factors;
     uint8_t sharp_tx;
+    uint8_t hbd_mds;
 } PictureControlSetInitData;
 
 /**************************************
