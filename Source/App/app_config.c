@@ -217,6 +217,7 @@
 #define PSY_RD_TOKEN "--psy-rd"
 #define SPY_RD_TOKEN "--spy-rd"
 #define SHARP_TX_TOKEN "--sharp-tx"
+#define HBD_MDS_TOKEN "--hbd-mds"
 
 static EbErrorType validate_error(EbErrorType err, const char *token, const char *value) {
     switch (err) {
@@ -1011,7 +1012,9 @@ ConfigDescription config_entry_variance_boost[] = {
     //Spy-rd
     {SPY_RD_TOKEN, "[PSY] Alternative psychovisual rate distortion, default is 0 [0-1]"},
     //Sharp-tx
-    {SHARP_TX_TOKEN, "[PSY] Sharp transform optimization, default is 1 [0-1]"},
+    {SHARP_TX_TOKEN, "[PSY] Sharp transform optimization, default is 1; best used in combination with psy-rd [0-1]"},
+    //HBD Mode Decisions
+    {HBD_MDS_TOKEN, "[PSY] High Bit-Depth Mode Decision, default is 0 [0: default preset behavior, 1 = 10-bit, 2 = hybrid 8/10-bit, 3 = 8-bit]"},
     // Termination
     {NULL, NULL}};
 
