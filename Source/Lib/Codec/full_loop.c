@@ -1118,7 +1118,9 @@ static void svt_av1_optimize_b(PictureControlSet *pcs, ModeDecisionContext *ctx,
     const int     rshift        = MAX(2, (int)sharpness_val);
     if (use_sharpness && delta_q_present && plane == 0) {
         int diff = ctx->sb_ptr->qindex - quantizer_to_qindex[picture_qp];
-        if (diff < 0) {
+        //Only activate on 2 conditions: diff<0
+        //or if the user controlled sharp-tx is active
+        if (diff < 0 || pcs->scs->static_config.sharp_tx == 1) {
             sharpness = 1;
             rweight   = 0;
         }
