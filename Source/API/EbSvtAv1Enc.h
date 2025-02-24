@@ -1082,6 +1082,15 @@ typedef struct EbSvtAv1EncConfiguration {
      * Default is true in SVT-AV1-HDR. */
     bool alt_lambda_factors;
 
+    /**
+     * @brief Enable sharp-tx, a toggle that enables much sharper transforms decisions for higher fidelity ouput,
+     at the possible cost of increasing artifacting
+     * 0: disabled
+     * 1: enabled
+     * Default is 1
+     */
+    uint8_t sharp_tx;
+
     // clang-format off
     /* Add 128 Byte Padding to Struct to avoid changing the size of the public configuration struct */
     uint8_t padding[128
@@ -1095,6 +1104,7 @@ typedef struct EbSvtAv1EncConfiguration {
         - sizeof(uint8_t) // noise_norm_strength
         - sizeof(uint8_t) // kf_tf_strength
         - sizeof(bool) // alt_lambda_factors
+        - sizeof(uint8_t) // sharp_tx
     ];
     // clang-format on
 } EbSvtAv1EncConfiguration;
