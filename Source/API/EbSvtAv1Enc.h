@@ -1061,6 +1061,15 @@ typedef struct EbSvtAv1EncConfiguration {
      */
      uint8_t sharp_tx;
 
+     /**
+     * @brief High Bit-Depth Mode Decision, used to control the bit-depth of the mode decision path.
+     * 0: preset-determined
+     * 1: full 10-bit MD
+     * 2: hybrid 8/10-bit MD
+     * Default is 0
+     */
+     uint8_t hbd_mds;
+
     /*Add 128 Byte Padding to Struct to avoid changing the size of the public configuration struct*/
     uint8_t padding[128 - (sizeof(uint8_t) * 5)
         - (sizeof(bool) * 2)
