@@ -1859,16 +1859,30 @@ void svt_aom_sig_deriv_multi_processes(SequenceControlSet *scs, PictureParentCon
     // 1                                     ON
     pcs->frame_end_cdf_update_mode = 1;
 
-    if (scs->enable_hbd_mode_decision == DEFAULT)
-        //In the future, enable full HBD mode decisions
-        //only for psy-rd at P4 and slower,
-        //since that's where we see most of the gains
-        if (enc_mode <= ENC_M4)
+    if (scs->enable_hbd_mode_decision == DEFAULT) {
+
+    if (pcs->scs->static_config.hbd_mds == 0) {
+        if (enc_mode <= ENC_M2)
+            pcs->hbd_md = 1;
+        //Empiral testing shows enabling full 10-bit MD greatly increases
+        //psy-rd performance once it becomes strong enough (>=0.6)
+        if (enc_mode <= ENC_M4 && pcs->scs->static_config.psy_rd >= 0.6)
             pcs->hbd_md = 1;
         else if (enc_mode <= ENC_M6)
             pcs->hbd_md = 2;
         else
             pcs->hbd_md = is_islice ? 2 : 0;
+
+    } else if (pcs->scs->static_config.hbd_mds == 1){
+        pcs->hbd_md = 1;
+
+    } else if (pcs->scs->static_config.hbd_mds == 2) {
+        pcs->hbd_md = 2;
+
+    } else if (pcs->scs->static_config.hbd_mds == 3) {
+        pcs->hbd_md = 3;
+    }
+}
     else
         pcs->hbd_md = scs->enable_hbd_mode_decision;
 

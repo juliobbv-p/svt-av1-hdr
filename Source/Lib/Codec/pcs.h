@@ -1197,6 +1197,7 @@ typedef struct PictureControlSetInitData {
     double  psy_rd;
     bool    spy_rd;
     uint8_t sharp_tx;
+    uint8_t hbd_mds;
 } PictureControlSetInitData;
 
 /**************************************
