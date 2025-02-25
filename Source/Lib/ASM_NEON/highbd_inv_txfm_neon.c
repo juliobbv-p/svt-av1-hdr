@@ -2574,15 +2574,24 @@ static INLINE void iadst4_x4_neon(int32x4_t *in, int32x4_t *out, int bit) {
     out[3] = u3;
 }
 
+static INLINE void round_shift_neon(int32x4_t *in, int32_t shift, int n) {
+    const int32x4_t vshift = vdupq_n_s32(shift);
+    for (int i = 0; i < n; i++) { in[i] = vrshlq_s32(in[i], vshift); }
+}
+
+static INLINE void iidentity4_x4_neon(int32x4_t *in, int32x4_t *out) {
+    out[0] = vmulq_n_s32(in[0], new_sqrt2);
+    out[1] = vmulq_n_s32(in[1], new_sqrt2);
+    out[2] = vmulq_n_s32(in[2], new_sqrt2);
+    out[3] = vmulq_n_s32(in[3], new_sqrt2);
+
+    round_shift_neon(out, -new_sqrt2_bits, 4);
+}
+
 static INLINE void clamp_neon(const int32x4_t *in, int32x4_t *out, int log_range, int size) {
     const int32x4_t clamp_lo = vdupq_n_s32(-(1 << (log_range - 1)));
     const int32x4_t clamp_hi = vdupq_n_s32((1 << (log_range - 1)) - 1);
     highbd_clamp_s32_neon(in, out, &clamp_lo, &clamp_hi, size);
-}
-
-static INLINE void round_shift_neon(int32x4_t *in, int32_t shift, int n) {
-    const int32x4_t vshift = vdupq_n_s32(shift);
-    for (int i = 0; i < n; i++) { in[i] = vrshlq_s32(in[i], vshift); }
 }
 
 void svt_av1_inv_txfm2d_add_4x4_neon(const int32_t *input, uint16_t *output_r, int32_t stride_r, uint16_t *output_w,
@@ -2680,6 +2689,68 @@ void svt_av1_inv_txfm2d_add_4x4_neon(const int32_t *input, uint16_t *output_r, i
         round_shift_neon(in, /*shift[1]=*/-4, 4);
         write_buffer_4x4(in, output_r, stride_r, output_w, stride_w, 0, 1, bd);
         break;
-    default: svt_av1_inv_txfm2d_add_4x4_c(input, output_r, stride_r, output_w, stride_w, tx_type, bd); break;
+    case IDTX:
+        load_s32_4x4((int32_t *)input, 4, &in[0], &in[1], &in[2], &in[3]);
+        iidentity4_x4_neon(in, in);
+        clamp_neon(in, in, AOMMAX(bd + 6, 16), 4);
+        iidentity4_x4_neon(in, in);
+        round_shift_neon(in, /*shift[1]=*/-4, 4);
+        write_buffer_4x4(in, output_r, stride_r, output_w, stride_w, 0, 0, bd);
+        break;
+    case V_DCT:
+        load_s32_4x4((int32_t *)input, 4, &in[0], &in[1], &in[2], &in[3]);
+        iidentity4_x4_neon(in, in);
+        clamp_neon(in, in, AOMMAX(bd + 6, 16), 4);
+        idct4_x4_neon(in, in, inv_cos_bit_col[0][0]);
+        round_shift_neon(in, /*shift[1]=*/-4, 4);
+        write_buffer_4x4(in, output_r, stride_r, output_w, stride_w, 0, 0, bd);
+        break;
+    case H_DCT:
+        load_s32_4x4((int32_t *)input, 4, &in[0], &in[1], &in[2], &in[3]);
+        transpose_arrays_s32_4x4(in, in);
+        idct4_x4_neon(in, in, inv_cos_bit_row[0][0]);
+        transpose_arrays_s32_4x4(in, in);
+        clamp_neon(in, in, AOMMAX(bd + 6, 16), 4);
+        iidentity4_x4_neon(in, in);
+        round_shift_neon(in, /*shift[1]=*/-4, 4);
+        write_buffer_4x4(in, output_r, stride_r, output_w, stride_w, 0, 0, bd);
+        break;
+    case V_ADST:
+        load_s32_4x4((int32_t *)input, 4, &in[0], &in[1], &in[2], &in[3]);
+        iidentity4_x4_neon(in, in);
+        clamp_neon(in, in, AOMMAX(bd + 6, 16), 4);
+        iadst4_x4_neon(in, in, inv_cos_bit_col[0][0]);
+        round_shift_neon(in, /*shift[1]=*/-4, 4);
+        write_buffer_4x4(in, output_r, stride_r, output_w, stride_w, 0, 0, bd);
+        break;
+    case H_ADST:
+        load_s32_4x4((int32_t *)input, 4, &in[0], &in[1], &in[2], &in[3]);
+        transpose_arrays_s32_4x4(in, in);
+        iadst4_x4_neon(in, in, inv_cos_bit_row[0][0]);
+        transpose_arrays_s32_4x4(in, in);
+        clamp_neon(in, in, AOMMAX(bd + 6, 16), 4);
+        iidentity4_x4_neon(in, in);
+        round_shift_neon(in, /*shift[1]=*/-4, 4);
+        write_buffer_4x4(in, output_r, stride_r, output_w, stride_w, 0, 0, bd);
+        break;
+    case V_FLIPADST:
+        load_s32_4x4((int32_t *)input, 4, &in[0], &in[1], &in[2], &in[3]);
+        iidentity4_x4_neon(in, in);
+        clamp_neon(in, in, AOMMAX(bd + 6, 16), 4);
+        iadst4_x4_neon(in, in, inv_cos_bit_col[0][0]);
+        round_shift_neon(in, /*shift[1]=*/-4, 4);
+        write_buffer_4x4(in, output_r, stride_r, output_w, stride_w, 0, 1, bd);
+        break;
+    case H_FLIPADST:
+        load_s32_4x4((int32_t *)input, 4, &in[0], &in[1], &in[2], &in[3]);
+        transpose_arrays_s32_4x4(in, in);
+        iadst4_x4_neon(in, in, inv_cos_bit_row[0][0]);
+        transpose_arrays_s32_4x4(in, in);
+        clamp_neon(in, in, AOMMAX(bd + 6, 16), 4);
+        iidentity4_x4_neon(in, in);
+        round_shift_neon(in, /*shift[1]=*/-4, 4);
+        write_buffer_4x4(in, output_r, stride_r, output_w, stride_w, 1, 0, bd);
+        break;
+    default: assert(0);
     }
 }

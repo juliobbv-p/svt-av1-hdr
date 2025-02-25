@@ -305,8 +305,7 @@ INSTANTIATE_TEST_SUITE_P(AVX512, InvTxfm2dAsmSqrTest,
 
 #ifdef ARCH_AARCH64
 static const InvSqrTxfmTestParam inv_txfm_c_neon_func_pairs[10] = {
-    SQR_FUNC_PAIRS(svt_av1_inv_txfm2d_add_4x4, neon, TX_4X4,
-                   dct_adst_combine_imp),
+    SQR_FUNC_PAIRS(svt_av1_inv_txfm2d_add_4x4, neon, TX_4X4, all_txtype_imp),
     SQR_FUNC_PAIRS(svt_av1_inv_txfm2d_add_8x8, neon, TX_8X8, all_txtype_imp),
     SQR_FUNC_PAIRS(svt_av1_inv_txfm2d_add_16x16, neon, TX_16X16,
                    all_txtype_imp),
