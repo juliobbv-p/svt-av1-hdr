@@ -20,6 +20,11 @@
 #include "mem_neon.h"
 #include "transpose_neon.h"
 
+static INLINE void round_shift_neon(int32x4_t *in, int32_t shift, int n) {
+    const int32x4_t vshift = vdupq_n_s32(shift);
+    for (int i = 0; i < n; i++) { in[i] = vrshlq_s32(in[i], vshift); }
+}
+
 static INLINE void round_shift_4x4(int32x4_t in[], int32_t shift) {
     const int32x4_t vshift = vdupq_n_s32(-shift); // sign change so that shift > 0 is a shift-right
     in[0]                  = vrshlq_s32(in[0], vshift);
@@ -70,34 +75,27 @@ static INLINE int32x4_t revert_int32x4_register(int32x4_t in) {
     return vextq_s32(r_in, r_in, 2);
 }
 
-static INLINE int16x8_t highbd_clamp_s16(int16x8_t u, int32_t bd) {
-    return vminq_s16(vmaxq_s16(vdupq_n_s16(0), u), vdupq_n_s16((1 << bd) - 1));
-}
-
-static INLINE int16x8_t get_recon_8x8(const int16x8_t pred, int32x4_t res_lo, int32x4_t res_hi, int32_t fliplr,
-                                      int32_t bd) {
-    const int16x8_t zero = vdupq_n_s16(0);
-
-    int32x4_t x0 = vreinterpretq_s32_s16(vzip1q_s16(pred, zero));
-    int32x4_t x1 = vreinterpretq_s32_s16(vzip2q_s16(pred, zero));
+static INLINE uint16x8_t get_recon_8x8(const int16x8_t pred, int32x4_t res_lo, int32x4_t res_hi, int32_t fliplr,
+                                       int32_t bd) {
+    int32x4_t x0, x1;
 
     if (fliplr) {
         res_lo = revert_int32x4_register(res_lo);
         res_hi = revert_int32x4_register(res_hi);
-        x0     = vaddq_s32(res_hi, x0);
-        x1     = vaddq_s32(res_lo, x1);
+        x0     = vaddw_s16(res_hi, vget_low_s16(pred));
+        x1     = vaddw_s16(res_lo, vget_high_s16(pred));
     } else {
-        x0 = vaddq_s32(res_lo, x0);
-        x1 = vaddq_s32(res_hi, x1);
+        x0 = vaddw_s16(res_lo, vget_low_s16(pred));
+        x1 = vaddw_s16(res_hi, vget_high_s16(pred));
     }
 
-    const int16x8_t wide_x = vcombine_s16(vqmovn_s32(x0), vqmovn_s32(x1));
-    return highbd_clamp_s16(wide_x, bd);
+    const uint16x8_t x = vcombine_u16(vqmovun_s32(x0), vqmovun_s32(x1));
+    return vminq_u16(x, vdupq_n_u16((1 << bd) - 1));
 }
 
 static INLINE void write_buffer_8x8(int32x4_t in[], uint16_t *output_r, int32_t stride_r, uint16_t *output_w,
                                     int32_t stride_w, int32_t fliplr, int32_t flipud, int32_t shift, int32_t bd) {
-    int16x8_t u0, u1, u2, u3, u4, u5, u6, u7;
+    uint16x8_t u0, u1, u2, u3, u4, u5, u6, u7;
 
     round_shift_8x8(in, shift);
 
@@ -130,14 +128,46 @@ static INLINE void write_buffer_8x8(int32x4_t in[], uint16_t *output_r, int32_t 
         u7 = get_recon_8x8(v7, in[14], in[15], fliplr, bd);
     }
 
-    vst1q_s16((int16_t *)output_w + 0 * stride_w, u0);
-    vst1q_s16((int16_t *)output_w + 1 * stride_w, u1);
-    vst1q_s16((int16_t *)output_w + 2 * stride_w, u2);
-    vst1q_s16((int16_t *)output_w + 3 * stride_w, u3);
-    vst1q_s16((int16_t *)output_w + 4 * stride_w, u4);
-    vst1q_s16((int16_t *)output_w + 5 * stride_w, u5);
-    vst1q_s16((int16_t *)output_w + 6 * stride_w, u6);
-    vst1q_s16((int16_t *)output_w + 7 * stride_w, u7);
+    vst1q_u16(output_w + 0 * stride_w, u0);
+    vst1q_u16(output_w + 1 * stride_w, u1);
+    vst1q_u16(output_w + 2 * stride_w, u2);
+    vst1q_u16(output_w + 3 * stride_w, u3);
+    vst1q_u16(output_w + 4 * stride_w, u4);
+    vst1q_u16(output_w + 5 * stride_w, u5);
+    vst1q_u16(output_w + 6 * stride_w, u6);
+    vst1q_u16(output_w + 7 * stride_w, u7);
+}
+
+static INLINE void write_buffer_8x8_(int32x4_t *in, const uint16_t *output_r, int32_t stride_r, uint16_t *output_w,
+                                     int32_t stride_w, int32_t fliplr, int32_t flipud, int32_t shift, int32_t bd) {
+    uint16x8_t u[8];
+    int16x8_t  v[8];
+
+    round_shift_neon(in, shift, 16);
+
+    load_s16_8x8((int16_t *)output_r, stride_r, &v[0], &v[1], &v[2], &v[3], &v[4], &v[5], &v[6], &v[7]);
+
+    if (flipud) {
+        u[0] = get_recon_8x8(v[0], in[7], in[15], fliplr, bd);
+        u[1] = get_recon_8x8(v[1], in[6], in[14], fliplr, bd);
+        u[2] = get_recon_8x8(v[2], in[5], in[13], fliplr, bd);
+        u[3] = get_recon_8x8(v[3], in[4], in[12], fliplr, bd);
+        u[4] = get_recon_8x8(v[4], in[3], in[11], fliplr, bd);
+        u[5] = get_recon_8x8(v[5], in[2], in[10], fliplr, bd);
+        u[6] = get_recon_8x8(v[6], in[1], in[9], fliplr, bd);
+        u[7] = get_recon_8x8(v[7], in[0], in[8], fliplr, bd);
+    } else {
+        u[0] = get_recon_8x8(v[0], in[0], in[8], fliplr, bd);
+        u[1] = get_recon_8x8(v[1], in[1], in[9], fliplr, bd);
+        u[2] = get_recon_8x8(v[2], in[2], in[10], fliplr, bd);
+        u[3] = get_recon_8x8(v[3], in[3], in[11], fliplr, bd);
+        u[4] = get_recon_8x8(v[4], in[4], in[12], fliplr, bd);
+        u[5] = get_recon_8x8(v[5], in[5], in[13], fliplr, bd);
+        u[6] = get_recon_8x8(v[6], in[6], in[14], fliplr, bd);
+        u[7] = get_recon_8x8(v[7], in[7], in[15], fliplr, bd);
+    }
+
+    store_u16_8x8(output_w, stride_w, u[0], u[1], u[2], u[3], u[4], u[5], u[6], u[7]);
 }
 
 static INLINE void assign_8x8_input_from_16x16(const int32x4_t in[], int32x4_t in8x8[], int32_t col) {
@@ -1897,194 +1927,131 @@ void svt_av1_inv_txfm2d_add_16x16_neon(const int32_t *input, uint16_t *output_r,
     }
 }
 
-// 8x8
-static void load_buffer_8x8(const int32_t *coeff, int32x4_t *in) {
-    in[0]  = vld1q_s32(coeff + 0);
-    in[1]  = vld1q_s32(coeff + 4);
-    in[2]  = vld1q_s32(coeff + 8);
-    in[3]  = vld1q_s32(coeff + 12);
-    in[4]  = vld1q_s32(coeff + 16);
-    in[5]  = vld1q_s32(coeff + 20);
-    in[6]  = vld1q_s32(coeff + 24);
-    in[7]  = vld1q_s32(coeff + 28);
-    in[8]  = vld1q_s32(coeff + 32);
-    in[9]  = vld1q_s32(coeff + 36);
-    in[10] = vld1q_s32(coeff + 40);
-    in[11] = vld1q_s32(coeff + 44);
-    in[12] = vld1q_s32(coeff + 48);
-    in[13] = vld1q_s32(coeff + 52);
-    in[14] = vld1q_s32(coeff + 56);
-    in[15] = vld1q_s32(coeff + 60);
-}
-
-static void idct8x8_neon(int32x4_t *in, int32x4_t *out, int32_t bit) {
-    const int32_t  *cospi    = cospi_arr(bit);
-    const int32x4_t cospi56  = vdupq_n_s32(cospi[56]);
-    const int32x4_t cospim8  = vdupq_n_s32(-cospi[8]);
-    const int32x4_t cospi24  = vdupq_n_s32(cospi[24]);
-    const int32x4_t cospim40 = vdupq_n_s32(-cospi[40]);
-    const int32x4_t cospi40  = vdupq_n_s32(cospi[40]);
-    const int32x4_t cospi8   = vdupq_n_s32(cospi[8]);
-    const int32x4_t cospi32  = vdupq_n_s32(cospi[32]);
-    const int32x4_t cospi48  = vdupq_n_s32(cospi[48]);
-    const int32x4_t cospim16 = vdupq_n_s32(-cospi[16]);
-    const int32x4_t cospi16  = vdupq_n_s32(cospi[16]);
-    const int32x4_t shift    = -vdupq_n_s32(bit);
+static INLINE void idct8_x4_neon(int32x4_t *in, int32x4_t *out, int32_t bit) {
+    const int32_t  *cospi = cospi_arr(bit);
+    const int32x4_t shift = -vdupq_n_s32(bit);
     int32x4_t       u0, u1, u2, u3, u4, u5, u6, u7;
     int32x4_t       v0, v1, v2, v3, v4, v5, v6, v7;
     int32x4_t       x, y;
-    int32_t         col;
 
-    // Note:
-    //  Even column: 0, 2, ..., 14
-    //  Odd column: 1, 3, ..., 15
-    //  one even column plus one odd column constructs one row (8 coeffs)
-    //  total we have 8 rows (8x8).
-    for (col = 0; col < 2; ++col) {
-        // stage 0
-        // stage 1
-        // stage 2
-        u0 = in[0 * 2 + col];
-        u1 = in[4 * 2 + col];
-        u2 = in[2 * 2 + col];
-        u3 = in[6 * 2 + col];
+    u0 = in[0];
+    u1 = in[4];
+    u2 = in[2];
+    u3 = in[6];
 
-        x  = vmulq_s32(in[1 * 2 + col], cospi56);
-        y  = vmulq_s32(in[7 * 2 + col], cospim8);
-        u4 = vaddq_s32(x, y);
-        u4 = vqrshlq_s32(u4, shift);
+    u4 = vmulq_n_s32(in[1], cospi[56]);
+    u4 = vmlaq_n_s32(u4, in[7], -cospi[8]);
+    u4 = vqrshlq_s32(u4, shift);
 
-        x  = vmulq_s32(in[1 * 2 + col], cospi8);
-        y  = vmulq_s32(in[7 * 2 + col], cospi56);
-        u7 = vaddq_s32(x, y);
-        u7 = vqrshlq_s32(u7, shift);
+    u7 = vmulq_n_s32(in[1], cospi[8]);
+    u7 = vmlaq_n_s32(u7, in[7], cospi[56]);
+    u7 = vqrshlq_s32(u7, shift);
 
-        x  = vmulq_s32(in[5 * 2 + col], cospi24);
-        y  = vmulq_s32(in[3 * 2 + col], cospim40);
-        u5 = vaddq_s32(x, y);
-        u5 = vqrshlq_s32(u5, shift);
+    u5 = vmulq_n_s32(in[5], cospi[24]);
+    u5 = vmlaq_n_s32(u5, in[3], -cospi[40]);
+    u5 = vqrshlq_s32(u5, shift);
 
-        x  = vmulq_s32(in[5 * 2 + col], cospi40);
-        y  = vmulq_s32(in[3 * 2 + col], cospi24);
-        u6 = vaddq_s32(x, y);
-        u6 = vqrshlq_s32(u6, shift);
+    u6 = vmulq_n_s32(in[5], cospi[40]);
+    u6 = vmlaq_n_s32(u6, in[3], cospi[24]);
+    u6 = vqrshlq_s32(u6, shift);
 
-        // stage 3
-        x  = vmulq_s32(u0, cospi32);
-        y  = vmulq_s32(u1, cospi32);
-        v0 = vaddq_s32(x, y);
-        v0 = vqrshlq_s32(v0, shift);
+    // stage 3
+    x  = vmulq_n_s32(u0, cospi[32]);
+    y  = vmulq_n_s32(u1, cospi[32]);
+    v0 = vaddq_s32(x, y);
+    v0 = vqrshlq_s32(v0, shift);
 
-        v1 = vsubq_s32(x, y);
-        v1 = vqrshlq_s32(v1, shift);
+    v1 = vsubq_s32(x, y);
+    v1 = vqrshlq_s32(v1, shift);
 
-        x  = vmulq_s32(u2, cospi48);
-        y  = vmulq_s32(u3, cospim16);
-        v2 = vaddq_s32(x, y);
-        v2 = vqrshlq_s32(v2, shift);
+    v2 = vmulq_n_s32(u2, cospi[48]);
+    v2 = vmlaq_n_s32(v2, u3, -cospi[16]);
+    v2 = vqrshlq_s32(v2, shift);
 
-        x  = vmulq_s32(u2, cospi16);
-        y  = vmulq_s32(u3, cospi48);
-        v3 = vaddq_s32(x, y);
-        v3 = vqrshlq_s32(v3, shift);
+    v3 = vmulq_n_s32(u2, cospi[16]);
+    v3 = vmlaq_n_s32(v3, u3, cospi[48]);
+    v3 = vqrshlq_s32(v3, shift);
 
-        v4 = vaddq_s32(u4, u5);
-        v5 = vsubq_s32(u4, u5);
-        v6 = vsubq_s32(u7, u6);
-        v7 = vaddq_s32(u6, u7);
+    v4 = vaddq_s32(u4, u5);
+    v5 = vsubq_s32(u4, u5);
+    v6 = vsubq_s32(u7, u6);
+    v7 = vaddq_s32(u6, u7);
 
-        // stage 4
-        u0 = vaddq_s32(v0, v3);
-        u1 = vaddq_s32(v1, v2);
-        u2 = vsubq_s32(v1, v2);
-        u3 = vsubq_s32(v0, v3);
-        u4 = v4;
-        u7 = v7;
+    // stage 4
+    u0 = vaddq_s32(v0, v3);
+    u1 = vaddq_s32(v1, v2);
+    u2 = vsubq_s32(v1, v2);
+    u3 = vsubq_s32(v0, v3);
+    u4 = v4;
+    u7 = v7;
 
-        x  = vmulq_s32(v5, cospi32);
-        y  = vmulq_s32(v6, cospi32);
-        u6 = vaddq_s32(y, x);
-        u6 = vqrshlq_s32(u6, shift);
+    x  = vmulq_n_s32(v5, cospi[32]);
+    y  = vmulq_n_s32(v6, cospi[32]);
+    u6 = vaddq_s32(y, x);
+    u6 = vqrshlq_s32(u6, shift);
 
-        u5 = vsubq_s32(y, x);
-        u5 = vqrshlq_s32(u5, shift);
+    u5 = vsubq_s32(y, x);
+    u5 = vqrshlq_s32(u5, shift);
 
-        // stage 5
-        out[0 * 2 + col] = vaddq_s32(u0, u7);
-        out[1 * 2 + col] = vaddq_s32(u1, u6);
-        out[2 * 2 + col] = vaddq_s32(u2, u5);
-        out[3 * 2 + col] = vaddq_s32(u3, u4);
-        out[4 * 2 + col] = vsubq_s32(u3, u4);
-        out[5 * 2 + col] = vsubq_s32(u2, u5);
-        out[6 * 2 + col] = vsubq_s32(u1, u6);
-        out[7 * 2 + col] = vsubq_s32(u0, u7);
-    }
+    // stage 5
+    out[0] = vaddq_s32(u0, u7);
+    out[1] = vaddq_s32(u1, u6);
+    out[2] = vaddq_s32(u2, u5);
+    out[3] = vaddq_s32(u3, u4);
+    out[4] = vsubq_s32(u3, u4);
+    out[5] = vsubq_s32(u2, u5);
+    out[6] = vsubq_s32(u1, u6);
+    out[7] = vsubq_s32(u0, u7);
 }
 
-static void iadst8x8_neon(int32x4_t *in, int32x4_t *out, int32_t bit) {
-    const int32_t  *cospi    = cospi_arr(bit);
-    const int32x4_t cospi4   = vdupq_n_s32(cospi[4]);
-    const int32x4_t cospi60  = vdupq_n_s32(cospi[60]);
-    const int32x4_t cospi20  = vdupq_n_s32(cospi[20]);
-    const int32x4_t cospi44  = vdupq_n_s32(cospi[44]);
-    const int32x4_t cospi36  = vdupq_n_s32(cospi[36]);
-    const int32x4_t cospi28  = vdupq_n_s32(cospi[28]);
-    const int32x4_t cospi52  = vdupq_n_s32(cospi[52]);
-    const int32x4_t cospi12  = vdupq_n_s32(cospi[12]);
-    const int32x4_t cospi16  = vdupq_n_s32(cospi[16]);
-    const int32x4_t cospi48  = vdupq_n_s32(cospi[48]);
-    const int32x4_t cospim48 = vdupq_n_s32(-cospi[48]);
-    const int32x4_t cospi32  = vdupq_n_s32(cospi[32]);
-    const int32x4_t k_zero   = vdupq_n_s32(0);
-    const int32x4_t shift    = -vdupq_n_s32(bit);
+static INLINE void idct8_xn_neon(int32x4_t *in, int32x4_t *out, int32_t bit, int howmany) {
+    const int stride = 8;
+    int       i      = 0;
+    do { idct8_x4_neon(in + i * stride, out + i * stride, bit); } while (++i < howmany);
+}
+
+static INLINE void iadst8_x4_neon(int32x4_t *in, int32x4_t *out, int32_t bit) {
+    const int32_t  *cospi = cospi_arr(bit);
+    const int32x4_t shift = -vdupq_n_s32(bit);
     int32x4_t       u[8], v[8], x;
 
-    // Even 8 points: 0, 2, ..., 14
     // stage 0
     // stage 1
     // stage 2
     // (1)
-    u[0] = vmulq_s32(in[14], cospi4);
-    x    = vmulq_s32(in[0], cospi60);
-    u[0] = vaddq_s32(u[0], x);
+    u[0] = vmulq_n_s32(in[7], cospi[4]);
+    u[0] = vmlaq_n_s32(u[0], in[0], cospi[60]);
     u[0] = vqrshlq_s32(u[0], shift);
 
-    u[1] = vmulq_s32(in[14], cospi60);
-    x    = vmulq_s32(in[0], cospi4);
-    u[1] = vsubq_s32(u[1], x);
+    u[1] = vmulq_n_s32(in[7], cospi[60]);
+    u[1] = vmlsq_n_s32(u[1], in[0], cospi[4]);
     u[1] = vqrshlq_s32(u[1], shift);
 
     // (2)
-    u[2] = vmulq_s32(in[10], cospi20);
-    x    = vmulq_s32(in[4], cospi44);
-    u[2] = vaddq_s32(u[2], x);
+    u[2] = vmulq_n_s32(in[5], cospi[20]);
+    u[2] = vmlaq_n_s32(u[2], in[2], cospi[44]);
     u[2] = vqrshlq_s32(u[2], shift);
 
-    u[3] = vmulq_s32(in[10], cospi44);
-    x    = vmulq_s32(in[4], cospi20);
-    u[3] = vsubq_s32(u[3], x);
+    u[3] = vmulq_n_s32(in[5], cospi[44]);
+    u[3] = vmlsq_n_s32(u[3], in[2], cospi[20]);
     u[3] = vqrshlq_s32(u[3], shift);
 
     // (3)
-    u[4] = vmulq_s32(in[6], cospi36);
-    x    = vmulq_s32(in[8], cospi28);
-    u[4] = vaddq_s32(u[4], x);
+    u[4] = vmulq_n_s32(in[3], cospi[36]);
+    u[4] = vmlaq_n_s32(u[4], in[4], cospi[28]);
     u[4] = vqrshlq_s32(u[4], shift);
 
-    u[5] = vmulq_s32(in[6], cospi28);
-    x    = vmulq_s32(in[8], cospi36);
-    u[5] = vsubq_s32(u[5], x);
+    u[5] = vmulq_n_s32(in[3], cospi[28]);
+    u[5] = vmlsq_n_s32(u[5], in[4], cospi[36]);
     u[5] = vqrshlq_s32(u[5], shift);
 
     // (4)
-    u[6] = vmulq_s32(in[2], cospi52);
-    x    = vmulq_s32(in[12], cospi12);
-    u[6] = vaddq_s32(u[6], x);
+    u[6] = vmulq_n_s32(in[1], cospi[52]);
+    u[6] = vmlaq_n_s32(u[6], in[6], cospi[12]);
     u[6] = vqrshlq_s32(u[6], shift);
 
-    u[7] = vmulq_s32(in[2], cospi12);
-    x    = vmulq_s32(in[12], cospi52);
-    u[7] = vsubq_s32(u[7], x);
+    u[7] = vmulq_n_s32(in[1], cospi[12]);
+    u[7] = vmlsq_n_s32(u[7], in[6], cospi[52]);
     u[7] = vqrshlq_s32(u[7], shift);
 
     // stage 3
@@ -2103,24 +2070,20 @@ static void iadst8x8_neon(int32x4_t *in, int32x4_t *out, int32_t bit) {
     u[2] = v[2];
     u[3] = v[3];
 
-    u[4] = vmulq_s32(v[4], cospi16);
-    x    = vmulq_s32(v[5], cospi48);
-    u[4] = vaddq_s32(u[4], x);
+    u[4] = vmulq_n_s32(v[4], cospi[16]);
+    u[4] = vmlaq_n_s32(u[4], v[5], cospi[48]);
     u[4] = vqrshlq_s32(u[4], shift);
 
-    u[5] = vmulq_s32(v[4], cospi48);
-    x    = vmulq_s32(v[5], cospi16);
-    u[5] = vsubq_s32(u[5], x);
+    u[5] = vmulq_n_s32(v[4], cospi[48]);
+    u[5] = vmlsq_n_s32(u[5], v[5], cospi[16]);
     u[5] = vqrshlq_s32(u[5], shift);
 
-    u[6] = vmulq_s32(v[6], cospim48);
-    x    = vmulq_s32(v[7], cospi16);
-    u[6] = vaddq_s32(u[6], x);
+    u[6] = vmulq_n_s32(v[6], -cospi[48]);
+    u[6] = vmlaq_n_s32(u[6], v[7], cospi[16]);
     u[6] = vqrshlq_s32(u[6], shift);
 
-    u[7] = vmulq_s32(v[6], cospi16);
-    x    = vmulq_s32(v[7], cospim48);
-    u[7] = vsubq_s32(u[7], x);
+    u[7] = vmulq_n_s32(v[6], cospi[16]);
+    u[7] = vmlsq_n_s32(u[7], v[7], -cospi[48]);
     u[7] = vqrshlq_s32(u[7], shift);
 
     // stage 5
@@ -2139,16 +2102,16 @@ static void iadst8x8_neon(int32x4_t *in, int32x4_t *out, int32_t bit) {
     u[4] = v[4];
     u[5] = v[5];
 
-    v[0] = vmulq_s32(v[2], cospi32);
-    x    = vmulq_s32(v[3], cospi32);
+    v[0] = vmulq_n_s32(v[2], cospi[32]);
+    x    = vmulq_n_s32(v[3], cospi[32]);
     u[2] = vaddq_s32(v[0], x);
     u[2] = vqrshlq_s32(u[2], shift);
 
     u[3] = vsubq_s32(v[0], x);
     u[3] = vqrshlq_s32(u[3], shift);
 
-    v[0] = vmulq_s32(v[6], cospi32);
-    x    = vmulq_s32(v[7], cospi32);
+    v[0] = vmulq_n_s32(v[6], cospi[32]);
+    x    = vmulq_n_s32(v[7], cospi[32]);
     u[6] = vaddq_s32(v[0], x);
     u[6] = vqrshlq_s32(u[6], shift);
 
@@ -2156,292 +2119,176 @@ static void iadst8x8_neon(int32x4_t *in, int32x4_t *out, int32_t bit) {
     u[7] = vqrshlq_s32(u[7], shift);
 
     // stage 7
-    out[0]  = u[0];
-    out[2]  = vsubq_s32(k_zero, u[4]);
-    out[4]  = u[6];
-    out[6]  = vsubq_s32(k_zero, u[2]);
-    out[8]  = u[3];
-    out[10] = vsubq_s32(k_zero, u[7]);
-    out[12] = u[5];
-    out[14] = vsubq_s32(k_zero, u[1]);
+    out[0] = u[0];
+    out[1] = vnegq_s32(u[4]);
+    out[2] = u[6];
+    out[3] = vnegq_s32(u[2]);
+    out[4] = u[3];
+    out[5] = vnegq_s32(u[7]);
+    out[6] = u[5];
+    out[7] = vnegq_s32(u[1]);
+}
 
-    // Odd 8 points: 1, 3, ..., 15
-    // stage 0
-    // stage 1
-    // stage 2
-    // (1)
-    u[0] = vmulq_s32(in[15], cospi4);
-    x    = vmulq_s32(in[1], cospi60);
-    u[0] = vaddq_s32(u[0], x);
-    u[0] = vqrshlq_s32(u[0], shift);
+static INLINE void iadst8_xn_neon(int32x4_t *in, int32x4_t *out, int32_t bit, const int howmany) {
+    const int stride = 8;
+    int       i      = 0;
+    do { iadst8_x4_neon(in + i * stride, out + i * stride, bit); } while (++i < howmany);
+}
 
-    u[1] = vmulq_s32(in[15], cospi60);
-    x    = vmulq_s32(in[1], cospi4);
-    u[1] = vsubq_s32(u[1], x);
-    u[1] = vqrshlq_s32(u[1], shift);
-
-    // (2)
-    u[2] = vmulq_s32(in[11], cospi20);
-    x    = vmulq_s32(in[5], cospi44);
-    u[2] = vaddq_s32(u[2], x);
-    u[2] = vqrshlq_s32(u[2], shift);
-
-    u[3] = vmulq_s32(in[11], cospi44);
-    x    = vmulq_s32(in[5], cospi20);
-    u[3] = vsubq_s32(u[3], x);
-    u[3] = vqrshlq_s32(u[3], shift);
-
-    // (3)
-    u[4] = vmulq_s32(in[7], cospi36);
-    x    = vmulq_s32(in[9], cospi28);
-    u[4] = vaddq_s32(u[4], x);
-    u[4] = vqrshlq_s32(u[4], shift);
-
-    u[5] = vmulq_s32(in[7], cospi28);
-    x    = vmulq_s32(in[9], cospi36);
-    u[5] = vsubq_s32(u[5], x);
-    u[5] = vqrshlq_s32(u[5], shift);
-
-    // (4)
-    u[6] = vmulq_s32(in[3], cospi52);
-    x    = vmulq_s32(in[13], cospi12);
-    u[6] = vaddq_s32(u[6], x);
-    u[6] = vqrshlq_s32(u[6], shift);
-
-    u[7] = vmulq_s32(in[3], cospi12);
-    x    = vmulq_s32(in[13], cospi52);
-    u[7] = vsubq_s32(u[7], x);
-    u[7] = vqrshlq_s32(u[7], shift);
-
-    // stage 3
-    v[0] = vaddq_s32(u[0], u[4]);
-    v[4] = vsubq_s32(u[0], u[4]);
-    v[1] = vaddq_s32(u[1], u[5]);
-    v[5] = vsubq_s32(u[1], u[5]);
-    v[2] = vaddq_s32(u[2], u[6]);
-    v[6] = vsubq_s32(u[2], u[6]);
-    v[3] = vaddq_s32(u[3], u[7]);
-    v[7] = vsubq_s32(u[3], u[7]);
-
-    // stage 4
-    u[0] = v[0];
-    u[1] = v[1];
-    u[2] = v[2];
-    u[3] = v[3];
-
-    u[4] = vmulq_s32(v[4], cospi16);
-    x    = vmulq_s32(v[5], cospi48);
-    u[4] = vaddq_s32(u[4], x);
-    u[4] = vqrshlq_s32(u[4], shift);
-
-    u[5] = vmulq_s32(v[4], cospi48);
-    x    = vmulq_s32(v[5], cospi16);
-    u[5] = vsubq_s32(u[5], x);
-    u[5] = vqrshlq_s32(u[5], shift);
-
-    u[6] = vmulq_s32(v[6], cospim48);
-    x    = vmulq_s32(v[7], cospi16);
-    u[6] = vaddq_s32(u[6], x);
-    u[6] = vqrshlq_s32(u[6], shift);
-
-    u[7] = vmulq_s32(v[6], cospi16);
-    x    = vmulq_s32(v[7], cospim48);
-    u[7] = vsubq_s32(u[7], x);
-    u[7] = vqrshlq_s32(u[7], shift);
-
-    // stage 5
-    v[0] = vaddq_s32(u[0], u[2]);
-    v[2] = vsubq_s32(u[0], u[2]);
-    v[1] = vaddq_s32(u[1], u[3]);
-    v[3] = vsubq_s32(u[1], u[3]);
-    v[4] = vaddq_s32(u[4], u[6]);
-    v[6] = vsubq_s32(u[4], u[6]);
-    v[5] = vaddq_s32(u[5], u[7]);
-    v[7] = vsubq_s32(u[5], u[7]);
-
-    // stage 6
-    u[0] = v[0];
-    u[1] = v[1];
-    u[4] = v[4];
-    u[5] = v[5];
-
-    v[0] = vmulq_s32(v[2], cospi32);
-    x    = vmulq_s32(v[3], cospi32);
-    u[2] = vaddq_s32(v[0], x);
-    u[2] = vqrshlq_s32(u[2], shift);
-
-    u[3] = vsubq_s32(v[0], x);
-    u[3] = vqrshlq_s32(u[3], shift);
-
-    v[0] = vmulq_s32(v[6], cospi32);
-    x    = vmulq_s32(v[7], cospi32);
-    u[6] = vaddq_s32(v[0], x);
-    u[6] = vqrshlq_s32(u[6], shift);
-
-    u[7] = vsubq_s32(v[0], x);
-    u[7] = vqrshlq_s32(u[7], shift);
-
-    // stage 7
-    out[1]  = u[0];
-    out[3]  = vsubq_s32(k_zero, u[4]);
-    out[5]  = u[6];
-    out[7]  = vsubq_s32(k_zero, u[2]);
-    out[9]  = u[3];
-    out[11] = vsubq_s32(k_zero, u[7]);
-    out[13] = u[5];
-    out[15] = vsubq_s32(k_zero, u[1]);
+static INLINE void load_buffer_s32(const int32_t *input, int32x4_t *in, const int col, const int row) {
+    for (int i = 0; i < col; i++) {
+        for (int j = 0; j < row >> 2; j++) { in[i + j * col] = vld1q_s32(input + i * row + j * 4); }
+    }
 }
 
 void svt_av1_inv_txfm2d_add_8x8_neon(const int32_t *input, uint16_t *output_r, int32_t stride_r, uint16_t *output_w,
                                      int32_t stride_w, TxType tx_type, int32_t bd) {
     int32x4_t     in[16], out[16];
-    const int8_t *shift   = svt_aom_inv_txfm_shift_ls[TX_8X8];
-    const int32_t txw_idx = get_txw_idx(TX_8X8);
-    const int32_t txh_idx = get_txh_idx(TX_8X8);
+    const int8_t *shift = svt_aom_inv_txfm_shift_ls[TX_8X8];
 
     switch (tx_type) {
     case DCT_DCT:
-        load_buffer_8x8(input, in);
-        transpose_8x8(in, out);
-        idct8x8_neon(out, in, inv_cos_bit_row[txw_idx][txh_idx]);
-        transpose_8x8(in, out);
-        round_shift_8x8(out, -shift[0]);
-        idct8x8_neon(out, in, inv_cos_bit_col[txw_idx][txh_idx]);
-        write_buffer_8x8(in, output_r, stride_r, output_w, stride_w, 0, 0, -shift[1], bd);
-        break;
-    case DCT_ADST:
-        load_buffer_8x8(input, in);
-        transpose_8x8(in, out);
-        iadst8x8_neon(out, in, inv_cos_bit_row[txw_idx][txh_idx]);
-        transpose_8x8(in, out);
-        round_shift_8x8(out, -shift[0]);
-        idct8x8_neon(out, in, inv_cos_bit_col[txw_idx][txh_idx]);
-        write_buffer_8x8(in, output_r, stride_r, output_w, stride_w, 0, 0, -shift[1], bd);
+        load_buffer_s32(input, in, 8, 8);
+        transpose_arrays_s32_8x8(in, out);
+        idct8_xn_neon(out, in, inv_cos_bit_row[1][1], 2);
+        transpose_arrays_s32_8x8(in, out);
+        round_shift_neon(out, shift[0], 16);
+        idct8_xn_neon(out, in, inv_cos_bit_col[1][1], 2);
+        write_buffer_8x8_(in, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
         break;
     case ADST_DCT:
-        load_buffer_8x8(input, in);
-        transpose_8x8(in, out);
-        idct8x8_neon(out, in, inv_cos_bit_row[txw_idx][txh_idx]);
-        transpose_8x8(in, out);
-        round_shift_8x8(out, -shift[0]);
-        iadst8x8_neon(out, in, inv_cos_bit_col[txw_idx][txh_idx]);
-        write_buffer_8x8(in, output_r, stride_r, output_w, stride_w, 0, 0, -shift[1], bd);
+        load_buffer_s32(input, in, 8, 8);
+        transpose_arrays_s32_8x8(in, out);
+        idct8_xn_neon(out, in, inv_cos_bit_row[1][1], 2);
+        transpose_arrays_s32_8x8(in, out);
+        round_shift_neon(out, shift[0], 16);
+        iadst8_xn_neon(out, in, inv_cos_bit_col[1][1], 2);
+        write_buffer_8x8_(in, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
+        break;
+    case DCT_ADST:
+        load_buffer_s32(input, in, 8, 8);
+        transpose_arrays_s32_8x8(in, out);
+        iadst8_xn_neon(out, in, inv_cos_bit_row[1][1], 2);
+        transpose_arrays_s32_8x8(in, out);
+        round_shift_neon(out, shift[0], 16);
+        idct8_xn_neon(out, in, inv_cos_bit_col[1][1], 2);
+        write_buffer_8x8_(in, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
         break;
     case ADST_ADST:
-        load_buffer_8x8(input, in);
-        transpose_8x8(in, out);
-        iadst8x8_neon(out, in, inv_cos_bit_row[txw_idx][txh_idx]);
-        transpose_8x8(in, out);
-        round_shift_8x8(out, -shift[0]);
-        iadst8x8_neon(out, in, inv_cos_bit_col[txw_idx][txh_idx]);
-        write_buffer_8x8(in, output_r, stride_r, output_w, stride_w, 0, 0, -shift[1], bd);
+        load_buffer_s32(input, in, 8, 8);
+        transpose_arrays_s32_8x8(in, out);
+        iadst8_xn_neon(out, in, inv_cos_bit_row[1][1], 2);
+        transpose_arrays_s32_8x8(in, out);
+        round_shift_neon(out, shift[0], 16);
+        iadst8_xn_neon(out, in, inv_cos_bit_col[1][1], 2);
+        write_buffer_8x8_(in, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
         break;
     case FLIPADST_DCT:
-        load_buffer_8x8(input, in);
-        transpose_8x8(in, out);
-        idct8x8_neon(out, in, inv_cos_bit_row[txw_idx][txh_idx]);
-        transpose_8x8(in, out);
-        round_shift_8x8(out, -shift[0]);
-        iadst8x8_neon(out, in, inv_cos_bit_col[txw_idx][txh_idx]);
-        write_buffer_8x8(in, output_r, stride_r, output_w, stride_w, 0, 1, -shift[1], bd);
+        load_buffer_s32(input, in, 8, 8);
+        transpose_arrays_s32_8x8(in, out);
+        idct8_xn_neon(out, in, inv_cos_bit_row[1][1], 2);
+        transpose_arrays_s32_8x8(in, out);
+        round_shift_neon(out, shift[0], 16);
+        iadst8_xn_neon(out, in, inv_cos_bit_col[1][1], 2);
+        write_buffer_8x8_(in, output_r, stride_r, output_w, stride_w, 0, 1, shift[1], bd);
         break;
     case DCT_FLIPADST:
-        load_buffer_8x8(input, in);
-        transpose_8x8(in, out);
-        iadst8x8_neon(out, in, inv_cos_bit_row[txw_idx][txh_idx]);
-        transpose_8x8(in, out);
-        round_shift_8x8(out, -shift[0]);
-        idct8x8_neon(out, in, inv_cos_bit_col[txw_idx][txh_idx]);
-        write_buffer_8x8(in, output_r, stride_r, output_w, stride_w, 1, 0, -shift[1], bd);
+        load_buffer_s32(input, in, 8, 8);
+        transpose_arrays_s32_8x8(in, out);
+        iadst8_xn_neon(out, in, inv_cos_bit_row[1][1], 2);
+        transpose_arrays_s32_8x8(in, out);
+        round_shift_neon(out, shift[0], 16);
+        idct8_xn_neon(out, in, inv_cos_bit_col[1][1], 2);
+        write_buffer_8x8_(in, output_r, stride_r, output_w, stride_w, 1, 0, shift[1], bd);
         break;
     case ADST_FLIPADST:
-        load_buffer_8x8(input, in);
-        transpose_8x8(in, out);
-        iadst8x8_neon(out, in, inv_cos_bit_row[txw_idx][txh_idx]);
-        transpose_8x8(in, out);
-        round_shift_8x8(out, -shift[0]);
-        iadst8x8_neon(out, in, inv_cos_bit_col[txw_idx][txh_idx]);
-        write_buffer_8x8(in, output_r, stride_r, output_w, stride_w, 1, 0, -shift[1], bd);
+        load_buffer_s32(input, in, 8, 8);
+        transpose_arrays_s32_8x8(in, out);
+        iadst8_xn_neon(out, in, inv_cos_bit_row[1][1], 2);
+        transpose_arrays_s32_8x8(in, out);
+        round_shift_neon(out, shift[0], 16);
+        iadst8_xn_neon(out, in, inv_cos_bit_col[1][1], 2);
+        write_buffer_8x8_(in, output_r, stride_r, output_w, stride_w, 1, 0, shift[1], bd);
         break;
     case FLIPADST_FLIPADST:
-        load_buffer_8x8(input, in);
-        transpose_8x8(in, out);
-        iadst8x8_neon(out, in, inv_cos_bit_row[txw_idx][txh_idx]);
-        transpose_8x8(in, out);
-        round_shift_8x8(out, -shift[0]);
-        iadst8x8_neon(out, in, inv_cos_bit_col[txw_idx][txh_idx]);
-        write_buffer_8x8(in, output_r, stride_r, output_w, stride_w, 1, 1, -shift[1], bd);
+        load_buffer_s32(input, in, 8, 8);
+        transpose_arrays_s32_8x8(in, out);
+        iadst8_xn_neon(out, in, inv_cos_bit_row[1][1], 2);
+        transpose_arrays_s32_8x8(in, out);
+        round_shift_neon(out, shift[0], 16);
+        iadst8_xn_neon(out, in, inv_cos_bit_col[1][1], 2);
+        write_buffer_8x8_(in, output_r, stride_r, output_w, stride_w, 1, 1, shift[1], bd);
         break;
     case FLIPADST_ADST:
-        load_buffer_8x8(input, in);
-        transpose_8x8(in, out);
-        iadst8x8_neon(out, in, inv_cos_bit_row[txw_idx][txh_idx]);
-        transpose_8x8(in, out);
-        round_shift_8x8(out, -shift[0]);
-        iadst8x8_neon(out, in, inv_cos_bit_col[txw_idx][txh_idx]);
-        write_buffer_8x8(in, output_r, stride_r, output_w, stride_w, 0, 1, -shift[1], bd);
+        load_buffer_s32(input, in, 8, 8);
+        transpose_arrays_s32_8x8(in, out);
+        iadst8_xn_neon(out, in, inv_cos_bit_row[1][1], 2);
+        transpose_arrays_s32_8x8(in, out);
+        round_shift_neon(out, shift[0], 16);
+        iadst8_xn_neon(out, in, inv_cos_bit_col[1][1], 2);
+        write_buffer_8x8_(in, output_r, stride_r, output_w, stride_w, 0, 1, shift[1], bd);
         break;
     case IDTX:
-        load_buffer_8x8(input, in);
+        load_buffer_s32(input, in, 8, 8);
         // Operations can be joined together without losing precision
         // svt_av1_iidentity8_c() shift left 1 bits
-        // round_shift_8x8(, -shift[0]) shift right 1 bits
+        // round_shift_neon(, -shift[0]) shift right 1 bits
         // svt_av1_iidentity8_c() shift left 1 bits
-        // round_shift_8x8(, -shift[1]) shift right 4 bits with complement
-        write_buffer_8x8(in, output_r, stride_r, output_w, stride_w, 0, 0, -shift[0] - shift[1] - 2, bd);
+        // round_shift_neon(, -shift[1]) shift right 4 bits with complement
+        write_buffer_8x8_(in, output_r, stride_r, output_w, stride_w, 0, 0, shift[0] + shift[1] + 2, bd);
         break;
     case V_DCT:
-        load_buffer_8x8(input, in);
+        load_buffer_s32(input, in, 8, 8);
         // svt_av1_iidentity8_c() shift left 1 bits
-        // round_shift_8x8(, -shift[0]) shift right 1 bits
-        idct8x8_neon(in, out, inv_cos_bit_row[txw_idx][txh_idx]);
-        write_buffer_8x8(out, output_r, stride_r, output_w, stride_w, 0, 0, -shift[1], bd);
+        // round_shift_neon(, -shift[0]) shift right 1 bits
+        idct8_xn_neon(in, out, inv_cos_bit_row[1][1], 2);
+        write_buffer_8x8_(out, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
         break;
     case H_DCT:
-        load_buffer_8x8(input, in);
-        transpose_8x8(in, out);
-        idct8x8_neon(out, in, inv_cos_bit_row[txw_idx][txh_idx]);
-        transpose_8x8(in, out);
+        load_buffer_s32(input, in, 8, 8);
+        transpose_arrays_s32_8x8(in, out);
+        idct8_xn_neon(out, in, inv_cos_bit_row[1][1], 2);
+        transpose_arrays_s32_8x8(in, out);
+        round_shift_neon(out, shift[0], 16);
         // svt_av1_iidentity8_c() shift left 1 bits
-        // round_shift_8x8(, -shift[1]) shift right 4 bits with complement
-        round_shift_8x8(out, -shift[0]);
-        write_buffer_8x8(out, output_r, stride_r, output_w, stride_w, 0, 0, -shift[1] - 1, bd);
+        // round_shift_neon(, -shift[1]) shift right 4 bits with complement
+        write_buffer_8x8_(out, output_r, stride_r, output_w, stride_w, 0, 0, shift[1] + 1, bd);
         break;
     case V_ADST:
-        load_buffer_8x8(input, in);
+        load_buffer_s32(input, in, 8, 8);
         // svt_av1_iidentity8_c() shift left 1 bits
-        // round_shift_8x8(, -shift[0]) shift right 1 bits
-        iadst8x8_neon(in, out, inv_cos_bit_col[txw_idx][txh_idx]);
-        write_buffer_8x8(out, output_r, stride_r, output_w, stride_w, 0, 0, -shift[1], bd);
+        // round_shift_neon(, -shift[0]) shift right 1 bits
+        iadst8_xn_neon(in, out, inv_cos_bit_col[1][1], 2);
+        write_buffer_8x8_(out, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
         break;
     case H_ADST:
-        load_buffer_8x8(input, in);
-        transpose_8x8(in, out);
-        iadst8x8_neon(out, in, inv_cos_bit_row[txw_idx][txh_idx]);
-        transpose_8x8(in, out);
+        load_buffer_s32(input, in, 8, 8);
+        transpose_arrays_s32_8x8(in, out);
+        iadst8_xn_neon(out, in, inv_cos_bit_row[1][1], 2);
+        transpose_arrays_s32_8x8(in, out);
+        round_shift_neon(out, shift[0], 16);
         // svt_av1_iidentity8_c() shift left 1 bits
-        // round_shift_8x8(, -shift[1]) shift right 4 bits with complement
-        round_shift_8x8(out, -shift[0]);
-        write_buffer_8x8(out, output_r, stride_r, output_w, stride_w, 0, 0, -shift[1] - 1, bd);
+        // round_shift_neon(, -shift[1]) shift right 4 bits with complement
+        write_buffer_8x8_(out, output_r, stride_r, output_w, stride_w, 0, 0, shift[1] + 1, bd);
         break;
     case V_FLIPADST:
-        load_buffer_8x8(input, in);
+        load_buffer_s32(input, in, 8, 8);
         // svt_av1_iidentity8_c() shift left 1 bits
-        // round_shift_8x8(, -shift[0]) shift right 1 bits
-        iadst8x8_neon(in, out, inv_cos_bit_col[txw_idx][txh_idx]);
-        write_buffer_8x8(out, output_r, stride_r, output_w, stride_w, 0, 1, -shift[1], bd);
+        // round_shift_neon(, -shift[0]) shift right 1 bits
+        iadst8_xn_neon(in, out, inv_cos_bit_col[1][1], 2);
+        write_buffer_8x8_(out, output_r, stride_r, output_w, stride_w, 0, 1, shift[1], bd);
         break;
     case H_FLIPADST:
-        load_buffer_8x8(input, in);
-        transpose_8x8(in, out);
-        iadst8x8_neon(out, in, inv_cos_bit_row[txw_idx][txh_idx]);
-        transpose_8x8(in, out);
+        load_buffer_s32(input, in, 8, 8);
+        transpose_arrays_s32_8x8(in, out);
+        iadst8_xn_neon(out, in, inv_cos_bit_row[1][1], 2);
+        transpose_arrays_s32_8x8(in, out);
+        round_shift_neon(out, shift[0], 16);
         // svt_av1_iidentity8_c() shift left 1 bits
-        // round_shift_8x8(, -shift[1]) shift right 4 bits with complement
-        round_shift_8x8(out, -shift[0]);
-        write_buffer_8x8(out, output_r, stride_r, output_w, stride_w, 1, 0, -shift[1] - 1, bd);
+        // round_shift_neon(, -shift[1]) shift right 4 bits with complement
+        write_buffer_8x8_(out, output_r, stride_r, output_w, stride_w, 1, 0, shift[1] + 1, bd);
         break;
-    default: svt_av1_inv_txfm2d_add_8x8_c(input, output_r, stride_r, output_w, stride_w, tx_type, bd);
+    default: assert(0);
     }
 }
 
@@ -2572,11 +2419,6 @@ static INLINE void iadst4_x4_neon(int32x4_t *in, int32x4_t *out, int bit) {
     out[1] = u1;
     out[2] = u2;
     out[3] = u3;
-}
-
-static INLINE void round_shift_neon(int32x4_t *in, int32_t shift, int n) {
-    const int32x4_t vshift = vdupq_n_s32(shift);
-    for (int i = 0; i < n; i++) { in[i] = vrshlq_s32(in[i], vshift); }
 }
 
 static INLINE void iidentity4_x4_neon(int32x4_t *in, int32x4_t *out) {
