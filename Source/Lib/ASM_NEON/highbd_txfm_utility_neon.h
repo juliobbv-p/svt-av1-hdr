@@ -14,21 +14,16 @@
 
 #include <arm_neon.h>
 
-static INLINE int32x4_t half_btf_neon(const int32x4_t *w0, const int32x4_t *n0, const int32x4_t *w1,
-                                      const int32x4_t *n1, int32_t bit) {
-    int32x4_t x, y;
-    x = vmulq_s32(*w0, *n0);
-    y = vmulq_s32(*w1, *n1);
-    x = vaddq_s32(x, y);
-    x = vrshlq_s32(x, vdupq_n_s32(-bit));
-    return x;
+static INLINE int32x4_t half_btf_neon(const int cospi0, const int32x4_t n0, const int cospi1, const int32x4_t n1,
+                                      int32_t bit) {
+    int32x4_t res = vmulq_n_s32(n0, cospi0);
+    res           = vmlaq_n_s32(res, n1, cospi1);
+    return vrshlq_s32(res, vdupq_n_s32(-bit));
 }
 
-static INLINE int32x4_t half_btf_0_neon(const int32x4_t *w0, const int32x4_t *n0, int32_t bit) {
-    int32x4_t x;
-    x = vmulq_s32(*w0, *n0);
-    x = vrshlq_s32(x, vdupq_n_s32(-bit));
-    return x;
+static INLINE int32x4_t half_btf_0_neon(const int cospi0, const int32x4_t n0, int32_t bit) {
+    int32x4_t x = vmulq_n_s32(n0, cospi0);
+    return vrshlq_s32(x, vdupq_n_s32(-bit));
 }
 
 #endif // _HIGHBD_TXFM_UTILITY_NEON_H
