@@ -648,6 +648,24 @@ INSTANTIATE_TEST_SUITE_P(AVX2, InvTxfm2dAsmType2Test,
 
 #endif  // ARCH_X86_64
 
+#ifdef ARCH_AARCH64
+static const InvRectTxfmType2TestParam rect_type2_ref_funcs_neon[4] = {
+    // clang-format off
+    { svt_av1_inv_txfm2d_add_4x8_c, svt_av1_inv_txfm2d_add_4x8_neon, TX_4X8,
+      8 },
+    { svt_av1_inv_txfm2d_add_4x8_c, svt_av1_inv_txfm2d_add_4x8_neon, TX_4X8,
+      10 },
+    { svt_av1_inv_txfm2d_add_4x16_c, svt_av1_inv_txfm2d_add_4x16_neon, TX_4X16,
+      8 },
+    { svt_av1_inv_txfm2d_add_4x16_c, svt_av1_inv_txfm2d_add_4x16_neon, TX_4X16,
+      10 },
+    // clang-format on
+};
+
+INSTANTIATE_TEST_SUITE_P(NEON, InvTxfm2dAsmType2Test,
+                         ::testing::ValuesIn(rect_type2_ref_funcs_neon));
+#endif  // ARCH_AARCH64
+
 using LowbdInvTxfm2dAddFunc = void (*)(const TranLow *dqcoeff, uint8_t *dst_r,
                                        int32_t stride_r, uint8_t *dst_w,
                                        int32_t stride_w,
