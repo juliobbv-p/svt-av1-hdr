@@ -1,14 +1,14 @@
 /*
-* Copyright(c) 2024 Intel Corporation
-* Copyright (c) 2024, Alliance for Open Media. All rights reserved
-*
-* This source code is subject to the terms of the BSD 2 Clause License and
-* the Alliance for Open Media Patent License 1.0. If the BSD 2 Clause License
-* was not distributed with this source code in the LICENSE file, you can
-* obtain it at https://www.aomedia.org/license/software-license. If the Alliance for Open
-* Media Patent License 1.0 was not distributed with this source code in the
-* PATENTS file, you can obtain it at https://www.aomedia.org/license/patent-license.
-*/
+ * Copyright(c) 2024 Intel Corporation
+ * Copyright (c) 2024, Alliance for Open Media. All rights reserved
+ *
+ * This source code is subject to the terms of the BSD 2 Clause License and
+ * the Alliance for Open Media Patent License 1.0. If the BSD 2 Clause License
+ * was not distributed with this source code in the LICENSE file, you can
+ * obtain it at https://www.aomedia.org/license/software-license. If the Alliance for Open
+ * Media Patent License 1.0 was not distributed with this source code in the
+ * PATENTS file, you can obtain it at https://www.aomedia.org/license/patent-license.
+ */
 
 #include <arm_neon.h>
 
@@ -25,49 +25,28 @@ static INLINE void round_shift_neon(int32x4_t *in, int32_t shift, int n) {
     for (int i = 0; i < n; i++) { in[i] = vrshlq_s32(in[i], vshift); }
 }
 
-static INLINE void round_shift_4x4(int32x4_t in[], int32_t shift) {
-    const int32x4_t vshift = vdupq_n_s32(-shift); // sign change so that shift > 0 is a shift-right
-    in[0]                  = vrshlq_s32(in[0], vshift);
-    in[1]                  = vrshlq_s32(in[1], vshift);
-    in[2]                  = vrshlq_s32(in[2], vshift);
-    in[3]                  = vrshlq_s32(in[3], vshift);
-}
+static INLINE void highbd_clamp_s32_neon(const int32x4_t *in, int32x4_t *out, const int32x4_t *clamp_lo,
+                                         const int32x4_t *clamp_hi, int32_t size) {
+    int32x4_t a0, a1;
+    for (int32_t i = 0; i < size; i += 4) {
+        a0     = vmaxq_s32(in[i], *clamp_lo);
+        out[i] = vminq_s32(a0, *clamp_hi);
 
-static INLINE void round_shift_8x8(int32x4_t in[], int32_t shift) {
-    round_shift_4x4(&in[0], shift);
-    round_shift_4x4(&in[4], shift);
-    round_shift_4x4(&in[8], shift);
-    round_shift_4x4(&in[12], shift);
-}
+        a1         = vmaxq_s32(in[i + 1], *clamp_lo);
+        out[i + 1] = vminq_s32(a1, *clamp_hi);
 
-static INLINE void round_shift_16x16(int32x4_t in[], int32_t shift) {
-    round_shift_8x8(&in[0], shift);
-    round_shift_8x8(&in[16], shift);
-    round_shift_8x8(&in[32], shift);
-    round_shift_8x8(&in[48], shift);
-}
+        a0         = vmaxq_s32(in[i + 2], *clamp_lo);
+        out[i + 2] = vminq_s32(a0, *clamp_hi);
 
-static INLINE void round_shift_32x32(int32x4_t in[], int32_t shift) {
-    round_shift_16x16(&in[0], shift);
-    round_shift_16x16(&in[64], shift);
-    round_shift_16x16(&in[128], shift);
-    round_shift_16x16(&in[192], shift);
-}
-
-static INLINE void swap_addr(uint16_t **output1, uint16_t **output2) {
-    uint16_t *tmp = *output1;
-    *output1      = *output2;
-    *output2      = tmp;
-}
-
-static INLINE void assign_16x16_input_from_32x32(const int32x4_t in[], int32x4_t out[], int32_t col) {
-    for (int32_t i = 0; i < 16 * 16 / 4; i += 4) {
-        out[i]     = in[col];
-        out[i + 1] = in[col + 1];
-        out[i + 2] = in[col + 2];
-        out[i + 3] = in[col + 3];
-        col += 8;
+        a1         = vmaxq_s32(in[i + 3], *clamp_lo);
+        out[i + 3] = vminq_s32(a1, *clamp_hi);
     }
+}
+
+static INLINE void clamp_neon(const int32x4_t *in, int32x4_t *out, int log_range, int size) {
+    const int32x4_t clamp_lo = vdupq_n_s32(-(1 << (log_range - 1)));
+    const int32x4_t clamp_hi = vdupq_n_s32((1 << (log_range - 1)) - 1);
+    highbd_clamp_s32_neon(in, out, &clamp_lo, &clamp_hi, size);
 }
 
 static INLINE int32x4_t revert_int32x4_register(int32x4_t in) {
@@ -141,53 +120,19 @@ static INLINE void get_recon_32x32(const int16x8_t pred[4], int32x4_t *in, uint1
     res[3] = vminq_u16(res[3], vdupq_n_u16((1 << bd) - 1));
 }
 
-static INLINE void write_buffer_8x8(int32x4_t in[], uint16_t *output_r, int32_t stride_r, uint16_t *output_w,
-                                    int32_t stride_w, int32_t fliplr, int32_t flipud, int32_t shift, int32_t bd) {
-    uint16x8_t u0, u1, u2, u3, u4, u5, u6, u7;
+static INLINE void get_recon_64x64(const int16x8_t pred[8], int32x4_t *u, uint16x8_t res[8], int32_t bd, int shift) {
+    int32x4_t vshift = vdupq_n_s32(shift);
 
-    round_shift_8x8(in, shift);
-
-    const int16x8_t v0 = vld1q_s16((int16_t *)output_r + 0 * stride_r);
-    const int16x8_t v1 = vld1q_s16((int16_t *)output_r + 1 * stride_r);
-    const int16x8_t v2 = vld1q_s16((int16_t *)output_r + 2 * stride_r);
-    const int16x8_t v3 = vld1q_s16((int16_t *)output_r + 3 * stride_r);
-    const int16x8_t v4 = vld1q_s16((int16_t *)output_r + 4 * stride_r);
-    const int16x8_t v5 = vld1q_s16((int16_t *)output_r + 5 * stride_r);
-    const int16x8_t v6 = vld1q_s16((int16_t *)output_r + 6 * stride_r);
-    const int16x8_t v7 = vld1q_s16((int16_t *)output_r + 7 * stride_r);
-
-    if (flipud) {
-        u0 = get_recon_8x8(v0, in[14], in[15], fliplr, bd);
-        u1 = get_recon_8x8(v1, in[12], in[13], fliplr, bd);
-        u2 = get_recon_8x8(v2, in[10], in[11], fliplr, bd);
-        u3 = get_recon_8x8(v3, in[8], in[9], fliplr, bd);
-        u4 = get_recon_8x8(v4, in[6], in[7], fliplr, bd);
-        u5 = get_recon_8x8(v5, in[4], in[5], fliplr, bd);
-        u6 = get_recon_8x8(v6, in[2], in[3], fliplr, bd);
-        u7 = get_recon_8x8(v7, in[0], in[1], fliplr, bd);
-    } else {
-        u0 = get_recon_8x8(v0, in[0], in[1], fliplr, bd);
-        u1 = get_recon_8x8(v1, in[2], in[3], fliplr, bd);
-        u2 = get_recon_8x8(v2, in[4], in[5], fliplr, bd);
-        u3 = get_recon_8x8(v3, in[6], in[7], fliplr, bd);
-        u4 = get_recon_8x8(v4, in[8], in[9], fliplr, bd);
-        u5 = get_recon_8x8(v5, in[10], in[11], fliplr, bd);
-        u6 = get_recon_8x8(v6, in[12], in[13], fliplr, bd);
-        u7 = get_recon_8x8(v7, in[14], in[15], fliplr, bd);
+    for (int i = 0; i < 16; i += 2) {
+        int32x4_t x0 = vaddw_s16(vrshlq_s32(u[i * 64], vshift), vget_low_s16(pred[i >> 1]));
+        int32x4_t x1 = vaddw_s16(vrshlq_s32(u[(i + 1) * 64], vshift), vget_high_s16(pred[i >> 1]));
+        res[i >> 1]  = vcombine_u16(vqmovun_s32(x0), vqmovun_s32(x1));
+        res[i >> 1]  = vminq_u16(res[i >> 1], vdupq_n_u16((1 << bd) - 1));
     }
-
-    vst1q_u16(output_w + 0 * stride_w, u0);
-    vst1q_u16(output_w + 1 * stride_w, u1);
-    vst1q_u16(output_w + 2 * stride_w, u2);
-    vst1q_u16(output_w + 3 * stride_w, u3);
-    vst1q_u16(output_w + 4 * stride_w, u4);
-    vst1q_u16(output_w + 5 * stride_w, u5);
-    vst1q_u16(output_w + 6 * stride_w, u6);
-    vst1q_u16(output_w + 7 * stride_w, u7);
 }
 
-static INLINE void write_buffer_8x8_(int32x4_t *in, const uint16_t *output_r, int32_t stride_r, uint16_t *output_w,
-                                     int32_t stride_w, int32_t fliplr, int32_t flipud, int32_t shift, int32_t bd) {
+static INLINE void write_buffer_8x8(int32x4_t *in, const uint16_t *output_r, int32_t stride_r, uint16_t *output_w,
+                                    int32_t stride_w, int32_t fliplr, int32_t flipud, int32_t shift, int32_t bd) {
     uint16x8_t u[8];
     int16x8_t  v[8];
 
@@ -218,60 +163,8 @@ static INLINE void write_buffer_8x8_(int32x4_t *in, const uint16_t *output_r, in
     store_u16_8x8(output_w, stride_w, u[0], u[1], u[2], u[3], u[4], u[5], u[6], u[7]);
 }
 
-static INLINE void assign_8x8_input_from_16x16(const int32x4_t in[], int32x4_t in8x8[], int32_t col) {
-    for (int32_t i = 0; i < 16; i += 2) {
-        in8x8[i]     = in[col];
-        in8x8[i + 1] = in[col + 1];
-        col += 4;
-    }
-}
-
 static INLINE void write_buffer_16x16(int32x4_t in[], uint16_t *output_r, int32_t stride_r, uint16_t *output_w,
                                       int32_t stride_w, int32_t fliplr, int32_t flipud, int32_t shift, int32_t bd) {
-    int32x4_t in8x8[16];
-
-    uint16_t *left_up_r    = &output_r[0];
-    uint16_t *right_up_r   = &output_r[8];
-    uint16_t *left_down_r  = &output_r[8 * stride_r];
-    uint16_t *right_down_r = &output_r[8 * stride_r + 8];
-    uint16_t *left_up_w    = &output_w[0];
-    uint16_t *right_up_w   = &output_w[8];
-    uint16_t *left_down_w  = &output_w[8 * stride_w];
-    uint16_t *right_down_w = &output_w[8 * stride_w + 8];
-
-    if (fliplr) {
-        swap_addr(&left_up_r, &right_up_r);
-        swap_addr(&left_down_r, &right_down_r);
-        swap_addr(&left_up_w, &right_up_w);
-        swap_addr(&left_down_w, &right_down_w);
-    }
-
-    if (flipud) {
-        swap_addr(&left_up_r, &left_down_r);
-        swap_addr(&right_up_r, &right_down_r);
-        swap_addr(&left_up_w, &left_down_w);
-        swap_addr(&right_up_w, &right_down_w);
-    }
-
-    // Left-up quarter
-    assign_8x8_input_from_16x16(in, in8x8, 0);
-    write_buffer_8x8(in8x8, left_up_r, stride_r, left_up_w, stride_w, fliplr, flipud, shift, bd);
-
-    // Right-up quarter
-    assign_8x8_input_from_16x16(in, in8x8, 2);
-    write_buffer_8x8(in8x8, right_up_r, stride_r, right_up_w, stride_w, fliplr, flipud, shift, bd);
-
-    // Left-down quarter
-    assign_8x8_input_from_16x16(in, in8x8, 32);
-    write_buffer_8x8(in8x8, left_down_r, stride_r, left_down_w, stride_w, fliplr, flipud, shift, bd);
-
-    // Right-down quarter
-    assign_8x8_input_from_16x16(in, in8x8, 34);
-    write_buffer_8x8(in8x8, right_down_r, stride_r, right_down_w, stride_w, fliplr, flipud, shift, bd);
-}
-
-static INLINE void write_buffer_16x16_(int32x4_t in[], uint16_t *output_r, int32_t stride_r, uint16_t *output_w,
-                                       int32_t stride_w, int32_t fliplr, int32_t flipud, int32_t shift, int32_t bd) {
     round_shift_neon(in, shift, 64);
 
     for (int i = 0; i < 16; i++) {
@@ -291,51 +184,7 @@ static INLINE void write_buffer_16x16_(int32x4_t in[], uint16_t *output_r, int32
 }
 
 static INLINE void write_buffer_32x32(int32x4_t in[], uint16_t *output_r, int32_t stride_r, uint16_t *output_w,
-                                      int32_t stride_w, int32_t fliplr, int32_t flipud, int32_t shift, int32_t bd) {
-    int32x4_t in16x16[16 * 16 / 4];
-
-    uint16_t *left_up_r    = &output_r[0];
-    uint16_t *right_up_r   = &output_r[16];
-    uint16_t *left_down_r  = &output_r[16 * stride_r];
-    uint16_t *right_down_r = &output_r[16 * stride_r + 16];
-    uint16_t *left_up_w    = &output_w[0];
-    uint16_t *right_up_w   = &output_w[16];
-    uint16_t *left_down_w  = &output_w[16 * stride_w];
-    uint16_t *right_down_w = &output_w[16 * stride_w + 16];
-
-    if (fliplr) {
-        swap_addr(&left_up_r, &right_up_r);
-        swap_addr(&left_down_r, &right_down_r);
-        swap_addr(&left_up_w, &right_up_w);
-        swap_addr(&left_down_w, &right_down_w);
-    }
-
-    if (flipud) {
-        swap_addr(&left_up_r, &left_down_r);
-        swap_addr(&right_up_r, &right_down_r);
-        swap_addr(&left_up_w, &left_down_w);
-        swap_addr(&right_up_w, &right_down_w);
-    }
-
-    // Left-up quarter
-    assign_16x16_input_from_32x32(in, in16x16, 0);
-    write_buffer_16x16(in16x16, left_up_r, stride_r, left_up_w, stride_w, fliplr, flipud, shift, bd);
-
-    // Right-up quarter
-    assign_16x16_input_from_32x32(in, in16x16, 32 / 2 / 4);
-    write_buffer_16x16(in16x16, right_up_r, stride_r, right_up_w, stride_w, fliplr, flipud, shift, bd);
-
-    // Left-down quarter
-    assign_16x16_input_from_32x32(in, in16x16, 32 * 32 / 2 / 4);
-    write_buffer_16x16(in16x16, left_down_r, stride_r, left_down_w, stride_w, fliplr, flipud, shift, bd);
-
-    // Right-down quarter
-    assign_16x16_input_from_32x32(in, in16x16, 32 * 32 / 2 / 4 + 32 / 2 / 4);
-    write_buffer_16x16(in16x16, right_down_r, stride_r, right_down_w, stride_w, fliplr, flipud, shift, bd);
-}
-
-static INLINE void write_buffer_32x32_(int32x4_t in[], uint16_t *output_r, int32_t stride_r, uint16_t *output_w,
-                                       int32_t stride_w, int32_t shift, int32_t bd) {
+                                      int32_t stride_w, int32_t shift, int32_t bd) {
     round_shift_neon(in, shift, 256);
 
     for (int i = 0; i < 32; i++) {
@@ -346,6 +195,18 @@ static INLINE void write_buffer_32x32_(int32x4_t in[], uint16_t *output_r, int32
         get_recon_32x32(v, &in[i], res, bd);
 
         store_u16_8x4(output_w + i * stride_w, 8, res[0], res[1], res[2], res[3]);
+    }
+}
+
+static INLINE void write_buffer_64x64(int32x4_t in[], uint16_t *output_r, int32_t stride_r, uint16_t *output_w,
+                                      int32_t stride_w, int32_t shift, int32_t bd) {
+    for (int i = 0; i < 64; i++) {
+        int16x8_t  v[8];
+        uint16x8_t res[8];
+        load_s16_8x8((int16_t *)output_r + i * stride_r, 8, &v[0], &v[1], &v[2], &v[3], &v[4], &v[5], &v[6], &v[7]);
+        get_recon_64x64(v, &in[i], res, bd, shift);
+
+        store_u16_8x8(output_w + i * stride_w, 8, res[0], res[1], res[2], res[3], res[4], res[5], res[6], res[7]);
     }
 }
 
@@ -737,116 +598,81 @@ void svt_av1_inv_txfm2d_add_32x32_neon(const int32_t *input, uint16_t *output_r,
         round_shift_neon(in, shift[0], 256);
         transpose_arrays_s32_32x32(in, out);
         idct32_xn_neon(out, in, inv_cos_bit_col[3][3], 8);
-        write_buffer_32x32_(in, output_r, stride_r, output_w, stride_w, shift[1], bd);
+        write_buffer_32x32(in, output_r, stride_r, output_w, stride_w, shift[1], bd);
         break;
     case IDTX:
         load_buffer_s32(input, in, 32, 32);
-        write_buffer_32x32_(in, output_r, stride_r, output_w, stride_w, shift[0] + shift[1] + 4, bd);
+        write_buffer_32x32(in, output_r, stride_r, output_w, stride_w, shift[0] + shift[1] + 4, bd);
         break;
     default: assert(0);
     }
 }
 
-static INLINE void load_buffer_64x64_lower_32x32(const int32_t *coeff, int32x4_t in[]) {
-    const int32x4_t zero = vdupq_n_s32(0);
-
-    for (int32_t i = 0; i < 32; ++i) {
-        for (int32_t j = 0; j < 8; ++j) {
-            in[16 * i + j]     = vld1q_s32(coeff + 32 * i + 4 * j);
-            in[16 * i + j + 8] = zero;
-        }
-    }
-
-    int32x4_t *inB = in + 512;
-    for (size_t i = 0; i < 512; ++i) { inB[i] = zero; }
-}
-
 static INLINE void transpose_64x64(int32x4_t in[], int32x4_t out[], int32_t do_cols) {
     int32_t i, j;
     for (i = 0; i < (do_cols ? 16 : 8); ++i) {
-        for (j = 0; j < 8; ++j) {
-            TRANSPOSE_4X4(in[(4 * i + 0) * 16 + j],
-                          in[(4 * i + 1) * 16 + j],
-                          in[(4 * i + 2) * 16 + j],
-                          in[(4 * i + 3) * 16 + j],
-                          out[(4 * j + 0) * 16 + i],
-                          out[(4 * j + 1) * 16 + i],
-                          out[(4 * j + 2) * 16 + i],
-                          out[(4 * j + 3) * 16 + i]);
-        }
+        for (j = 0; j < 8; ++j) { transpose_arrays_s32_4x4(in + i * 4 + j * 64, out + i * 64 + j * 4); }
     }
 }
 
-static INLINE void addsub_neon(const int32x4_t in0, const int32x4_t in1, int32x4_t out0[], int32x4_t out1[],
-                               const int32x4_t clamp_lo[], const int32x4_t clamp_hi[]) {
-    int32x4_t a0 = vaddq_s32(in0, in1);
-    int32x4_t a1 = vsubq_s32(in0, in1);
-
-    a0 = vmaxq_s32(a0, *clamp_lo);
-    a0 = vminq_s32(a0, *clamp_hi);
-    a1 = vmaxq_s32(a1, *clamp_lo);
-    a1 = vminq_s32(a1, *clamp_hi);
-
-    *out0 = a0;
-    *out1 = a1;
+static INLINE void addsub_neon(const int32x4_t in0, const int32x4_t in1, int32x4_t out0[], int32x4_t out1[]) {
+    *out0 = vaddq_s32(in0, in1);
+    *out1 = vsubq_s32(in0, in1);
 }
 
-static void idct64x64_neon(int32x4_t in[], int32x4_t out[], int32_t bit, int32_t do_cols, int32_t bd) {
-    const int32_t  *cospi     = cospi_arr(bit);
-    const int32_t   log_range = AOMMAX(16, bd + (do_cols ? 6 : 8));
-    const int32x4_t clamp_lo  = vdupq_n_s32(-(1 << (log_range - 1)));
-    const int32x4_t clamp_hi  = vdupq_n_s32((1 << (log_range - 1)) - 1);
-    const int32x4_t cospi1    = vdupq_n_s32(cospi[1]);
-    const int32x4_t cospi2    = vdupq_n_s32(cospi[2]);
-    const int32x4_t cospi3    = vdupq_n_s32(cospi[3]);
-    const int32x4_t cospi4    = vdupq_n_s32(cospi[4]);
-    const int32x4_t cospi5    = vdupq_n_s32(cospi[5]);
-    const int32x4_t cospi6    = vdupq_n_s32(cospi[6]);
-    const int32x4_t cospi7    = vdupq_n_s32(cospi[7]);
-    const int32x4_t cospi8    = vdupq_n_s32(cospi[8]);
-    const int32x4_t cospi9    = vdupq_n_s32(cospi[9]);
-    const int32x4_t cospi10   = vdupq_n_s32(cospi[10]);
-    const int32x4_t cospi11   = vdupq_n_s32(cospi[11]);
-    const int32x4_t cospi12   = vdupq_n_s32(cospi[12]);
-    const int32x4_t cospi13   = vdupq_n_s32(cospi[13]);
-    const int32x4_t cospi14   = vdupq_n_s32(cospi[14]);
-    const int32x4_t cospi15   = vdupq_n_s32(cospi[15]);
-    const int32x4_t cospi16   = vdupq_n_s32(cospi[16]);
-    const int32x4_t cospi17   = vdupq_n_s32(cospi[17]);
-    const int32x4_t cospi18   = vdupq_n_s32(cospi[18]);
-    const int32x4_t cospi19   = vdupq_n_s32(cospi[19]);
-    const int32x4_t cospi20   = vdupq_n_s32(cospi[20]);
-    const int32x4_t cospi21   = vdupq_n_s32(cospi[21]);
-    const int32x4_t cospi22   = vdupq_n_s32(cospi[22]);
-    const int32x4_t cospi23   = vdupq_n_s32(cospi[23]);
-    const int32x4_t cospi24   = vdupq_n_s32(cospi[24]);
-    const int32x4_t cospi25   = vdupq_n_s32(cospi[25]);
-    const int32x4_t cospi26   = vdupq_n_s32(cospi[26]);
-    const int32x4_t cospi27   = vdupq_n_s32(cospi[27]);
-    const int32x4_t cospi28   = vdupq_n_s32(cospi[28]);
-    const int32x4_t cospi29   = vdupq_n_s32(cospi[29]);
-    const int32x4_t cospi30   = vdupq_n_s32(cospi[30]);
-    const int32x4_t cospi31   = vdupq_n_s32(cospi[31]);
-    const int32x4_t cospi32   = vdupq_n_s32(cospi[32]);
-    const int32x4_t cospi35   = vdupq_n_s32(cospi[35]);
-    const int32x4_t cospi36   = vdupq_n_s32(cospi[36]);
-    const int32x4_t cospi38   = vdupq_n_s32(cospi[38]);
-    const int32x4_t cospi39   = vdupq_n_s32(cospi[39]);
-    const int32x4_t cospi40   = vdupq_n_s32(cospi[40]);
-    const int32x4_t cospi43   = vdupq_n_s32(cospi[43]);
-    const int32x4_t cospi44   = vdupq_n_s32(cospi[44]);
-    const int32x4_t cospi46   = vdupq_n_s32(cospi[46]);
-    const int32x4_t cospi47   = vdupq_n_s32(cospi[47]);
-    const int32x4_t cospi48   = vdupq_n_s32(cospi[48]);
-    const int32x4_t cospi51   = vdupq_n_s32(cospi[51]);
-    const int32x4_t cospi52   = vdupq_n_s32(cospi[52]);
-    const int32x4_t cospi54   = vdupq_n_s32(cospi[54]);
-    const int32x4_t cospi55   = vdupq_n_s32(cospi[55]);
-    const int32x4_t cospi56   = vdupq_n_s32(cospi[56]);
-    const int32x4_t cospi59   = vdupq_n_s32(cospi[59]);
-    const int32x4_t cospi60   = vdupq_n_s32(cospi[60]);
-    const int32x4_t cospi62   = vdupq_n_s32(cospi[62]);
-    const int32x4_t cospi63   = vdupq_n_s32(cospi[63]);
+static void idct64_x4_neon(int32x4_t in[], int32x4_t out[], int32_t bit) {
+    const int32_t  *cospi   = cospi_arr(bit);
+    const int32x4_t cospi1  = vdupq_n_s32(cospi[1]);
+    const int32x4_t cospi2  = vdupq_n_s32(cospi[2]);
+    const int32x4_t cospi3  = vdupq_n_s32(cospi[3]);
+    const int32x4_t cospi4  = vdupq_n_s32(cospi[4]);
+    const int32x4_t cospi5  = vdupq_n_s32(cospi[5]);
+    const int32x4_t cospi6  = vdupq_n_s32(cospi[6]);
+    const int32x4_t cospi7  = vdupq_n_s32(cospi[7]);
+    const int32x4_t cospi8  = vdupq_n_s32(cospi[8]);
+    const int32x4_t cospi9  = vdupq_n_s32(cospi[9]);
+    const int32x4_t cospi10 = vdupq_n_s32(cospi[10]);
+    const int32x4_t cospi11 = vdupq_n_s32(cospi[11]);
+    const int32x4_t cospi12 = vdupq_n_s32(cospi[12]);
+    const int32x4_t cospi13 = vdupq_n_s32(cospi[13]);
+    const int32x4_t cospi14 = vdupq_n_s32(cospi[14]);
+    const int32x4_t cospi15 = vdupq_n_s32(cospi[15]);
+    const int32x4_t cospi16 = vdupq_n_s32(cospi[16]);
+    const int32x4_t cospi17 = vdupq_n_s32(cospi[17]);
+    const int32x4_t cospi18 = vdupq_n_s32(cospi[18]);
+    const int32x4_t cospi19 = vdupq_n_s32(cospi[19]);
+    const int32x4_t cospi20 = vdupq_n_s32(cospi[20]);
+    const int32x4_t cospi21 = vdupq_n_s32(cospi[21]);
+    const int32x4_t cospi22 = vdupq_n_s32(cospi[22]);
+    const int32x4_t cospi23 = vdupq_n_s32(cospi[23]);
+    const int32x4_t cospi24 = vdupq_n_s32(cospi[24]);
+    const int32x4_t cospi25 = vdupq_n_s32(cospi[25]);
+    const int32x4_t cospi26 = vdupq_n_s32(cospi[26]);
+    const int32x4_t cospi27 = vdupq_n_s32(cospi[27]);
+    const int32x4_t cospi28 = vdupq_n_s32(cospi[28]);
+    const int32x4_t cospi29 = vdupq_n_s32(cospi[29]);
+    const int32x4_t cospi30 = vdupq_n_s32(cospi[30]);
+    const int32x4_t cospi31 = vdupq_n_s32(cospi[31]);
+    const int32x4_t cospi32 = vdupq_n_s32(cospi[32]);
+    const int32x4_t cospi35 = vdupq_n_s32(cospi[35]);
+    const int32x4_t cospi36 = vdupq_n_s32(cospi[36]);
+    const int32x4_t cospi38 = vdupq_n_s32(cospi[38]);
+    const int32x4_t cospi39 = vdupq_n_s32(cospi[39]);
+    const int32x4_t cospi40 = vdupq_n_s32(cospi[40]);
+    const int32x4_t cospi43 = vdupq_n_s32(cospi[43]);
+    const int32x4_t cospi44 = vdupq_n_s32(cospi[44]);
+    const int32x4_t cospi46 = vdupq_n_s32(cospi[46]);
+    const int32x4_t cospi47 = vdupq_n_s32(cospi[47]);
+    const int32x4_t cospi48 = vdupq_n_s32(cospi[48]);
+    const int32x4_t cospi51 = vdupq_n_s32(cospi[51]);
+    const int32x4_t cospi52 = vdupq_n_s32(cospi[52]);
+    const int32x4_t cospi54 = vdupq_n_s32(cospi[54]);
+    const int32x4_t cospi55 = vdupq_n_s32(cospi[55]);
+    const int32x4_t cospi56 = vdupq_n_s32(cospi[56]);
+    const int32x4_t cospi59 = vdupq_n_s32(cospi[59]);
+    const int32x4_t cospi60 = vdupq_n_s32(cospi[60]);
+    const int32x4_t cospi62 = vdupq_n_s32(cospi[62]);
+    const int32x4_t cospi63 = vdupq_n_s32(cospi[63]);
 
     const int32x4_t cospim4  = vdupq_n_s32(-cospi[4]);
     const int32x4_t cospim8  = vdupq_n_s32(-cospi[8]);
@@ -876,429 +702,380 @@ static void idct64x64_neon(int32x4_t in[], int32x4_t out[], int32_t bit, int32_t
     const int32x4_t cospim60 = vdupq_n_s32(-cospi[60]);
     const int32x4_t cospim61 = vdupq_n_s32(-cospi[61]);
 
-    for (int32_t col = 0; col < (do_cols ? 64 / 4 : 32 / 4); ++col) {
-        int32x4_t u[64], v[64];
+    int32x4_t u[64], v[64];
 
-        // stage 1
-        u[32] = in[1 * 16 + col];
-        u[34] = in[17 * 16 + col];
-        u[36] = in[9 * 16 + col];
-        u[38] = in[25 * 16 + col];
-        u[40] = in[5 * 16 + col];
-        u[42] = in[21 * 16 + col];
-        u[44] = in[13 * 16 + col];
-        u[46] = in[29 * 16 + col];
-        u[48] = in[3 * 16 + col];
-        u[50] = in[19 * 16 + col];
-        u[52] = in[11 * 16 + col];
-        u[54] = in[27 * 16 + col];
-        u[56] = in[7 * 16 + col];
-        u[58] = in[23 * 16 + col];
-        u[60] = in[15 * 16 + col];
-        u[62] = in[31 * 16 + col];
+    // stage 1
+    u[32] = in[1];
+    u[34] = in[17];
+    u[36] = in[9];
+    u[38] = in[25];
+    u[40] = in[5];
+    u[42] = in[21];
+    u[44] = in[13];
+    u[46] = in[29];
+    u[48] = in[3];
+    u[50] = in[19];
+    u[52] = in[11];
+    u[54] = in[27];
+    u[56] = in[7];
+    u[58] = in[23];
+    u[60] = in[15];
+    u[62] = in[31];
 
-        v[16] = in[2 * 16 + col];
-        v[18] = in[18 * 16 + col];
-        v[20] = in[10 * 16 + col];
-        v[22] = in[26 * 16 + col];
-        v[24] = in[6 * 16 + col];
-        v[26] = in[22 * 16 + col];
-        v[28] = in[14 * 16 + col];
-        v[30] = in[30 * 16 + col];
+    v[16] = in[2];
+    v[18] = in[18];
+    v[20] = in[10];
+    v[22] = in[26];
+    v[24] = in[6];
+    v[26] = in[22];
+    v[28] = in[14];
+    v[30] = in[30];
 
-        u[8]  = in[4 * 16 + col];
-        u[10] = in[20 * 16 + col];
-        u[12] = in[12 * 16 + col];
-        u[14] = in[28 * 16 + col];
+    u[8]  = in[4];
+    u[10] = in[20];
+    u[12] = in[12];
+    u[14] = in[28];
 
-        v[4] = in[8 * 16 + col];
-        v[6] = in[24 * 16 + col];
+    v[4] = in[8];
+    v[6] = in[24];
 
-        u[0] = in[0 * 16 + col];
-        u[2] = in[16 * 16 + col];
+    u[0] = in[0];
+    u[2] = in[16];
 
-        // stage 2
-        v[32] = half_btf_0_neon(&cospi63, &u[32], bit);
-        v[33] = half_btf_0_neon(&cospim33, &u[62], bit);
-        v[34] = half_btf_0_neon(&cospi47, &u[34], bit);
-        v[35] = half_btf_0_neon(&cospim49, &u[60], bit);
-        v[36] = half_btf_0_neon(&cospi55, &u[36], bit);
-        v[37] = half_btf_0_neon(&cospim41, &u[58], bit);
-        v[38] = half_btf_0_neon(&cospi39, &u[38], bit);
-        v[39] = half_btf_0_neon(&cospim57, &u[56], bit);
-        v[40] = half_btf_0_neon(&cospi59, &u[40], bit);
-        v[41] = half_btf_0_neon(&cospim37, &u[54], bit);
-        v[42] = half_btf_0_neon(&cospi43, &u[42], bit);
-        v[43] = half_btf_0_neon(&cospim53, &u[52], bit);
-        v[44] = half_btf_0_neon(&cospi51, &u[44], bit);
-        v[45] = half_btf_0_neon(&cospim45, &u[50], bit);
-        v[46] = half_btf_0_neon(&cospi35, &u[46], bit);
-        v[47] = half_btf_0_neon(&cospim61, &u[48], bit);
-        v[48] = half_btf_0_neon(&cospi3, &u[48], bit);
-        v[49] = half_btf_0_neon(&cospi29, &u[46], bit);
-        v[50] = half_btf_0_neon(&cospi19, &u[50], bit);
-        v[51] = half_btf_0_neon(&cospi13, &u[44], bit);
-        v[52] = half_btf_0_neon(&cospi11, &u[52], bit);
-        v[53] = half_btf_0_neon(&cospi21, &u[42], bit);
-        v[54] = half_btf_0_neon(&cospi27, &u[54], bit);
-        v[55] = half_btf_0_neon(&cospi5, &u[40], bit);
-        v[56] = half_btf_0_neon(&cospi7, &u[56], bit);
-        v[57] = half_btf_0_neon(&cospi25, &u[38], bit);
-        v[58] = half_btf_0_neon(&cospi23, &u[58], bit);
-        v[59] = half_btf_0_neon(&cospi9, &u[36], bit);
-        v[60] = half_btf_0_neon(&cospi15, &u[60], bit);
-        v[61] = half_btf_0_neon(&cospi17, &u[34], bit);
-        v[62] = half_btf_0_neon(&cospi31, &u[62], bit);
-        v[63] = half_btf_0_neon(&cospi1, &u[32], bit);
+    // stage 2
+    v[32] = half_btf_0_neon(&cospi63, &u[32], bit);
+    v[33] = half_btf_0_neon(&cospim33, &u[62], bit);
+    v[34] = half_btf_0_neon(&cospi47, &u[34], bit);
+    v[35] = half_btf_0_neon(&cospim49, &u[60], bit);
+    v[36] = half_btf_0_neon(&cospi55, &u[36], bit);
+    v[37] = half_btf_0_neon(&cospim41, &u[58], bit);
+    v[38] = half_btf_0_neon(&cospi39, &u[38], bit);
+    v[39] = half_btf_0_neon(&cospim57, &u[56], bit);
+    v[40] = half_btf_0_neon(&cospi59, &u[40], bit);
+    v[41] = half_btf_0_neon(&cospim37, &u[54], bit);
+    v[42] = half_btf_0_neon(&cospi43, &u[42], bit);
+    v[43] = half_btf_0_neon(&cospim53, &u[52], bit);
+    v[44] = half_btf_0_neon(&cospi51, &u[44], bit);
+    v[45] = half_btf_0_neon(&cospim45, &u[50], bit);
+    v[46] = half_btf_0_neon(&cospi35, &u[46], bit);
+    v[47] = half_btf_0_neon(&cospim61, &u[48], bit);
+    v[48] = half_btf_0_neon(&cospi3, &u[48], bit);
+    v[49] = half_btf_0_neon(&cospi29, &u[46], bit);
+    v[50] = half_btf_0_neon(&cospi19, &u[50], bit);
+    v[51] = half_btf_0_neon(&cospi13, &u[44], bit);
+    v[52] = half_btf_0_neon(&cospi11, &u[52], bit);
+    v[53] = half_btf_0_neon(&cospi21, &u[42], bit);
+    v[54] = half_btf_0_neon(&cospi27, &u[54], bit);
+    v[55] = half_btf_0_neon(&cospi5, &u[40], bit);
+    v[56] = half_btf_0_neon(&cospi7, &u[56], bit);
+    v[57] = half_btf_0_neon(&cospi25, &u[38], bit);
+    v[58] = half_btf_0_neon(&cospi23, &u[58], bit);
+    v[59] = half_btf_0_neon(&cospi9, &u[36], bit);
+    v[60] = half_btf_0_neon(&cospi15, &u[60], bit);
+    v[61] = half_btf_0_neon(&cospi17, &u[34], bit);
+    v[62] = half_btf_0_neon(&cospi31, &u[62], bit);
+    v[63] = half_btf_0_neon(&cospi1, &u[32], bit);
 
-        // stage 3
-        u[16] = half_btf_0_neon(&cospi62, &v[16], bit);
-        u[17] = half_btf_0_neon(&cospim34, &v[30], bit);
-        u[18] = half_btf_0_neon(&cospi46, &v[18], bit);
-        u[19] = half_btf_0_neon(&cospim50, &v[28], bit);
-        u[20] = half_btf_0_neon(&cospi54, &v[20], bit);
-        u[21] = half_btf_0_neon(&cospim42, &v[26], bit);
-        u[22] = half_btf_0_neon(&cospi38, &v[22], bit);
-        u[23] = half_btf_0_neon(&cospim58, &v[24], bit);
-        u[24] = half_btf_0_neon(&cospi6, &v[24], bit);
-        u[25] = half_btf_0_neon(&cospi26, &v[22], bit);
-        u[26] = half_btf_0_neon(&cospi22, &v[26], bit);
-        u[27] = half_btf_0_neon(&cospi10, &v[20], bit);
-        u[28] = half_btf_0_neon(&cospi14, &v[28], bit);
-        u[29] = half_btf_0_neon(&cospi18, &v[18], bit);
-        u[30] = half_btf_0_neon(&cospi30, &v[30], bit);
-        u[31] = half_btf_0_neon(&cospi2, &v[16], bit);
+    // stage 3
+    u[16] = half_btf_0_neon(&cospi62, &v[16], bit);
+    u[17] = half_btf_0_neon(&cospim34, &v[30], bit);
+    u[18] = half_btf_0_neon(&cospi46, &v[18], bit);
+    u[19] = half_btf_0_neon(&cospim50, &v[28], bit);
+    u[20] = half_btf_0_neon(&cospi54, &v[20], bit);
+    u[21] = half_btf_0_neon(&cospim42, &v[26], bit);
+    u[22] = half_btf_0_neon(&cospi38, &v[22], bit);
+    u[23] = half_btf_0_neon(&cospim58, &v[24], bit);
+    u[24] = half_btf_0_neon(&cospi6, &v[24], bit);
+    u[25] = half_btf_0_neon(&cospi26, &v[22], bit);
+    u[26] = half_btf_0_neon(&cospi22, &v[26], bit);
+    u[27] = half_btf_0_neon(&cospi10, &v[20], bit);
+    u[28] = half_btf_0_neon(&cospi14, &v[28], bit);
+    u[29] = half_btf_0_neon(&cospi18, &v[18], bit);
+    u[30] = half_btf_0_neon(&cospi30, &v[30], bit);
+    u[31] = half_btf_0_neon(&cospi2, &v[16], bit);
 
-        for (int32_t i = 32; i < 64; i += 4) {
-            addsub_neon(v[i + 0], v[i + 1], &u[i + 0], &u[i + 1], &clamp_lo, &clamp_hi);
-            addsub_neon(v[i + 3], v[i + 2], &u[i + 3], &u[i + 2], &clamp_lo, &clamp_hi);
-        }
+    for (int32_t i = 32; i < 64; i += 4) {
+        addsub_neon(v[i + 0], v[i + 1], &u[i + 0], &u[i + 1]);
+        addsub_neon(v[i + 3], v[i + 2], &u[i + 3], &u[i + 2]);
+    }
 
-        // stage 4
-        v[8]  = half_btf_0_neon(&cospi60, &u[8], bit);
-        v[9]  = half_btf_0_neon(&cospim36, &u[14], bit);
-        v[10] = half_btf_0_neon(&cospi44, &u[10], bit);
-        v[11] = half_btf_0_neon(&cospim52, &u[12], bit);
-        v[12] = half_btf_0_neon(&cospi12, &u[12], bit);
-        v[13] = half_btf_0_neon(&cospi20, &u[10], bit);
-        v[14] = half_btf_0_neon(&cospi28, &u[14], bit);
-        v[15] = half_btf_0_neon(&cospi4, &u[8], bit);
+    // stage 4
+    v[8]  = half_btf_0_neon(&cospi60, &u[8], bit);
+    v[9]  = half_btf_0_neon(&cospim36, &u[14], bit);
+    v[10] = half_btf_0_neon(&cospi44, &u[10], bit);
+    v[11] = half_btf_0_neon(&cospim52, &u[12], bit);
+    v[12] = half_btf_0_neon(&cospi12, &u[12], bit);
+    v[13] = half_btf_0_neon(&cospi20, &u[10], bit);
+    v[14] = half_btf_0_neon(&cospi28, &u[14], bit);
+    v[15] = half_btf_0_neon(&cospi4, &u[8], bit);
 
-        for (int32_t i = 16; i < 32; i += 4) {
-            addsub_neon(u[i + 0], u[i + 1], &v[i + 0], &v[i + 1], &clamp_lo, &clamp_hi);
-            addsub_neon(u[i + 3], u[i + 2], &v[i + 3], &v[i + 2], &clamp_lo, &clamp_hi);
-        }
+    for (int32_t i = 16; i < 32; i += 4) {
+        addsub_neon(u[i + 0], u[i + 1], &v[i + 0], &v[i + 1]);
+        addsub_neon(u[i + 3], u[i + 2], &v[i + 3], &v[i + 2]);
+    }
 
-        for (int32_t i = 32; i < 64; i += 4) {
-            v[i + 0] = u[i + 0];
-            v[i + 3] = u[i + 3];
-        }
+    for (int32_t i = 32; i < 64; i += 4) {
+        v[i + 0] = u[i + 0];
+        v[i + 3] = u[i + 3];
+    }
 
-        v[33] = half_btf_neon(&cospim4, &u[33], &cospi60, &u[62], bit);
-        v[34] = half_btf_neon(&cospim60, &u[34], &cospim4, &u[61], bit);
-        v[37] = half_btf_neon(&cospim36, &u[37], &cospi28, &u[58], bit);
-        v[38] = half_btf_neon(&cospim28, &u[38], &cospim36, &u[57], bit);
-        v[41] = half_btf_neon(&cospim20, &u[41], &cospi44, &u[54], bit);
-        v[42] = half_btf_neon(&cospim44, &u[42], &cospim20, &u[53], bit);
-        v[45] = half_btf_neon(&cospim52, &u[45], &cospi12, &u[50], bit);
-        v[46] = half_btf_neon(&cospim12, &u[46], &cospim52, &u[49], bit);
-        v[49] = half_btf_neon(&cospim52, &u[46], &cospi12, &u[49], bit);
-        v[50] = half_btf_neon(&cospi12, &u[45], &cospi52, &u[50], bit);
-        v[53] = half_btf_neon(&cospim20, &u[42], &cospi44, &u[53], bit);
-        v[54] = half_btf_neon(&cospi44, &u[41], &cospi20, &u[54], bit);
-        v[57] = half_btf_neon(&cospim36, &u[38], &cospi28, &u[57], bit);
-        v[58] = half_btf_neon(&cospi28, &u[37], &cospi36, &u[58], bit);
-        v[61] = half_btf_neon(&cospim4, &u[34], &cospi60, &u[61], bit);
-        v[62] = half_btf_neon(&cospi60, &u[33], &cospi4, &u[62], bit);
+    v[33] = half_btf_neon(&cospim4, &u[33], &cospi60, &u[62], bit);
+    v[34] = half_btf_neon(&cospim60, &u[34], &cospim4, &u[61], bit);
+    v[37] = half_btf_neon(&cospim36, &u[37], &cospi28, &u[58], bit);
+    v[38] = half_btf_neon(&cospim28, &u[38], &cospim36, &u[57], bit);
+    v[41] = half_btf_neon(&cospim20, &u[41], &cospi44, &u[54], bit);
+    v[42] = half_btf_neon(&cospim44, &u[42], &cospim20, &u[53], bit);
+    v[45] = half_btf_neon(&cospim52, &u[45], &cospi12, &u[50], bit);
+    v[46] = half_btf_neon(&cospim12, &u[46], &cospim52, &u[49], bit);
+    v[49] = half_btf_neon(&cospim52, &u[46], &cospi12, &u[49], bit);
+    v[50] = half_btf_neon(&cospi12, &u[45], &cospi52, &u[50], bit);
+    v[53] = half_btf_neon(&cospim20, &u[42], &cospi44, &u[53], bit);
+    v[54] = half_btf_neon(&cospi44, &u[41], &cospi20, &u[54], bit);
+    v[57] = half_btf_neon(&cospim36, &u[38], &cospi28, &u[57], bit);
+    v[58] = half_btf_neon(&cospi28, &u[37], &cospi36, &u[58], bit);
+    v[61] = half_btf_neon(&cospim4, &u[34], &cospi60, &u[61], bit);
+    v[62] = half_btf_neon(&cospi60, &u[33], &cospi4, &u[62], bit);
 
-        // stage 5
-        u[4] = half_btf_0_neon(&cospi56, &v[4], bit);
-        u[5] = half_btf_0_neon(&cospim40, &v[6], bit);
-        u[6] = half_btf_0_neon(&cospi24, &v[6], bit);
-        u[7] = half_btf_0_neon(&cospi8, &v[4], bit);
+    // stage 5
+    u[4] = half_btf_0_neon(&cospi56, &v[4], bit);
+    u[5] = half_btf_0_neon(&cospim40, &v[6], bit);
+    u[6] = half_btf_0_neon(&cospi24, &v[6], bit);
+    u[7] = half_btf_0_neon(&cospi8, &v[4], bit);
 
-        for (int32_t i = 8; i < 16; i += 4) {
-            addsub_neon(v[i + 0], v[i + 1], &u[i + 0], &u[i + 1], &clamp_lo, &clamp_hi);
-            addsub_neon(v[i + 3], v[i + 2], &u[i + 3], &u[i + 2], &clamp_lo, &clamp_hi);
-        }
+    for (int32_t i = 8; i < 16; i += 4) {
+        addsub_neon(v[i + 0], v[i + 1], &u[i + 0], &u[i + 1]);
+        addsub_neon(v[i + 3], v[i + 2], &u[i + 3], &u[i + 2]);
+    }
 
-        for (int32_t i = 16; i < 32; i += 4) {
-            u[i + 0] = v[i + 0];
-            u[i + 3] = v[i + 3];
-        }
+    for (int32_t i = 16; i < 32; i += 4) {
+        u[i + 0] = v[i + 0];
+        u[i + 3] = v[i + 3];
+    }
 
-        u[17] = half_btf_neon(&cospim8, &v[17], &cospi56, &v[30], bit);
-        u[18] = half_btf_neon(&cospim56, &v[18], &cospim8, &v[29], bit);
-        u[21] = half_btf_neon(&cospim40, &v[21], &cospi24, &v[26], bit);
-        u[22] = half_btf_neon(&cospim24, &v[22], &cospim40, &v[25], bit);
-        u[25] = half_btf_neon(&cospim40, &v[22], &cospi24, &v[25], bit);
-        u[26] = half_btf_neon(&cospi24, &v[21], &cospi40, &v[26], bit);
-        u[29] = half_btf_neon(&cospim8, &v[18], &cospi56, &v[29], bit);
-        u[30] = half_btf_neon(&cospi56, &v[17], &cospi8, &v[30], bit);
+    u[17] = half_btf_neon(&cospim8, &v[17], &cospi56, &v[30], bit);
+    u[18] = half_btf_neon(&cospim56, &v[18], &cospim8, &v[29], bit);
+    u[21] = half_btf_neon(&cospim40, &v[21], &cospi24, &v[26], bit);
+    u[22] = half_btf_neon(&cospim24, &v[22], &cospim40, &v[25], bit);
+    u[25] = half_btf_neon(&cospim40, &v[22], &cospi24, &v[25], bit);
+    u[26] = half_btf_neon(&cospi24, &v[21], &cospi40, &v[26], bit);
+    u[29] = half_btf_neon(&cospim8, &v[18], &cospi56, &v[29], bit);
+    u[30] = half_btf_neon(&cospi56, &v[17], &cospi8, &v[30], bit);
 
-        for (int32_t i = 32; i < 64; i += 8) {
-            addsub_neon(v[i + 0], v[i + 3], &u[i + 0], &u[i + 3], &clamp_lo, &clamp_hi);
-            addsub_neon(v[i + 1], v[i + 2], &u[i + 1], &u[i + 2], &clamp_lo, &clamp_hi);
+    for (int32_t i = 32; i < 64; i += 8) {
+        addsub_neon(v[i + 0], v[i + 3], &u[i + 0], &u[i + 3]);
+        addsub_neon(v[i + 1], v[i + 2], &u[i + 1], &u[i + 2]);
 
-            addsub_neon(v[i + 7], v[i + 4], &u[i + 7], &u[i + 4], &clamp_lo, &clamp_hi);
-            addsub_neon(v[i + 6], v[i + 5], &u[i + 6], &u[i + 5], &clamp_lo, &clamp_hi);
-        }
+        addsub_neon(v[i + 7], v[i + 4], &u[i + 7], &u[i + 4]);
+        addsub_neon(v[i + 6], v[i + 5], &u[i + 6], &u[i + 5]);
+    }
 
-        // stage 6
-        v[0] = half_btf_0_neon(&cospi32, &u[0], bit);
-        v[1] = half_btf_0_neon(&cospi32, &u[0], bit);
-        v[2] = half_btf_0_neon(&cospi48, &u[2], bit);
-        v[3] = half_btf_0_neon(&cospi16, &u[2], bit);
+    // stage 6
+    v[0] = half_btf_0_neon(&cospi32, &u[0], bit);
+    v[1] = half_btf_0_neon(&cospi32, &u[0], bit);
+    v[2] = half_btf_0_neon(&cospi48, &u[2], bit);
+    v[3] = half_btf_0_neon(&cospi16, &u[2], bit);
 
-        addsub_neon(u[4], u[5], &v[4], &v[5], &clamp_lo, &clamp_hi);
-        addsub_neon(u[7], u[6], &v[7], &v[6], &clamp_lo, &clamp_hi);
+    addsub_neon(u[4], u[5], &v[4], &v[5]);
+    addsub_neon(u[7], u[6], &v[7], &v[6]);
 
-        for (int32_t i = 8; i < 16; i += 4) {
-            v[i + 0] = u[i + 0];
-            v[i + 3] = u[i + 3];
-        }
+    for (int32_t i = 8; i < 16; i += 4) {
+        v[i + 0] = u[i + 0];
+        v[i + 3] = u[i + 3];
+    }
 
-        v[9]  = half_btf_neon(&cospim16, &u[9], &cospi48, &u[14], bit);
-        v[10] = half_btf_neon(&cospim48, &u[10], &cospim16, &u[13], bit);
-        v[13] = half_btf_neon(&cospim16, &u[10], &cospi48, &u[13], bit);
-        v[14] = half_btf_neon(&cospi48, &u[9], &cospi16, &u[14], bit);
+    v[9]  = half_btf_neon(&cospim16, &u[9], &cospi48, &u[14], bit);
+    v[10] = half_btf_neon(&cospim48, &u[10], &cospim16, &u[13], bit);
+    v[13] = half_btf_neon(&cospim16, &u[10], &cospi48, &u[13], bit);
+    v[14] = half_btf_neon(&cospi48, &u[9], &cospi16, &u[14], bit);
 
-        for (int32_t i = 16; i < 32; i += 8) {
-            addsub_neon(u[i + 0], u[i + 3], &v[i + 0], &v[i + 3], &clamp_lo, &clamp_hi);
-            addsub_neon(u[i + 1], u[i + 2], &v[i + 1], &v[i + 2], &clamp_lo, &clamp_hi);
+    for (int32_t i = 16; i < 32; i += 8) {
+        addsub_neon(u[i + 0], u[i + 3], &v[i + 0], &v[i + 3]);
+        addsub_neon(u[i + 1], u[i + 2], &v[i + 1], &v[i + 2]);
 
-            addsub_neon(u[i + 7], u[i + 4], &v[i + 7], &v[i + 4], &clamp_lo, &clamp_hi);
-            addsub_neon(u[i + 6], u[i + 5], &v[i + 6], &v[i + 5], &clamp_lo, &clamp_hi);
-        }
+        addsub_neon(u[i + 7], u[i + 4], &v[i + 7], &v[i + 4]);
+        addsub_neon(u[i + 6], u[i + 5], &v[i + 6], &v[i + 5]);
+    }
 
-        for (int32_t i = 32; i < 64; i += 8) {
-            v[i + 0] = u[i + 0];
-            v[i + 1] = u[i + 1];
-            v[i + 6] = u[i + 6];
-            v[i + 7] = u[i + 7];
-        }
+    for (int32_t i = 32; i < 64; i += 8) {
+        v[i + 0] = u[i + 0];
+        v[i + 1] = u[i + 1];
+        v[i + 6] = u[i + 6];
+        v[i + 7] = u[i + 7];
+    }
 
-        v[34] = half_btf_neon(&cospim8, &u[34], &cospi56, &u[61], bit);
-        v[35] = half_btf_neon(&cospim8, &u[35], &cospi56, &u[60], bit);
-        v[36] = half_btf_neon(&cospim56, &u[36], &cospim8, &u[59], bit);
-        v[37] = half_btf_neon(&cospim56, &u[37], &cospim8, &u[58], bit);
-        v[42] = half_btf_neon(&cospim40, &u[42], &cospi24, &u[53], bit);
-        v[43] = half_btf_neon(&cospim40, &u[43], &cospi24, &u[52], bit);
-        v[44] = half_btf_neon(&cospim24, &u[44], &cospim40, &u[51], bit);
-        v[45] = half_btf_neon(&cospim24, &u[45], &cospim40, &u[50], bit);
-        v[50] = half_btf_neon(&cospim40, &u[45], &cospi24, &u[50], bit);
-        v[51] = half_btf_neon(&cospim40, &u[44], &cospi24, &u[51], bit);
-        v[52] = half_btf_neon(&cospi24, &u[43], &cospi40, &u[52], bit);
-        v[53] = half_btf_neon(&cospi24, &u[42], &cospi40, &u[53], bit);
-        v[58] = half_btf_neon(&cospim8, &u[37], &cospi56, &u[58], bit);
-        v[59] = half_btf_neon(&cospim8, &u[36], &cospi56, &u[59], bit);
-        v[60] = half_btf_neon(&cospi56, &u[35], &cospi8, &u[60], bit);
-        v[61] = half_btf_neon(&cospi56, &u[34], &cospi8, &u[61], bit);
+    v[34] = half_btf_neon(&cospim8, &u[34], &cospi56, &u[61], bit);
+    v[35] = half_btf_neon(&cospim8, &u[35], &cospi56, &u[60], bit);
+    v[36] = half_btf_neon(&cospim56, &u[36], &cospim8, &u[59], bit);
+    v[37] = half_btf_neon(&cospim56, &u[37], &cospim8, &u[58], bit);
+    v[42] = half_btf_neon(&cospim40, &u[42], &cospi24, &u[53], bit);
+    v[43] = half_btf_neon(&cospim40, &u[43], &cospi24, &u[52], bit);
+    v[44] = half_btf_neon(&cospim24, &u[44], &cospim40, &u[51], bit);
+    v[45] = half_btf_neon(&cospim24, &u[45], &cospim40, &u[50], bit);
+    v[50] = half_btf_neon(&cospim40, &u[45], &cospi24, &u[50], bit);
+    v[51] = half_btf_neon(&cospim40, &u[44], &cospi24, &u[51], bit);
+    v[52] = half_btf_neon(&cospi24, &u[43], &cospi40, &u[52], bit);
+    v[53] = half_btf_neon(&cospi24, &u[42], &cospi40, &u[53], bit);
+    v[58] = half_btf_neon(&cospim8, &u[37], &cospi56, &u[58], bit);
+    v[59] = half_btf_neon(&cospim8, &u[36], &cospi56, &u[59], bit);
+    v[60] = half_btf_neon(&cospi56, &u[35], &cospi8, &u[60], bit);
+    v[61] = half_btf_neon(&cospi56, &u[34], &cospi8, &u[61], bit);
 
-        // stage 7
-        addsub_neon(v[0], v[3], &u[0], &u[3], &clamp_lo, &clamp_hi);
-        addsub_neon(v[1], v[2], &u[1], &u[2], &clamp_lo, &clamp_hi);
+    // stage 7
+    addsub_neon(v[0], v[3], &u[0], &u[3]);
+    addsub_neon(v[1], v[2], &u[1], &u[2]);
 
-        u[4] = v[4];
-        u[7] = v[7];
-        u[5] = half_btf_neon(&cospim32, &v[5], &cospi32, &v[6], bit);
-        u[6] = half_btf_neon(&cospi32, &v[5], &cospi32, &v[6], bit);
+    u[4] = v[4];
+    u[7] = v[7];
+    u[5] = half_btf_neon(&cospim32, &v[5], &cospi32, &v[6], bit);
+    u[6] = half_btf_neon(&cospi32, &v[5], &cospi32, &v[6], bit);
 
-        addsub_neon(v[8], v[11], &u[8], &u[11], &clamp_lo, &clamp_hi);
-        addsub_neon(v[9], v[10], &u[9], &u[10], &clamp_lo, &clamp_hi);
-        addsub_neon(v[15], v[12], &u[15], &u[12], &clamp_lo, &clamp_hi);
-        addsub_neon(v[14], v[13], &u[14], &u[13], &clamp_lo, &clamp_hi);
+    addsub_neon(v[8], v[11], &u[8], &u[11]);
+    addsub_neon(v[9], v[10], &u[9], &u[10]);
+    addsub_neon(v[15], v[12], &u[15], &u[12]);
+    addsub_neon(v[14], v[13], &u[14], &u[13]);
 
-        for (int32_t i = 16; i < 32; i += 8) {
-            u[i + 0] = v[i + 0];
-            u[i + 1] = v[i + 1];
-            u[i + 6] = v[i + 6];
-            u[i + 7] = v[i + 7];
-        }
+    for (int32_t i = 16; i < 32; i += 8) {
+        u[i + 0] = v[i + 0];
+        u[i + 1] = v[i + 1];
+        u[i + 6] = v[i + 6];
+        u[i + 7] = v[i + 7];
+    }
 
-        u[18] = half_btf_neon(&cospim16, &v[18], &cospi48, &v[29], bit);
-        u[19] = half_btf_neon(&cospim16, &v[19], &cospi48, &v[28], bit);
-        u[20] = half_btf_neon(&cospim48, &v[20], &cospim16, &v[27], bit);
-        u[21] = half_btf_neon(&cospim48, &v[21], &cospim16, &v[26], bit);
-        u[26] = half_btf_neon(&cospim16, &v[21], &cospi48, &v[26], bit);
-        u[27] = half_btf_neon(&cospim16, &v[20], &cospi48, &v[27], bit);
-        u[28] = half_btf_neon(&cospi48, &v[19], &cospi16, &v[28], bit);
-        u[29] = half_btf_neon(&cospi48, &v[18], &cospi16, &v[29], bit);
+    u[18] = half_btf_neon(&cospim16, &v[18], &cospi48, &v[29], bit);
+    u[19] = half_btf_neon(&cospim16, &v[19], &cospi48, &v[28], bit);
+    u[20] = half_btf_neon(&cospim48, &v[20], &cospim16, &v[27], bit);
+    u[21] = half_btf_neon(&cospim48, &v[21], &cospim16, &v[26], bit);
+    u[26] = half_btf_neon(&cospim16, &v[21], &cospi48, &v[26], bit);
+    u[27] = half_btf_neon(&cospim16, &v[20], &cospi48, &v[27], bit);
+    u[28] = half_btf_neon(&cospi48, &v[19], &cospi16, &v[28], bit);
+    u[29] = half_btf_neon(&cospi48, &v[18], &cospi16, &v[29], bit);
 
-        for (int32_t i = 32; i < 64; i += 16) {
-            for (int32_t j = i; j < i + 4; j++) {
-                addsub_neon(v[j], v[j ^ 7], &u[j], &u[j ^ 7], &clamp_lo, &clamp_hi);
-                addsub_neon(v[j ^ 15], v[j ^ 8], &u[j ^ 15], &u[j ^ 8], &clamp_lo, &clamp_hi);
-            }
-        }
-
-        // stage 8
-        for (int32_t i = 0; i < 4; ++i) { addsub_neon(u[i], u[7 - i], &v[i], &v[7 - i], &clamp_lo, &clamp_hi); }
-        v[8]  = u[8];
-        v[9]  = u[9];
-        v[14] = u[14];
-        v[15] = u[15];
-
-        v[10] = half_btf_neon(&cospim32, &u[10], &cospi32, &u[13], bit);
-        v[11] = half_btf_neon(&cospim32, &u[11], &cospi32, &u[12], bit);
-        v[12] = half_btf_neon(&cospi32, &u[11], &cospi32, &u[12], bit);
-        v[13] = half_btf_neon(&cospi32, &u[10], &cospi32, &u[13], bit);
-
-        for (int32_t i = 16; i < 20; ++i) {
-            addsub_neon(u[i], u[i ^ 7], &v[i], &v[i ^ 7], &clamp_lo, &clamp_hi);
-            addsub_neon(u[i ^ 15], u[i ^ 8], &v[i ^ 15], &v[i ^ 8], &clamp_lo, &clamp_hi);
-        }
-
-        for (int32_t i = 32; i < 36; ++i) {
-            v[i]      = u[i];
-            v[i + 12] = u[i + 12];
-            v[i + 16] = u[i + 16];
-            v[i + 28] = u[i + 28];
-        }
-
-        v[36] = half_btf_neon(&cospim16, &u[36], &cospi48, &u[59], bit);
-        v[37] = half_btf_neon(&cospim16, &u[37], &cospi48, &u[58], bit);
-        v[38] = half_btf_neon(&cospim16, &u[38], &cospi48, &u[57], bit);
-        v[39] = half_btf_neon(&cospim16, &u[39], &cospi48, &u[56], bit);
-        v[40] = half_btf_neon(&cospim48, &u[40], &cospim16, &u[55], bit);
-        v[41] = half_btf_neon(&cospim48, &u[41], &cospim16, &u[54], bit);
-        v[42] = half_btf_neon(&cospim48, &u[42], &cospim16, &u[53], bit);
-        v[43] = half_btf_neon(&cospim48, &u[43], &cospim16, &u[52], bit);
-        v[52] = half_btf_neon(&cospim16, &u[43], &cospi48, &u[52], bit);
-        v[53] = half_btf_neon(&cospim16, &u[42], &cospi48, &u[53], bit);
-        v[54] = half_btf_neon(&cospim16, &u[41], &cospi48, &u[54], bit);
-        v[55] = half_btf_neon(&cospim16, &u[40], &cospi48, &u[55], bit);
-        v[56] = half_btf_neon(&cospi48, &u[39], &cospi16, &u[56], bit);
-        v[57] = half_btf_neon(&cospi48, &u[38], &cospi16, &u[57], bit);
-        v[58] = half_btf_neon(&cospi48, &u[37], &cospi16, &u[58], bit);
-        v[59] = half_btf_neon(&cospi48, &u[36], &cospi16, &u[59], bit);
-
-        // stage 9
-        for (int32_t i = 0; i < 8; ++i) { addsub_neon(v[i], v[15 - i], &u[i], &u[15 - i], &clamp_lo, &clamp_hi); }
-        for (int32_t i = 16; i < 20; ++i) {
-            u[i]      = v[i];
-            u[i + 12] = v[i + 12];
-        }
-
-        u[20] = half_btf_neon(&cospim32, &v[20], &cospi32, &v[27], bit);
-        u[21] = half_btf_neon(&cospim32, &v[21], &cospi32, &v[26], bit);
-        u[22] = half_btf_neon(&cospim32, &v[22], &cospi32, &v[25], bit);
-        u[23] = half_btf_neon(&cospim32, &v[23], &cospi32, &v[24], bit);
-        u[24] = half_btf_neon(&cospi32, &v[23], &cospi32, &v[24], bit);
-        u[25] = half_btf_neon(&cospi32, &v[22], &cospi32, &v[25], bit);
-        u[26] = half_btf_neon(&cospi32, &v[21], &cospi32, &v[26], bit);
-        u[27] = half_btf_neon(&cospi32, &v[20], &cospi32, &v[27], bit);
-
-        for (int32_t i = 32; i < 40; i++) { addsub_neon(v[i], v[i ^ 15], &u[i], &u[i ^ 15], &clamp_lo, &clamp_hi); }
-        for (int32_t i = 48; i < 56; i++) { addsub_neon(v[i ^ 15], v[i], &u[i ^ 15], &u[i], &clamp_lo, &clamp_hi); }
-        // stage 10
-        for (int32_t i = 0; i < 16; i++) { addsub_neon(u[i], u[31 - i], &v[i], &v[31 - i], &clamp_lo, &clamp_hi); }
-        for (int32_t i = 32; i < 40; i++) { v[i] = u[i]; }
-
-        v[40] = half_btf_neon(&cospim32, &u[40], &cospi32, &u[55], bit);
-        v[41] = half_btf_neon(&cospim32, &u[41], &cospi32, &u[54], bit);
-        v[42] = half_btf_neon(&cospim32, &u[42], &cospi32, &u[53], bit);
-        v[43] = half_btf_neon(&cospim32, &u[43], &cospi32, &u[52], bit);
-        v[44] = half_btf_neon(&cospim32, &u[44], &cospi32, &u[51], bit);
-        v[45] = half_btf_neon(&cospim32, &u[45], &cospi32, &u[50], bit);
-        v[46] = half_btf_neon(&cospim32, &u[46], &cospi32, &u[49], bit);
-        v[47] = half_btf_neon(&cospim32, &u[47], &cospi32, &u[48], bit);
-        v[48] = half_btf_neon(&cospi32, &u[47], &cospi32, &u[48], bit);
-        v[49] = half_btf_neon(&cospi32, &u[46], &cospi32, &u[49], bit);
-        v[50] = half_btf_neon(&cospi32, &u[45], &cospi32, &u[50], bit);
-        v[51] = half_btf_neon(&cospi32, &u[44], &cospi32, &u[51], bit);
-        v[52] = half_btf_neon(&cospi32, &u[43], &cospi32, &u[52], bit);
-        v[53] = half_btf_neon(&cospi32, &u[42], &cospi32, &u[53], bit);
-        v[54] = half_btf_neon(&cospi32, &u[41], &cospi32, &u[54], bit);
-        v[55] = half_btf_neon(&cospi32, &u[40], &cospi32, &u[55], bit);
-
-        for (int32_t i = 56; i < 64; i++) { v[i] = u[i]; }
-
-        // stage 11
-        for (int32_t i = 0; i < 32; i++) {
-            addsub_neon(v[i], v[63 - i], &out[16 * (i) + col], &out[16 * (63 - i) + col], &clamp_lo, &clamp_hi);
+    for (int32_t i = 32; i < 64; i += 16) {
+        for (int32_t j = i; j < i + 4; j++) {
+            addsub_neon(v[j], v[j ^ 7], &u[j], &u[j ^ 7]);
+            addsub_neon(v[j ^ 15], v[j ^ 8], &u[j ^ 15], &u[j ^ 8]);
         }
     }
+
+    // stage 8
+    for (int32_t i = 0; i < 4; ++i) { addsub_neon(u[i], u[7 - i], &v[i], &v[7 - i]); }
+    v[8]  = u[8];
+    v[9]  = u[9];
+    v[14] = u[14];
+    v[15] = u[15];
+
+    v[10] = half_btf_neon(&cospim32, &u[10], &cospi32, &u[13], bit);
+    v[11] = half_btf_neon(&cospim32, &u[11], &cospi32, &u[12], bit);
+    v[12] = half_btf_neon(&cospi32, &u[11], &cospi32, &u[12], bit);
+    v[13] = half_btf_neon(&cospi32, &u[10], &cospi32, &u[13], bit);
+
+    for (int32_t i = 16; i < 20; ++i) {
+        addsub_neon(u[i], u[i ^ 7], &v[i], &v[i ^ 7]);
+        addsub_neon(u[i ^ 15], u[i ^ 8], &v[i ^ 15], &v[i ^ 8]);
+    }
+
+    for (int32_t i = 32; i < 36; ++i) {
+        v[i]      = u[i];
+        v[i + 12] = u[i + 12];
+        v[i + 16] = u[i + 16];
+        v[i + 28] = u[i + 28];
+    }
+
+    v[36] = half_btf_neon(&cospim16, &u[36], &cospi48, &u[59], bit);
+    v[37] = half_btf_neon(&cospim16, &u[37], &cospi48, &u[58], bit);
+    v[38] = half_btf_neon(&cospim16, &u[38], &cospi48, &u[57], bit);
+    v[39] = half_btf_neon(&cospim16, &u[39], &cospi48, &u[56], bit);
+    v[40] = half_btf_neon(&cospim48, &u[40], &cospim16, &u[55], bit);
+    v[41] = half_btf_neon(&cospim48, &u[41], &cospim16, &u[54], bit);
+    v[42] = half_btf_neon(&cospim48, &u[42], &cospim16, &u[53], bit);
+    v[43] = half_btf_neon(&cospim48, &u[43], &cospim16, &u[52], bit);
+    v[52] = half_btf_neon(&cospim16, &u[43], &cospi48, &u[52], bit);
+    v[53] = half_btf_neon(&cospim16, &u[42], &cospi48, &u[53], bit);
+    v[54] = half_btf_neon(&cospim16, &u[41], &cospi48, &u[54], bit);
+    v[55] = half_btf_neon(&cospim16, &u[40], &cospi48, &u[55], bit);
+    v[56] = half_btf_neon(&cospi48, &u[39], &cospi16, &u[56], bit);
+    v[57] = half_btf_neon(&cospi48, &u[38], &cospi16, &u[57], bit);
+    v[58] = half_btf_neon(&cospi48, &u[37], &cospi16, &u[58], bit);
+    v[59] = half_btf_neon(&cospi48, &u[36], &cospi16, &u[59], bit);
+
+    // stage 9
+    for (int32_t i = 0; i < 8; ++i) { addsub_neon(v[i], v[15 - i], &u[i], &u[15 - i]); }
+    for (int32_t i = 16; i < 20; ++i) {
+        u[i]      = v[i];
+        u[i + 12] = v[i + 12];
+    }
+
+    u[20] = half_btf_neon(&cospim32, &v[20], &cospi32, &v[27], bit);
+    u[21] = half_btf_neon(&cospim32, &v[21], &cospi32, &v[26], bit);
+    u[22] = half_btf_neon(&cospim32, &v[22], &cospi32, &v[25], bit);
+    u[23] = half_btf_neon(&cospim32, &v[23], &cospi32, &v[24], bit);
+    u[24] = half_btf_neon(&cospi32, &v[23], &cospi32, &v[24], bit);
+    u[25] = half_btf_neon(&cospi32, &v[22], &cospi32, &v[25], bit);
+    u[26] = half_btf_neon(&cospi32, &v[21], &cospi32, &v[26], bit);
+    u[27] = half_btf_neon(&cospi32, &v[20], &cospi32, &v[27], bit);
+
+    for (int32_t i = 32; i < 40; i++) { addsub_neon(v[i], v[i ^ 15], &u[i], &u[i ^ 15]); }
+    for (int32_t i = 48; i < 56; i++) { addsub_neon(v[i ^ 15], v[i], &u[i ^ 15], &u[i]); }
+    // stage 10
+    for (int32_t i = 0; i < 16; i++) { addsub_neon(u[i], u[31 - i], &v[i], &v[31 - i]); }
+    for (int32_t i = 32; i < 40; i++) { v[i] = u[i]; }
+
+    v[40] = half_btf_neon(&cospim32, &u[40], &cospi32, &u[55], bit);
+    v[41] = half_btf_neon(&cospim32, &u[41], &cospi32, &u[54], bit);
+    v[42] = half_btf_neon(&cospim32, &u[42], &cospi32, &u[53], bit);
+    v[43] = half_btf_neon(&cospim32, &u[43], &cospi32, &u[52], bit);
+    v[44] = half_btf_neon(&cospim32, &u[44], &cospi32, &u[51], bit);
+    v[45] = half_btf_neon(&cospim32, &u[45], &cospi32, &u[50], bit);
+    v[46] = half_btf_neon(&cospim32, &u[46], &cospi32, &u[49], bit);
+    v[47] = half_btf_neon(&cospim32, &u[47], &cospi32, &u[48], bit);
+    v[48] = half_btf_neon(&cospi32, &u[47], &cospi32, &u[48], bit);
+    v[49] = half_btf_neon(&cospi32, &u[46], &cospi32, &u[49], bit);
+    v[50] = half_btf_neon(&cospi32, &u[45], &cospi32, &u[50], bit);
+    v[51] = half_btf_neon(&cospi32, &u[44], &cospi32, &u[51], bit);
+    v[52] = half_btf_neon(&cospi32, &u[43], &cospi32, &u[52], bit);
+    v[53] = half_btf_neon(&cospi32, &u[42], &cospi32, &u[53], bit);
+    v[54] = half_btf_neon(&cospi32, &u[41], &cospi32, &u[54], bit);
+    v[55] = half_btf_neon(&cospi32, &u[40], &cospi32, &u[55], bit);
+
+    for (int32_t i = 56; i < 64; i++) { v[i] = u[i]; }
+
+    // stage 11
+    for (int32_t i = 0; i < 32; i++) { addsub_neon(v[i], v[63 - i], &out[i], &out[63 - i]); }
 }
 
-static INLINE void round_shift_64x64(int32x4_t in[], int32_t shift) {
-    round_shift_32x32(&in[0], shift);
-    round_shift_32x32(&in[256], shift);
+static void idct64_xn_neon(int32x4_t in[], int32x4_t out[], int32_t bit, int howmany) {
+    const int stride = 64;
+    int       i      = 0;
+    do { idct64_x4_neon(in + i * stride, out + i * stride, bit); } while (++i < howmany);
 }
 
-static INLINE void assign_32x32_input_from_64x64(const int32x4_t in[], int32x4_t in32x32[], int32_t col) {
-    for (int32_t i = 0; i < 32 * 32 / 4; i += 8) {
-        in32x32[i]     = in[col];
-        in32x32[i + 1] = in[col + 1];
-        in32x32[i + 2] = in[col + 2];
-        in32x32[i + 3] = in[col + 3];
-        in32x32[i + 4] = in[col + 4];
-        in32x32[i + 5] = in[col + 5];
-        in32x32[i + 6] = in[col + 6];
-        in32x32[i + 7] = in[col + 7];
-        col += 16;
+static INLINE void load_buffer_32x32_in_64x64(const int32_t *input, int32x4_t *in) {
+    const int col = 32;
+    const int row = 32;
+
+    for (int i = 0; i < col; i++) {
+        for (int j = 0; j < row >> 2; j++) { in[i + j * 64] = vld1q_s32(input + i * col + j * 4); }
+        for (int j = row >> 2; j < 64 >> 2; j++) { in[i + j * 64] = vdupq_n_s32(0); }
     }
-}
-
-static void write_buffer_64x64(int32x4_t in[], uint16_t *output_r, int32_t stride_r, uint16_t *output_w,
-                               int32_t stride_w, int32_t fliplr, int32_t flipud, int32_t shift, int32_t bd) {
-    int32x4_t in32x32[32 * 32 / 4];
-    uint16_t *left_up_r    = &output_r[0];
-    uint16_t *right_up_r   = &output_r[32];
-    uint16_t *left_down_r  = &output_r[32 * stride_r];
-    uint16_t *right_down_r = &output_r[32 * stride_r + 32];
-    uint16_t *left_up_w    = &output_w[0];
-    uint16_t *right_up_w   = &output_w[32];
-    uint16_t *left_down_w  = &output_w[32 * stride_w];
-    uint16_t *right_down_w = &output_w[32 * stride_w + 32];
-
-    if (fliplr) {
-        swap_addr(&left_up_r, &right_up_r);
-        swap_addr(&left_down_r, &right_down_r);
-        swap_addr(&left_up_w, &right_up_w);
-        swap_addr(&left_down_w, &right_down_w);
-    }
-
-    if (flipud) {
-        swap_addr(&left_up_r, &left_down_r);
-        swap_addr(&right_up_r, &right_down_r);
-        swap_addr(&left_up_w, &left_down_w);
-        swap_addr(&right_up_w, &right_down_w);
-    }
-
-    // Left-up quarter
-    assign_32x32_input_from_64x64(in, in32x32, 0);
-    write_buffer_32x32(in32x32, left_up_r, stride_r, left_up_w, stride_w, fliplr, flipud, shift, bd);
-
-    // Right-up quarter
-    assign_32x32_input_from_64x64(in, in32x32, 64 / 2 / 4);
-    write_buffer_32x32(in32x32, right_up_r, stride_r, right_up_w, stride_w, fliplr, flipud, shift, bd);
-
-    // Left-down quarter
-    assign_32x32_input_from_64x64(in, in32x32, 64 * 64 / 2 / 4);
-    write_buffer_32x32(in32x32, left_down_r, stride_r, left_down_w, stride_w, fliplr, flipud, shift, bd);
-
-    // Right-down quarter
-    assign_32x32_input_from_64x64(in, in32x32, 64 * 64 / 2 / 4 + 64 / 2 / 4);
-    write_buffer_32x32(in32x32, right_down_r, stride_r, right_down_w, stride_w, fliplr, flipud, shift, bd);
+    for (int i = 0; i < 64 >> 2; i++) { memset(in + 32 + i * 64, 0, 32 * sizeof(int32x4_t)); }
 }
 
 void svt_av1_inv_txfm2d_add_64x64_neon(const int32_t *input, uint16_t *output_r, int32_t stride_r, uint16_t *output_w,
                                        int32_t stride_w, TxType tx_type, int32_t bd) {
     int32x4_t     in[64 * 64 / 4], out[64 * 64 / 4];
-    const int8_t *shift   = svt_aom_inv_txfm_shift_ls[TX_64X64];
-    const int32_t txw_idx = tx_size_wide_log2[TX_64X64] - tx_size_wide_log2[0];
-    const int32_t txh_idx = tx_size_high_log2[TX_64X64] - tx_size_high_log2[0];
+    const int8_t *shift = svt_aom_inv_txfm_shift_ls[TX_64X64];
+
+    memset(out, 0, sizeof(out));
 
     switch (tx_type) {
     case DCT_DCT:
-        load_buffer_64x64_lower_32x32(input, in);
+        load_buffer_32x32_in_64x64(input, in);
         transpose_64x64(in, out, 0);
-        idct64x64_neon(out, in, inv_cos_bit_row[txw_idx][txh_idx], 0, bd);
+        idct64_xn_neon(out, in, inv_cos_bit_row[4][4], 8);
+        round_shift_neon(in, shift[0], 1024);
         transpose_64x64(in, out, 1);
-        round_shift_64x64(out, -shift[0]);
-        idct64x64_neon(out, in, inv_cos_bit_col[txw_idx][txh_idx], 1, bd);
-        write_buffer_64x64(in, output_r, stride_r, output_w, stride_w, 0, 0, -shift[1], bd);
+        idct64_xn_neon(out, in, inv_cos_bit_col[4][4], 16);
+        write_buffer_64x64(in, output_r, stride_r, output_w, stride_w, shift[1], bd);
         break;
 
     default: svt_av1_inv_txfm2d_add_64x64_c(input, output_r, stride_r, output_w, stride_w, tx_type, bd); break;
@@ -1801,7 +1578,7 @@ void svt_av1_inv_txfm2d_add_16x16_neon(const int32_t *input, uint16_t *output_r,
         round_shift_neon(in, shift[0], 64);
         transpose_arrays_s32_16x16(in, out);
         idct16_xn_neon(out, in, inv_cos_bit_col[2][2], 4);
-        write_buffer_16x16_(in, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
+        write_buffer_16x16(in, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
         break;
     case ADST_DCT:
         load_buffer_s32(input, in, 16, 16);
@@ -1810,7 +1587,7 @@ void svt_av1_inv_txfm2d_add_16x16_neon(const int32_t *input, uint16_t *output_r,
         round_shift_neon(in, shift[0], 64);
         transpose_arrays_s32_16x16(in, out);
         iadst16_xn_neon(out, in, inv_cos_bit_col[2][2], 4);
-        write_buffer_16x16_(in, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
+        write_buffer_16x16(in, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
         break;
     case DCT_ADST:
         load_buffer_s32(input, in, 16, 16);
@@ -1819,7 +1596,7 @@ void svt_av1_inv_txfm2d_add_16x16_neon(const int32_t *input, uint16_t *output_r,
         round_shift_neon(in, shift[0], 64);
         transpose_arrays_s32_16x16(in, out);
         idct16_xn_neon(out, in, inv_cos_bit_col[2][2], 4);
-        write_buffer_16x16_(in, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
+        write_buffer_16x16(in, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
         break;
     case ADST_ADST:
         load_buffer_s32(input, in, 16, 16);
@@ -1828,7 +1605,7 @@ void svt_av1_inv_txfm2d_add_16x16_neon(const int32_t *input, uint16_t *output_r,
         round_shift_neon(in, shift[0], 64);
         transpose_arrays_s32_16x16(in, out);
         iadst16_xn_neon(out, in, inv_cos_bit_col[2][2], 4);
-        write_buffer_16x16_(in, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
+        write_buffer_16x16(in, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
         break;
     case FLIPADST_DCT:
         load_buffer_s32(input, in, 16, 16);
@@ -1837,7 +1614,7 @@ void svt_av1_inv_txfm2d_add_16x16_neon(const int32_t *input, uint16_t *output_r,
         round_shift_neon(in, shift[0], 64);
         transpose_arrays_s32_16x16(in, out);
         iadst16_xn_neon(out, in, inv_cos_bit_col[2][2], 4);
-        write_buffer_16x16_(in, output_r, stride_r, output_w, stride_w, 0, 1, shift[1], bd);
+        write_buffer_16x16(in, output_r, stride_r, output_w, stride_w, 0, 1, shift[1], bd);
         break;
     case DCT_FLIPADST:
         load_buffer_s32(input, in, 16, 16);
@@ -1846,7 +1623,7 @@ void svt_av1_inv_txfm2d_add_16x16_neon(const int32_t *input, uint16_t *output_r,
         round_shift_neon(in, shift[0], 64);
         transpose_arrays_s32_16x16(in, out);
         idct16_xn_neon(out, in, inv_cos_bit_col[2][2], 4);
-        write_buffer_16x16_(in, output_r, stride_r, output_w, stride_w, 1, 0, shift[1], bd);
+        write_buffer_16x16(in, output_r, stride_r, output_w, stride_w, 1, 0, shift[1], bd);
         break;
     case FLIPADST_FLIPADST:
         load_buffer_s32(input, in, 16, 16);
@@ -1855,7 +1632,7 @@ void svt_av1_inv_txfm2d_add_16x16_neon(const int32_t *input, uint16_t *output_r,
         round_shift_neon(in, shift[0], 64);
         transpose_arrays_s32_16x16(in, out);
         iadst16_xn_neon(out, in, inv_cos_bit_col[2][2], 4);
-        write_buffer_16x16_(in, output_r, stride_r, output_w, stride_w, 1, 1, shift[1], bd);
+        write_buffer_16x16(in, output_r, stride_r, output_w, stride_w, 1, 1, shift[1], bd);
         break;
     case ADST_FLIPADST:
         load_buffer_s32(input, in, 16, 16);
@@ -1864,7 +1641,7 @@ void svt_av1_inv_txfm2d_add_16x16_neon(const int32_t *input, uint16_t *output_r,
         round_shift_neon(in, shift[0], 64);
         transpose_arrays_s32_16x16(in, out);
         iadst16_xn_neon(out, in, inv_cos_bit_col[2][2], 4);
-        write_buffer_16x16_(in, output_r, stride_r, output_w, stride_w, 1, 0, shift[1], bd);
+        write_buffer_16x16(in, output_r, stride_r, output_w, stride_w, 1, 0, shift[1], bd);
         break;
     case FLIPADST_ADST:
         load_buffer_s32(input, in, 16, 16);
@@ -1873,21 +1650,21 @@ void svt_av1_inv_txfm2d_add_16x16_neon(const int32_t *input, uint16_t *output_r,
         round_shift_neon(in, shift[0], 64);
         transpose_arrays_s32_16x16(in, out);
         iadst16_xn_neon(out, in, inv_cos_bit_col[2][2], 4);
-        write_buffer_16x16_(in, output_r, stride_r, output_w, stride_w, 0, 1, shift[1], bd);
+        write_buffer_16x16(in, output_r, stride_r, output_w, stride_w, 0, 1, shift[1], bd);
         break;
     case IDTX:
         load_buffer_s32(input, in, 16, 16);
         iidentity16_xn_neon(in, out, 0 /*unused*/, 4);
         round_shift_neon(out, shift[0], 64);
         iidentity16_xn_neon(out, in, 0 /*unused*/, 4);
-        write_buffer_16x16_(in, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
+        write_buffer_16x16(in, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
         break;
     case V_DCT:
         load_buffer_s32(input, in, 16, 16);
         iidentity16_xn_neon(in, out, /*unused*/ 0, 4);
         round_shift_neon(out, shift[0], 64);
         idct16_xn_neon(out, in, inv_cos_bit_col[2][2], 4);
-        write_buffer_16x16_(in, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
+        write_buffer_16x16(in, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
         break;
     case H_DCT:
         load_buffer_s32(input, in, 16, 16);
@@ -1896,14 +1673,14 @@ void svt_av1_inv_txfm2d_add_16x16_neon(const int32_t *input, uint16_t *output_r,
         transpose_arrays_s32_16x16(in, out);
         round_shift_neon(out, shift[0], 64);
         iidentity16_xn_neon(out, in, /*unused*/ 0, 4);
-        write_buffer_16x16_(in, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
+        write_buffer_16x16(in, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
         break;
     case V_ADST:
         load_buffer_s32(input, in, 16, 16);
         iidentity16_xn_neon(in, out, /*unused*/ 0, 4);
         round_shift_neon(out, shift[0], 64);
         iadst16_xn_neon(out, in, inv_cos_bit_col[2][2], 4);
-        write_buffer_16x16_(in, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
+        write_buffer_16x16(in, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
         break;
     case H_ADST:
         load_buffer_s32(input, in, 16, 16);
@@ -1912,14 +1689,14 @@ void svt_av1_inv_txfm2d_add_16x16_neon(const int32_t *input, uint16_t *output_r,
         transpose_arrays_s32_16x16(in, out);
         round_shift_neon(out, shift[0], 64);
         iidentity16_xn_neon(out, in, /*unused*/ 0, 4);
-        write_buffer_16x16_(in, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
+        write_buffer_16x16(in, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
         break;
     case V_FLIPADST:
         load_buffer_s32(input, in, 16, 16);
         iidentity16_xn_neon(in, out, /*unused*/ 0, 4);
         round_shift_neon(out, shift[0], 64);
         iadst16_xn_neon(out, in, inv_cos_bit_col[2][2], 4);
-        write_buffer_16x16_(in, output_r, stride_r, output_w, stride_w, 0, 1, shift[1], bd);
+        write_buffer_16x16(in, output_r, stride_r, output_w, stride_w, 0, 1, shift[1], bd);
         break;
     case H_FLIPADST:
         load_buffer_s32(input, in, 16, 16);
@@ -1928,7 +1705,7 @@ void svt_av1_inv_txfm2d_add_16x16_neon(const int32_t *input, uint16_t *output_r,
         transpose_arrays_s32_16x16(in, out);
         round_shift_neon(out, shift[0], 64);
         iidentity16_xn_neon(out, in, /*unused*/ 0, 4);
-        write_buffer_16x16_(in, output_r, stride_r, output_w, stride_w, 1, 0, shift[1], bd);
+        write_buffer_16x16(in, output_r, stride_r, output_w, stride_w, 1, 0, shift[1], bd);
         break;
     default: assert(0);
     }
@@ -2155,7 +1932,7 @@ void svt_av1_inv_txfm2d_add_8x8_neon(const int32_t *input, uint16_t *output_r, i
         transpose_arrays_s32_8x8(in, out);
         round_shift_neon(out, shift[0], 16);
         idct8_xn_neon(out, in, inv_cos_bit_col[1][1], 2);
-        write_buffer_8x8_(in, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
+        write_buffer_8x8(in, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
         break;
     case ADST_DCT:
         load_buffer_s32(input, in, 8, 8);
@@ -2164,7 +1941,7 @@ void svt_av1_inv_txfm2d_add_8x8_neon(const int32_t *input, uint16_t *output_r, i
         transpose_arrays_s32_8x8(in, out);
         round_shift_neon(out, shift[0], 16);
         iadst8_xn_neon(out, in, inv_cos_bit_col[1][1], 2);
-        write_buffer_8x8_(in, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
+        write_buffer_8x8(in, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
         break;
     case DCT_ADST:
         load_buffer_s32(input, in, 8, 8);
@@ -2173,7 +1950,7 @@ void svt_av1_inv_txfm2d_add_8x8_neon(const int32_t *input, uint16_t *output_r, i
         transpose_arrays_s32_8x8(in, out);
         round_shift_neon(out, shift[0], 16);
         idct8_xn_neon(out, in, inv_cos_bit_col[1][1], 2);
-        write_buffer_8x8_(in, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
+        write_buffer_8x8(in, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
         break;
     case ADST_ADST:
         load_buffer_s32(input, in, 8, 8);
@@ -2182,7 +1959,7 @@ void svt_av1_inv_txfm2d_add_8x8_neon(const int32_t *input, uint16_t *output_r, i
         transpose_arrays_s32_8x8(in, out);
         round_shift_neon(out, shift[0], 16);
         iadst8_xn_neon(out, in, inv_cos_bit_col[1][1], 2);
-        write_buffer_8x8_(in, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
+        write_buffer_8x8(in, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
         break;
     case FLIPADST_DCT:
         load_buffer_s32(input, in, 8, 8);
@@ -2191,7 +1968,7 @@ void svt_av1_inv_txfm2d_add_8x8_neon(const int32_t *input, uint16_t *output_r, i
         transpose_arrays_s32_8x8(in, out);
         round_shift_neon(out, shift[0], 16);
         iadst8_xn_neon(out, in, inv_cos_bit_col[1][1], 2);
-        write_buffer_8x8_(in, output_r, stride_r, output_w, stride_w, 0, 1, shift[1], bd);
+        write_buffer_8x8(in, output_r, stride_r, output_w, stride_w, 0, 1, shift[1], bd);
         break;
     case DCT_FLIPADST:
         load_buffer_s32(input, in, 8, 8);
@@ -2200,7 +1977,7 @@ void svt_av1_inv_txfm2d_add_8x8_neon(const int32_t *input, uint16_t *output_r, i
         transpose_arrays_s32_8x8(in, out);
         round_shift_neon(out, shift[0], 16);
         idct8_xn_neon(out, in, inv_cos_bit_col[1][1], 2);
-        write_buffer_8x8_(in, output_r, stride_r, output_w, stride_w, 1, 0, shift[1], bd);
+        write_buffer_8x8(in, output_r, stride_r, output_w, stride_w, 1, 0, shift[1], bd);
         break;
     case ADST_FLIPADST:
         load_buffer_s32(input, in, 8, 8);
@@ -2209,7 +1986,7 @@ void svt_av1_inv_txfm2d_add_8x8_neon(const int32_t *input, uint16_t *output_r, i
         transpose_arrays_s32_8x8(in, out);
         round_shift_neon(out, shift[0], 16);
         iadst8_xn_neon(out, in, inv_cos_bit_col[1][1], 2);
-        write_buffer_8x8_(in, output_r, stride_r, output_w, stride_w, 1, 0, shift[1], bd);
+        write_buffer_8x8(in, output_r, stride_r, output_w, stride_w, 1, 0, shift[1], bd);
         break;
     case FLIPADST_FLIPADST:
         load_buffer_s32(input, in, 8, 8);
@@ -2218,7 +1995,7 @@ void svt_av1_inv_txfm2d_add_8x8_neon(const int32_t *input, uint16_t *output_r, i
         transpose_arrays_s32_8x8(in, out);
         round_shift_neon(out, shift[0], 16);
         iadst8_xn_neon(out, in, inv_cos_bit_col[1][1], 2);
-        write_buffer_8x8_(in, output_r, stride_r, output_w, stride_w, 1, 1, shift[1], bd);
+        write_buffer_8x8(in, output_r, stride_r, output_w, stride_w, 1, 1, shift[1], bd);
         break;
     case FLIPADST_ADST:
         load_buffer_s32(input, in, 8, 8);
@@ -2227,7 +2004,7 @@ void svt_av1_inv_txfm2d_add_8x8_neon(const int32_t *input, uint16_t *output_r, i
         transpose_arrays_s32_8x8(in, out);
         round_shift_neon(out, shift[0], 16);
         iadst8_xn_neon(out, in, inv_cos_bit_col[1][1], 2);
-        write_buffer_8x8_(in, output_r, stride_r, output_w, stride_w, 0, 1, shift[1], bd);
+        write_buffer_8x8(in, output_r, stride_r, output_w, stride_w, 0, 1, shift[1], bd);
         break;
     case IDTX:
         load_buffer_s32(input, in, 8, 8);
@@ -2236,14 +2013,14 @@ void svt_av1_inv_txfm2d_add_8x8_neon(const int32_t *input, uint16_t *output_r, i
         // round_shift_neon(, -shift[0]) shift right 1 bits
         // svt_av1_iidentity8_c() shift left 1 bits
         // round_shift_neon(, -shift[1]) shift right 4 bits with complement
-        write_buffer_8x8_(in, output_r, stride_r, output_w, stride_w, 0, 0, shift[0] + shift[1] + 2, bd);
+        write_buffer_8x8(in, output_r, stride_r, output_w, stride_w, 0, 0, shift[0] + shift[1] + 2, bd);
         break;
     case V_DCT:
         load_buffer_s32(input, in, 8, 8);
         // svt_av1_iidentity8_c() shift left 1 bits
         // round_shift_neon(, -shift[0]) shift right 1 bits
         idct8_xn_neon(in, out, inv_cos_bit_row[1][1], 2);
-        write_buffer_8x8_(out, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
+        write_buffer_8x8(out, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
         break;
     case H_DCT:
         load_buffer_s32(input, in, 8, 8);
@@ -2253,14 +2030,14 @@ void svt_av1_inv_txfm2d_add_8x8_neon(const int32_t *input, uint16_t *output_r, i
         round_shift_neon(out, shift[0], 16);
         // svt_av1_iidentity8_c() shift left 1 bits
         // round_shift_neon(, -shift[1]) shift right 4 bits with complement
-        write_buffer_8x8_(out, output_r, stride_r, output_w, stride_w, 0, 0, shift[1] + 1, bd);
+        write_buffer_8x8(out, output_r, stride_r, output_w, stride_w, 0, 0, shift[1] + 1, bd);
         break;
     case V_ADST:
         load_buffer_s32(input, in, 8, 8);
         // svt_av1_iidentity8_c() shift left 1 bits
         // round_shift_neon(, -shift[0]) shift right 1 bits
         iadst8_xn_neon(in, out, inv_cos_bit_col[1][1], 2);
-        write_buffer_8x8_(out, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
+        write_buffer_8x8(out, output_r, stride_r, output_w, stride_w, 0, 0, shift[1], bd);
         break;
     case H_ADST:
         load_buffer_s32(input, in, 8, 8);
@@ -2270,14 +2047,14 @@ void svt_av1_inv_txfm2d_add_8x8_neon(const int32_t *input, uint16_t *output_r, i
         round_shift_neon(out, shift[0], 16);
         // svt_av1_iidentity8_c() shift left 1 bits
         // round_shift_neon(, -shift[1]) shift right 4 bits with complement
-        write_buffer_8x8_(out, output_r, stride_r, output_w, stride_w, 0, 0, shift[1] + 1, bd);
+        write_buffer_8x8(out, output_r, stride_r, output_w, stride_w, 0, 0, shift[1] + 1, bd);
         break;
     case V_FLIPADST:
         load_buffer_s32(input, in, 8, 8);
         // svt_av1_iidentity8_c() shift left 1 bits
         // round_shift_neon(, -shift[0]) shift right 1 bits
         iadst8_xn_neon(in, out, inv_cos_bit_col[1][1], 2);
-        write_buffer_8x8_(out, output_r, stride_r, output_w, stride_w, 0, 1, shift[1], bd);
+        write_buffer_8x8(out, output_r, stride_r, output_w, stride_w, 0, 1, shift[1], bd);
         break;
     case H_FLIPADST:
         load_buffer_s32(input, in, 8, 8);
@@ -2287,27 +2064,9 @@ void svt_av1_inv_txfm2d_add_8x8_neon(const int32_t *input, uint16_t *output_r, i
         round_shift_neon(out, shift[0], 16);
         // svt_av1_iidentity8_c() shift left 1 bits
         // round_shift_neon(, -shift[1]) shift right 4 bits with complement
-        write_buffer_8x8_(out, output_r, stride_r, output_w, stride_w, 1, 0, shift[1] + 1, bd);
+        write_buffer_8x8(out, output_r, stride_r, output_w, stride_w, 1, 0, shift[1] + 1, bd);
         break;
     default: assert(0);
-    }
-}
-
-static INLINE void highbd_clamp_s32_neon(const int32x4_t *in, int32x4_t *out, const int32x4_t *clamp_lo,
-                                         const int32x4_t *clamp_hi, int32_t size) {
-    int32x4_t a0, a1;
-    for (int32_t i = 0; i < size; i += 4) {
-        a0     = vmaxq_s32(in[i], *clamp_lo);
-        out[i] = vminq_s32(a0, *clamp_hi);
-
-        a1         = vmaxq_s32(in[i + 1], *clamp_lo);
-        out[i + 1] = vminq_s32(a1, *clamp_hi);
-
-        a0         = vmaxq_s32(in[i + 2], *clamp_lo);
-        out[i + 2] = vminq_s32(a0, *clamp_hi);
-
-        a1         = vmaxq_s32(in[i + 3], *clamp_lo);
-        out[i + 3] = vminq_s32(a1, *clamp_hi);
     }
 }
 
@@ -2429,12 +2188,6 @@ static INLINE void iidentity4_x4_neon(int32x4_t *in, int32x4_t *out) {
     out[3] = vmulq_n_s32(in[3], new_sqrt2);
 
     round_shift_neon(out, -new_sqrt2_bits, 4);
-}
-
-static INLINE void clamp_neon(const int32x4_t *in, int32x4_t *out, int log_range, int size) {
-    const int32x4_t clamp_lo = vdupq_n_s32(-(1 << (log_range - 1)));
-    const int32x4_t clamp_hi = vdupq_n_s32((1 << (log_range - 1)) - 1);
-    highbd_clamp_s32_neon(in, out, &clamp_lo, &clamp_hi, size);
 }
 
 void svt_av1_inv_txfm2d_add_4x4_neon(const int32_t *input, uint16_t *output_r, int32_t stride_r, uint16_t *output_w,
