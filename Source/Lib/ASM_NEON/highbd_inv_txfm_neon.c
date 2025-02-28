@@ -119,6 +119,28 @@ static INLINE void get_recon_16x16(const int16x8_t pred_lo, const int16x8_t pred
     *res_hi = vminq_u16(*res_hi, vdupq_n_u16((1 << bd) - 1));
 }
 
+static INLINE void get_recon_32x32(const int16x8_t pred[4], int32x4_t *in, uint16x8_t res[4], int32_t bd) {
+    int32x4_t x0, x1, x2, x3, x4, x5, x6, x7;
+
+    x0 = vaddw_s16(in[0 * 32], vget_low_s16(pred[0]));
+    x1 = vaddw_s16(in[1 * 32], vget_high_s16(pred[0]));
+    x2 = vaddw_s16(in[2 * 32], vget_low_s16(pred[1]));
+    x3 = vaddw_s16(in[3 * 32], vget_high_s16(pred[1]));
+    x4 = vaddw_s16(in[4 * 32], vget_low_s16(pred[2]));
+    x5 = vaddw_s16(in[5 * 32], vget_high_s16(pred[2]));
+    x6 = vaddw_s16(in[6 * 32], vget_low_s16(pred[3]));
+    x7 = vaddw_s16(in[7 * 32], vget_high_s16(pred[3]));
+
+    res[0] = vcombine_u16(vqmovun_s32(x0), vqmovun_s32(x1));
+    res[1] = vcombine_u16(vqmovun_s32(x2), vqmovun_s32(x3));
+    res[2] = vcombine_u16(vqmovun_s32(x4), vqmovun_s32(x5));
+    res[3] = vcombine_u16(vqmovun_s32(x6), vqmovun_s32(x7));
+    res[0] = vminq_u16(res[0], vdupq_n_u16((1 << bd) - 1));
+    res[1] = vminq_u16(res[1], vdupq_n_u16((1 << bd) - 1));
+    res[2] = vminq_u16(res[2], vdupq_n_u16((1 << bd) - 1));
+    res[3] = vminq_u16(res[3], vdupq_n_u16((1 << bd) - 1));
+}
+
 static INLINE void write_buffer_8x8(int32x4_t in[], uint16_t *output_r, int32_t stride_r, uint16_t *output_w,
                                     int32_t stride_w, int32_t fliplr, int32_t flipud, int32_t shift, int32_t bd) {
     uint16x8_t u0, u1, u2, u3, u4, u5, u6, u7;
@@ -312,7 +334,22 @@ static INLINE void write_buffer_32x32(int32x4_t in[], uint16_t *output_r, int32_
     write_buffer_16x16(in16x16, right_down_r, stride_r, right_down_w, stride_w, fliplr, flipud, shift, bd);
 }
 
-static INLINE void idct32_neon(int32x4_t in[], int32x4_t out[], int32_t bit) {
+static INLINE void write_buffer_32x32_(int32x4_t in[], uint16_t *output_r, int32_t stride_r, uint16_t *output_w,
+                                       int32_t stride_w, int32_t shift, int32_t bd) {
+    round_shift_neon(in, shift, 256);
+
+    for (int i = 0; i < 32; i++) {
+        int16x8_t  v[4];
+        uint16x8_t res[4];
+        load_s16_8x4((int16_t *)output_r + i * stride_r, 8, &v[0], &v[1], &v[2], &v[3]);
+
+        get_recon_32x32(v, &in[i], res, bd);
+
+        store_u16_8x4(output_w + i * stride_w, 8, res[0], res[1], res[2], res[3]);
+    }
+}
+
+static INLINE void idct32_x4_neon(int32x4_t in[], int32x4_t out[], int32_t bit) {
     const int32_t  *cospi    = cospi_arr(bit);
     const int32x4_t cospi62  = vdupq_n_s32(cospi[62]);
     const int32x4_t cospi30  = vdupq_n_s32(cospi[30]);
@@ -367,360 +404,344 @@ static INLINE void idct32_neon(int32x4_t in[], int32x4_t out[], int32_t bit) {
 
     int32x4_t bf1[32], bf0[32];
 
-    for (int32_t col = 0; col < 8; ++col) {
-        // stage 0
-        // stage 1
-        bf1[0]  = in[0 * 8 + col];
-        bf1[1]  = in[16 * 8 + col];
-        bf1[2]  = in[8 * 8 + col];
-        bf1[3]  = in[24 * 8 + col];
-        bf1[4]  = in[4 * 8 + col];
-        bf1[5]  = in[20 * 8 + col];
-        bf1[6]  = in[12 * 8 + col];
-        bf1[7]  = in[28 * 8 + col];
-        bf1[8]  = in[2 * 8 + col];
-        bf1[9]  = in[18 * 8 + col];
-        bf1[10] = in[10 * 8 + col];
-        bf1[11] = in[26 * 8 + col];
-        bf1[12] = in[6 * 8 + col];
-        bf1[13] = in[22 * 8 + col];
-        bf1[14] = in[14 * 8 + col];
-        bf1[15] = in[30 * 8 + col];
-        bf1[16] = in[1 * 8 + col];
-        bf1[17] = in[17 * 8 + col];
-        bf1[18] = in[9 * 8 + col];
-        bf1[19] = in[25 * 8 + col];
-        bf1[20] = in[5 * 8 + col];
-        bf1[21] = in[21 * 8 + col];
-        bf1[22] = in[13 * 8 + col];
-        bf1[23] = in[29 * 8 + col];
-        bf1[24] = in[3 * 8 + col];
-        bf1[25] = in[19 * 8 + col];
-        bf1[26] = in[11 * 8 + col];
-        bf1[27] = in[27 * 8 + col];
-        bf1[28] = in[7 * 8 + col];
-        bf1[29] = in[23 * 8 + col];
-        bf1[30] = in[15 * 8 + col];
-        bf1[31] = in[31 * 8 + col];
+    // stage 0
+    // stage 1
+    bf1[0]  = in[0];
+    bf1[1]  = in[16];
+    bf1[2]  = in[8];
+    bf1[3]  = in[24];
+    bf1[4]  = in[4];
+    bf1[5]  = in[20];
+    bf1[6]  = in[12];
+    bf1[7]  = in[28];
+    bf1[8]  = in[2];
+    bf1[9]  = in[18];
+    bf1[10] = in[10];
+    bf1[11] = in[26];
+    bf1[12] = in[6];
+    bf1[13] = in[22];
+    bf1[14] = in[14];
+    bf1[15] = in[30];
+    bf1[16] = in[1];
+    bf1[17] = in[17];
+    bf1[18] = in[9];
+    bf1[19] = in[25];
+    bf1[20] = in[5];
+    bf1[21] = in[21];
+    bf1[22] = in[13];
+    bf1[23] = in[29];
+    bf1[24] = in[3];
+    bf1[25] = in[19];
+    bf1[26] = in[11];
+    bf1[27] = in[27];
+    bf1[28] = in[7];
+    bf1[29] = in[23];
+    bf1[30] = in[15];
+    bf1[31] = in[31];
 
-        // stage 2
-        bf0[0]  = bf1[0];
-        bf0[1]  = bf1[1];
-        bf0[2]  = bf1[2];
-        bf0[3]  = bf1[3];
-        bf0[4]  = bf1[4];
-        bf0[5]  = bf1[5];
-        bf0[6]  = bf1[6];
-        bf0[7]  = bf1[7];
-        bf0[8]  = bf1[8];
-        bf0[9]  = bf1[9];
-        bf0[10] = bf1[10];
-        bf0[11] = bf1[11];
-        bf0[12] = bf1[12];
-        bf0[13] = bf1[13];
-        bf0[14] = bf1[14];
-        bf0[15] = bf1[15];
-        bf0[16] = half_btf_neon(&cospi62, &bf1[16], &cospim2, &bf1[31], bit);
-        bf0[17] = half_btf_neon(&cospi30, &bf1[17], &cospim34, &bf1[30], bit);
-        bf0[18] = half_btf_neon(&cospi46, &bf1[18], &cospim18, &bf1[29], bit);
-        bf0[19] = half_btf_neon(&cospi14, &bf1[19], &cospim50, &bf1[28], bit);
-        bf0[20] = half_btf_neon(&cospi54, &bf1[20], &cospim10, &bf1[27], bit);
-        bf0[21] = half_btf_neon(&cospi22, &bf1[21], &cospim42, &bf1[26], bit);
-        bf0[22] = half_btf_neon(&cospi38, &bf1[22], &cospim26, &bf1[25], bit);
-        bf0[23] = half_btf_neon(&cospi6, &bf1[23], &cospim58, &bf1[24], bit);
-        bf0[24] = half_btf_neon(&cospi58, &bf1[23], &cospi6, &bf1[24], bit);
-        bf0[25] = half_btf_neon(&cospi26, &bf1[22], &cospi38, &bf1[25], bit);
-        bf0[26] = half_btf_neon(&cospi42, &bf1[21], &cospi22, &bf1[26], bit);
-        bf0[27] = half_btf_neon(&cospi10, &bf1[20], &cospi54, &bf1[27], bit);
-        bf0[28] = half_btf_neon(&cospi50, &bf1[19], &cospi14, &bf1[28], bit);
-        bf0[29] = half_btf_neon(&cospi18, &bf1[18], &cospi46, &bf1[29], bit);
-        bf0[30] = half_btf_neon(&cospi34, &bf1[17], &cospi30, &bf1[30], bit);
-        bf0[31] = half_btf_neon(&cospi2, &bf1[16], &cospi62, &bf1[31], bit);
+    // stage 2
+    bf0[0]  = bf1[0];
+    bf0[1]  = bf1[1];
+    bf0[2]  = bf1[2];
+    bf0[3]  = bf1[3];
+    bf0[4]  = bf1[4];
+    bf0[5]  = bf1[5];
+    bf0[6]  = bf1[6];
+    bf0[7]  = bf1[7];
+    bf0[8]  = bf1[8];
+    bf0[9]  = bf1[9];
+    bf0[10] = bf1[10];
+    bf0[11] = bf1[11];
+    bf0[12] = bf1[12];
+    bf0[13] = bf1[13];
+    bf0[14] = bf1[14];
+    bf0[15] = bf1[15];
+    bf0[16] = half_btf_neon(&cospi62, &bf1[16], &cospim2, &bf1[31], bit);
+    bf0[17] = half_btf_neon(&cospi30, &bf1[17], &cospim34, &bf1[30], bit);
+    bf0[18] = half_btf_neon(&cospi46, &bf1[18], &cospim18, &bf1[29], bit);
+    bf0[19] = half_btf_neon(&cospi14, &bf1[19], &cospim50, &bf1[28], bit);
+    bf0[20] = half_btf_neon(&cospi54, &bf1[20], &cospim10, &bf1[27], bit);
+    bf0[21] = half_btf_neon(&cospi22, &bf1[21], &cospim42, &bf1[26], bit);
+    bf0[22] = half_btf_neon(&cospi38, &bf1[22], &cospim26, &bf1[25], bit);
+    bf0[23] = half_btf_neon(&cospi6, &bf1[23], &cospim58, &bf1[24], bit);
+    bf0[24] = half_btf_neon(&cospi58, &bf1[23], &cospi6, &bf1[24], bit);
+    bf0[25] = half_btf_neon(&cospi26, &bf1[22], &cospi38, &bf1[25], bit);
+    bf0[26] = half_btf_neon(&cospi42, &bf1[21], &cospi22, &bf1[26], bit);
+    bf0[27] = half_btf_neon(&cospi10, &bf1[20], &cospi54, &bf1[27], bit);
+    bf0[28] = half_btf_neon(&cospi50, &bf1[19], &cospi14, &bf1[28], bit);
+    bf0[29] = half_btf_neon(&cospi18, &bf1[18], &cospi46, &bf1[29], bit);
+    bf0[30] = half_btf_neon(&cospi34, &bf1[17], &cospi30, &bf1[30], bit);
+    bf0[31] = half_btf_neon(&cospi2, &bf1[16], &cospi62, &bf1[31], bit);
 
-        // stage 3
-        bf1[0]  = bf0[0];
-        bf1[1]  = bf0[1];
-        bf1[2]  = bf0[2];
-        bf1[3]  = bf0[3];
-        bf1[4]  = bf0[4];
-        bf1[5]  = bf0[5];
-        bf1[6]  = bf0[6];
-        bf1[7]  = bf0[7];
-        bf1[8]  = half_btf_neon(&cospi60, &bf0[8], &cospim4, &bf0[15], bit);
-        bf1[9]  = half_btf_neon(&cospi28, &bf0[9], &cospim36, &bf0[14], bit);
-        bf1[10] = half_btf_neon(&cospi44, &bf0[10], &cospim20, &bf0[13], bit);
-        bf1[11] = half_btf_neon(&cospi12, &bf0[11], &cospim52, &bf0[12], bit);
-        bf1[12] = half_btf_neon(&cospi52, &bf0[11], &cospi12, &bf0[12], bit);
-        bf1[13] = half_btf_neon(&cospi20, &bf0[10], &cospi44, &bf0[13], bit);
-        bf1[14] = half_btf_neon(&cospi36, &bf0[9], &cospi28, &bf0[14], bit);
-        bf1[15] = half_btf_neon(&cospi4, &bf0[8], &cospi60, &bf0[15], bit);
-        bf1[16] = vaddq_s32(bf0[16], bf0[17]);
-        bf1[17] = vsubq_s32(bf0[16], bf0[17]);
-        bf1[18] = vsubq_s32(bf0[19], bf0[18]);
-        bf1[19] = vaddq_s32(bf0[18], bf0[19]);
-        bf1[20] = vaddq_s32(bf0[20], bf0[21]);
-        bf1[21] = vsubq_s32(bf0[20], bf0[21]);
-        bf1[22] = vsubq_s32(bf0[23], bf0[22]);
-        bf1[23] = vaddq_s32(bf0[22], bf0[23]);
-        bf1[24] = vaddq_s32(bf0[24], bf0[25]);
-        bf1[25] = vsubq_s32(bf0[24], bf0[25]);
-        bf1[26] = vsubq_s32(bf0[27], bf0[26]);
-        bf1[27] = vaddq_s32(bf0[26], bf0[27]);
-        bf1[28] = vaddq_s32(bf0[28], bf0[29]);
-        bf1[29] = vsubq_s32(bf0[28], bf0[29]);
-        bf1[30] = vsubq_s32(bf0[31], bf0[30]);
-        bf1[31] = vaddq_s32(bf0[30], bf0[31]);
+    // stage 3
+    bf1[0]  = bf0[0];
+    bf1[1]  = bf0[1];
+    bf1[2]  = bf0[2];
+    bf1[3]  = bf0[3];
+    bf1[4]  = bf0[4];
+    bf1[5]  = bf0[5];
+    bf1[6]  = bf0[6];
+    bf1[7]  = bf0[7];
+    bf1[8]  = half_btf_neon(&cospi60, &bf0[8], &cospim4, &bf0[15], bit);
+    bf1[9]  = half_btf_neon(&cospi28, &bf0[9], &cospim36, &bf0[14], bit);
+    bf1[10] = half_btf_neon(&cospi44, &bf0[10], &cospim20, &bf0[13], bit);
+    bf1[11] = half_btf_neon(&cospi12, &bf0[11], &cospim52, &bf0[12], bit);
+    bf1[12] = half_btf_neon(&cospi52, &bf0[11], &cospi12, &bf0[12], bit);
+    bf1[13] = half_btf_neon(&cospi20, &bf0[10], &cospi44, &bf0[13], bit);
+    bf1[14] = half_btf_neon(&cospi36, &bf0[9], &cospi28, &bf0[14], bit);
+    bf1[15] = half_btf_neon(&cospi4, &bf0[8], &cospi60, &bf0[15], bit);
+    bf1[16] = vaddq_s32(bf0[16], bf0[17]);
+    bf1[17] = vsubq_s32(bf0[16], bf0[17]);
+    bf1[18] = vsubq_s32(bf0[19], bf0[18]);
+    bf1[19] = vaddq_s32(bf0[18], bf0[19]);
+    bf1[20] = vaddq_s32(bf0[20], bf0[21]);
+    bf1[21] = vsubq_s32(bf0[20], bf0[21]);
+    bf1[22] = vsubq_s32(bf0[23], bf0[22]);
+    bf1[23] = vaddq_s32(bf0[22], bf0[23]);
+    bf1[24] = vaddq_s32(bf0[24], bf0[25]);
+    bf1[25] = vsubq_s32(bf0[24], bf0[25]);
+    bf1[26] = vsubq_s32(bf0[27], bf0[26]);
+    bf1[27] = vaddq_s32(bf0[26], bf0[27]);
+    bf1[28] = vaddq_s32(bf0[28], bf0[29]);
+    bf1[29] = vsubq_s32(bf0[28], bf0[29]);
+    bf1[30] = vsubq_s32(bf0[31], bf0[30]);
+    bf1[31] = vaddq_s32(bf0[30], bf0[31]);
 
-        // stage 4
-        bf0[0]  = bf1[0];
-        bf0[1]  = bf1[1];
-        bf0[2]  = bf1[2];
-        bf0[3]  = bf1[3];
-        bf0[4]  = half_btf_neon(&cospi56, &bf1[4], &cospim8, &bf1[7], bit);
-        bf0[5]  = half_btf_neon(&cospi24, &bf1[5], &cospim40, &bf1[6], bit);
-        bf0[6]  = half_btf_neon(&cospi40, &bf1[5], &cospi24, &bf1[6], bit);
-        bf0[7]  = half_btf_neon(&cospi8, &bf1[4], &cospi56, &bf1[7], bit);
-        bf0[8]  = vaddq_s32(bf1[8], bf1[9]);
-        bf0[9]  = vsubq_s32(bf1[8], bf1[9]);
-        bf0[10] = vsubq_s32(bf1[11], bf1[10]);
-        bf0[11] = vaddq_s32(bf1[10], bf1[11]);
-        bf0[12] = vaddq_s32(bf1[12], bf1[13]);
-        bf0[13] = vsubq_s32(bf1[12], bf1[13]);
-        bf0[14] = vsubq_s32(bf1[15], bf1[14]);
-        bf0[15] = vaddq_s32(bf1[14], bf1[15]);
-        bf0[16] = bf1[16];
-        bf0[17] = half_btf_neon(&cospim8, &bf1[17], &cospi56, &bf1[30], bit);
-        bf0[18] = half_btf_neon(&cospim56, &bf1[18], &cospim8, &bf1[29], bit);
-        bf0[19] = bf1[19];
-        bf0[20] = bf1[20];
-        bf0[21] = half_btf_neon(&cospim40, &bf1[21], &cospi24, &bf1[26], bit);
-        bf0[22] = half_btf_neon(&cospim24, &bf1[22], &cospim40, &bf1[25], bit);
-        bf0[23] = bf1[23];
-        bf0[24] = bf1[24];
-        bf0[25] = half_btf_neon(&cospim40, &bf1[22], &cospi24, &bf1[25], bit);
-        bf0[26] = half_btf_neon(&cospi24, &bf1[21], &cospi40, &bf1[26], bit);
-        bf0[27] = bf1[27];
-        bf0[28] = bf1[28];
-        bf0[29] = half_btf_neon(&cospim8, &bf1[18], &cospi56, &bf1[29], bit);
-        bf0[30] = half_btf_neon(&cospi56, &bf1[17], &cospi8, &bf1[30], bit);
-        bf0[31] = bf1[31];
+    // stage 4
+    bf0[0]  = bf1[0];
+    bf0[1]  = bf1[1];
+    bf0[2]  = bf1[2];
+    bf0[3]  = bf1[3];
+    bf0[4]  = half_btf_neon(&cospi56, &bf1[4], &cospim8, &bf1[7], bit);
+    bf0[5]  = half_btf_neon(&cospi24, &bf1[5], &cospim40, &bf1[6], bit);
+    bf0[6]  = half_btf_neon(&cospi40, &bf1[5], &cospi24, &bf1[6], bit);
+    bf0[7]  = half_btf_neon(&cospi8, &bf1[4], &cospi56, &bf1[7], bit);
+    bf0[8]  = vaddq_s32(bf1[8], bf1[9]);
+    bf0[9]  = vsubq_s32(bf1[8], bf1[9]);
+    bf0[10] = vsubq_s32(bf1[11], bf1[10]);
+    bf0[11] = vaddq_s32(bf1[10], bf1[11]);
+    bf0[12] = vaddq_s32(bf1[12], bf1[13]);
+    bf0[13] = vsubq_s32(bf1[12], bf1[13]);
+    bf0[14] = vsubq_s32(bf1[15], bf1[14]);
+    bf0[15] = vaddq_s32(bf1[14], bf1[15]);
+    bf0[16] = bf1[16];
+    bf0[17] = half_btf_neon(&cospim8, &bf1[17], &cospi56, &bf1[30], bit);
+    bf0[18] = half_btf_neon(&cospim56, &bf1[18], &cospim8, &bf1[29], bit);
+    bf0[19] = bf1[19];
+    bf0[20] = bf1[20];
+    bf0[21] = half_btf_neon(&cospim40, &bf1[21], &cospi24, &bf1[26], bit);
+    bf0[22] = half_btf_neon(&cospim24, &bf1[22], &cospim40, &bf1[25], bit);
+    bf0[23] = bf1[23];
+    bf0[24] = bf1[24];
+    bf0[25] = half_btf_neon(&cospim40, &bf1[22], &cospi24, &bf1[25], bit);
+    bf0[26] = half_btf_neon(&cospi24, &bf1[21], &cospi40, &bf1[26], bit);
+    bf0[27] = bf1[27];
+    bf0[28] = bf1[28];
+    bf0[29] = half_btf_neon(&cospim8, &bf1[18], &cospi56, &bf1[29], bit);
+    bf0[30] = half_btf_neon(&cospi56, &bf1[17], &cospi8, &bf1[30], bit);
+    bf0[31] = bf1[31];
 
-        // stage 5
-        bf1[0]  = half_btf_neon(&cospi32, &bf0[0], &cospi32, &bf0[1], bit);
-        bf1[1]  = half_btf_neon(&cospi32, &bf0[0], &cospim32, &bf0[1], bit);
-        bf1[2]  = half_btf_neon(&cospi48, &bf0[2], &cospim16, &bf0[3], bit);
-        bf1[3]  = half_btf_neon(&cospi16, &bf0[2], &cospi48, &bf0[3], bit);
-        bf1[4]  = vaddq_s32(bf0[4], bf0[5]);
-        bf1[5]  = vsubq_s32(bf0[4], bf0[5]);
-        bf1[6]  = vsubq_s32(bf0[7], bf0[6]);
-        bf1[7]  = vaddq_s32(bf0[6], bf0[7]);
-        bf1[8]  = bf0[8];
-        bf1[9]  = half_btf_neon(&cospim16, &bf0[9], &cospi48, &bf0[14], bit);
-        bf1[10] = half_btf_neon(&cospim48, &bf0[10], &cospim16, &bf0[13], bit);
-        bf1[11] = bf0[11];
-        bf1[12] = bf0[12];
-        bf1[13] = half_btf_neon(&cospim16, &bf0[10], &cospi48, &bf0[13], bit);
-        bf1[14] = half_btf_neon(&cospi48, &bf0[9], &cospi16, &bf0[14], bit);
-        bf1[15] = bf0[15];
-        bf1[16] = vaddq_s32(bf0[16], bf0[19]);
-        bf1[17] = vaddq_s32(bf0[17], bf0[18]);
-        bf1[18] = vsubq_s32(bf0[17], bf0[18]);
-        bf1[19] = vsubq_s32(bf0[16], bf0[19]);
-        bf1[20] = vsubq_s32(bf0[23], bf0[20]);
-        bf1[21] = vsubq_s32(bf0[22], bf0[21]);
-        bf1[22] = vaddq_s32(bf0[21], bf0[22]);
-        bf1[23] = vaddq_s32(bf0[20], bf0[23]);
-        bf1[24] = vaddq_s32(bf0[24], bf0[27]);
-        bf1[25] = vaddq_s32(bf0[25], bf0[26]);
-        bf1[26] = vsubq_s32(bf0[25], bf0[26]);
-        bf1[27] = vsubq_s32(bf0[24], bf0[27]);
-        bf1[28] = vsubq_s32(bf0[31], bf0[28]);
-        bf1[29] = vsubq_s32(bf0[30], bf0[29]);
-        bf1[30] = vaddq_s32(bf0[29], bf0[30]);
-        bf1[31] = vaddq_s32(bf0[28], bf0[31]);
+    // stage 5
+    bf1[0]  = half_btf_neon(&cospi32, &bf0[0], &cospi32, &bf0[1], bit);
+    bf1[1]  = half_btf_neon(&cospi32, &bf0[0], &cospim32, &bf0[1], bit);
+    bf1[2]  = half_btf_neon(&cospi48, &bf0[2], &cospim16, &bf0[3], bit);
+    bf1[3]  = half_btf_neon(&cospi16, &bf0[2], &cospi48, &bf0[3], bit);
+    bf1[4]  = vaddq_s32(bf0[4], bf0[5]);
+    bf1[5]  = vsubq_s32(bf0[4], bf0[5]);
+    bf1[6]  = vsubq_s32(bf0[7], bf0[6]);
+    bf1[7]  = vaddq_s32(bf0[6], bf0[7]);
+    bf1[8]  = bf0[8];
+    bf1[9]  = half_btf_neon(&cospim16, &bf0[9], &cospi48, &bf0[14], bit);
+    bf1[10] = half_btf_neon(&cospim48, &bf0[10], &cospim16, &bf0[13], bit);
+    bf1[11] = bf0[11];
+    bf1[12] = bf0[12];
+    bf1[13] = half_btf_neon(&cospim16, &bf0[10], &cospi48, &bf0[13], bit);
+    bf1[14] = half_btf_neon(&cospi48, &bf0[9], &cospi16, &bf0[14], bit);
+    bf1[15] = bf0[15];
+    bf1[16] = vaddq_s32(bf0[16], bf0[19]);
+    bf1[17] = vaddq_s32(bf0[17], bf0[18]);
+    bf1[18] = vsubq_s32(bf0[17], bf0[18]);
+    bf1[19] = vsubq_s32(bf0[16], bf0[19]);
+    bf1[20] = vsubq_s32(bf0[23], bf0[20]);
+    bf1[21] = vsubq_s32(bf0[22], bf0[21]);
+    bf1[22] = vaddq_s32(bf0[21], bf0[22]);
+    bf1[23] = vaddq_s32(bf0[20], bf0[23]);
+    bf1[24] = vaddq_s32(bf0[24], bf0[27]);
+    bf1[25] = vaddq_s32(bf0[25], bf0[26]);
+    bf1[26] = vsubq_s32(bf0[25], bf0[26]);
+    bf1[27] = vsubq_s32(bf0[24], bf0[27]);
+    bf1[28] = vsubq_s32(bf0[31], bf0[28]);
+    bf1[29] = vsubq_s32(bf0[30], bf0[29]);
+    bf1[30] = vaddq_s32(bf0[29], bf0[30]);
+    bf1[31] = vaddq_s32(bf0[28], bf0[31]);
 
-        // stage 6
-        bf0[0]  = vaddq_s32(bf1[0], bf1[3]);
-        bf0[1]  = vaddq_s32(bf1[1], bf1[2]);
-        bf0[2]  = vsubq_s32(bf1[1], bf1[2]);
-        bf0[3]  = vsubq_s32(bf1[0], bf1[3]);
-        bf0[4]  = bf1[4];
-        bf0[5]  = half_btf_neon(&cospim32, &bf1[5], &cospi32, &bf1[6], bit);
-        bf0[6]  = half_btf_neon(&cospi32, &bf1[5], &cospi32, &bf1[6], bit);
-        bf0[7]  = bf1[7];
-        bf0[8]  = vaddq_s32(bf1[8], bf1[11]);
-        bf0[9]  = vaddq_s32(bf1[9], bf1[10]);
-        bf0[10] = vsubq_s32(bf1[9], bf1[10]);
-        bf0[11] = vsubq_s32(bf1[8], bf1[11]);
-        bf0[12] = vsubq_s32(bf1[15], bf1[12]);
-        bf0[13] = vsubq_s32(bf1[14], bf1[13]);
-        bf0[14] = vaddq_s32(bf1[13], bf1[14]);
-        bf0[15] = vaddq_s32(bf1[12], bf1[15]);
-        bf0[16] = bf1[16];
-        bf0[17] = bf1[17];
-        bf0[18] = half_btf_neon(&cospim16, &bf1[18], &cospi48, &bf1[29], bit);
-        bf0[19] = half_btf_neon(&cospim16, &bf1[19], &cospi48, &bf1[28], bit);
-        bf0[20] = half_btf_neon(&cospim48, &bf1[20], &cospim16, &bf1[27], bit);
-        bf0[21] = half_btf_neon(&cospim48, &bf1[21], &cospim16, &bf1[26], bit);
-        bf0[22] = bf1[22];
-        bf0[23] = bf1[23];
-        bf0[24] = bf1[24];
-        bf0[25] = bf1[25];
-        bf0[26] = half_btf_neon(&cospim16, &bf1[21], &cospi48, &bf1[26], bit);
-        bf0[27] = half_btf_neon(&cospim16, &bf1[20], &cospi48, &bf1[27], bit);
-        bf0[28] = half_btf_neon(&cospi48, &bf1[19], &cospi16, &bf1[28], bit);
-        bf0[29] = half_btf_neon(&cospi48, &bf1[18], &cospi16, &bf1[29], bit);
-        bf0[30] = bf1[30];
-        bf0[31] = bf1[31];
+    // stage 6
+    bf0[0]  = vaddq_s32(bf1[0], bf1[3]);
+    bf0[1]  = vaddq_s32(bf1[1], bf1[2]);
+    bf0[2]  = vsubq_s32(bf1[1], bf1[2]);
+    bf0[3]  = vsubq_s32(bf1[0], bf1[3]);
+    bf0[4]  = bf1[4];
+    bf0[5]  = half_btf_neon(&cospim32, &bf1[5], &cospi32, &bf1[6], bit);
+    bf0[6]  = half_btf_neon(&cospi32, &bf1[5], &cospi32, &bf1[6], bit);
+    bf0[7]  = bf1[7];
+    bf0[8]  = vaddq_s32(bf1[8], bf1[11]);
+    bf0[9]  = vaddq_s32(bf1[9], bf1[10]);
+    bf0[10] = vsubq_s32(bf1[9], bf1[10]);
+    bf0[11] = vsubq_s32(bf1[8], bf1[11]);
+    bf0[12] = vsubq_s32(bf1[15], bf1[12]);
+    bf0[13] = vsubq_s32(bf1[14], bf1[13]);
+    bf0[14] = vaddq_s32(bf1[13], bf1[14]);
+    bf0[15] = vaddq_s32(bf1[12], bf1[15]);
+    bf0[16] = bf1[16];
+    bf0[17] = bf1[17];
+    bf0[18] = half_btf_neon(&cospim16, &bf1[18], &cospi48, &bf1[29], bit);
+    bf0[19] = half_btf_neon(&cospim16, &bf1[19], &cospi48, &bf1[28], bit);
+    bf0[20] = half_btf_neon(&cospim48, &bf1[20], &cospim16, &bf1[27], bit);
+    bf0[21] = half_btf_neon(&cospim48, &bf1[21], &cospim16, &bf1[26], bit);
+    bf0[22] = bf1[22];
+    bf0[23] = bf1[23];
+    bf0[24] = bf1[24];
+    bf0[25] = bf1[25];
+    bf0[26] = half_btf_neon(&cospim16, &bf1[21], &cospi48, &bf1[26], bit);
+    bf0[27] = half_btf_neon(&cospim16, &bf1[20], &cospi48, &bf1[27], bit);
+    bf0[28] = half_btf_neon(&cospi48, &bf1[19], &cospi16, &bf1[28], bit);
+    bf0[29] = half_btf_neon(&cospi48, &bf1[18], &cospi16, &bf1[29], bit);
+    bf0[30] = bf1[30];
+    bf0[31] = bf1[31];
 
-        // stage 7
-        bf1[0]  = vaddq_s32(bf0[0], bf0[7]);
-        bf1[1]  = vaddq_s32(bf0[1], bf0[6]);
-        bf1[2]  = vaddq_s32(bf0[2], bf0[5]);
-        bf1[3]  = vaddq_s32(bf0[3], bf0[4]);
-        bf1[4]  = vsubq_s32(bf0[3], bf0[4]);
-        bf1[5]  = vsubq_s32(bf0[2], bf0[5]);
-        bf1[6]  = vsubq_s32(bf0[1], bf0[6]);
-        bf1[7]  = vsubq_s32(bf0[0], bf0[7]);
-        bf1[8]  = bf0[8];
-        bf1[9]  = bf0[9];
-        bf1[10] = half_btf_neon(&cospim32, &bf0[10], &cospi32, &bf0[13], bit);
-        bf1[11] = half_btf_neon(&cospim32, &bf0[11], &cospi32, &bf0[12], bit);
-        bf1[12] = half_btf_neon(&cospi32, &bf0[11], &cospi32, &bf0[12], bit);
-        bf1[13] = half_btf_neon(&cospi32, &bf0[10], &cospi32, &bf0[13], bit);
-        bf1[14] = bf0[14];
-        bf1[15] = bf0[15];
-        bf1[16] = vaddq_s32(bf0[16], bf0[23]);
-        bf1[17] = vaddq_s32(bf0[17], bf0[22]);
-        bf1[18] = vaddq_s32(bf0[18], bf0[21]);
-        bf1[19] = vaddq_s32(bf0[19], bf0[20]);
-        bf1[20] = vsubq_s32(bf0[19], bf0[20]);
-        bf1[21] = vsubq_s32(bf0[18], bf0[21]);
-        bf1[22] = vsubq_s32(bf0[17], bf0[22]);
-        bf1[23] = vsubq_s32(bf0[16], bf0[23]);
-        bf1[24] = vsubq_s32(bf0[31], bf0[24]);
-        bf1[25] = vsubq_s32(bf0[30], bf0[25]);
-        bf1[26] = vsubq_s32(bf0[29], bf0[26]);
-        bf1[27] = vsubq_s32(bf0[28], bf0[27]);
-        bf1[28] = vaddq_s32(bf0[27], bf0[28]);
-        bf1[29] = vaddq_s32(bf0[26], bf0[29]);
-        bf1[30] = vaddq_s32(bf0[25], bf0[30]);
-        bf1[31] = vaddq_s32(bf0[24], bf0[31]);
+    // stage 7
+    bf1[0]  = vaddq_s32(bf0[0], bf0[7]);
+    bf1[1]  = vaddq_s32(bf0[1], bf0[6]);
+    bf1[2]  = vaddq_s32(bf0[2], bf0[5]);
+    bf1[3]  = vaddq_s32(bf0[3], bf0[4]);
+    bf1[4]  = vsubq_s32(bf0[3], bf0[4]);
+    bf1[5]  = vsubq_s32(bf0[2], bf0[5]);
+    bf1[6]  = vsubq_s32(bf0[1], bf0[6]);
+    bf1[7]  = vsubq_s32(bf0[0], bf0[7]);
+    bf1[8]  = bf0[8];
+    bf1[9]  = bf0[9];
+    bf1[10] = half_btf_neon(&cospim32, &bf0[10], &cospi32, &bf0[13], bit);
+    bf1[11] = half_btf_neon(&cospim32, &bf0[11], &cospi32, &bf0[12], bit);
+    bf1[12] = half_btf_neon(&cospi32, &bf0[11], &cospi32, &bf0[12], bit);
+    bf1[13] = half_btf_neon(&cospi32, &bf0[10], &cospi32, &bf0[13], bit);
+    bf1[14] = bf0[14];
+    bf1[15] = bf0[15];
+    bf1[16] = vaddq_s32(bf0[16], bf0[23]);
+    bf1[17] = vaddq_s32(bf0[17], bf0[22]);
+    bf1[18] = vaddq_s32(bf0[18], bf0[21]);
+    bf1[19] = vaddq_s32(bf0[19], bf0[20]);
+    bf1[20] = vsubq_s32(bf0[19], bf0[20]);
+    bf1[21] = vsubq_s32(bf0[18], bf0[21]);
+    bf1[22] = vsubq_s32(bf0[17], bf0[22]);
+    bf1[23] = vsubq_s32(bf0[16], bf0[23]);
+    bf1[24] = vsubq_s32(bf0[31], bf0[24]);
+    bf1[25] = vsubq_s32(bf0[30], bf0[25]);
+    bf1[26] = vsubq_s32(bf0[29], bf0[26]);
+    bf1[27] = vsubq_s32(bf0[28], bf0[27]);
+    bf1[28] = vaddq_s32(bf0[27], bf0[28]);
+    bf1[29] = vaddq_s32(bf0[26], bf0[29]);
+    bf1[30] = vaddq_s32(bf0[25], bf0[30]);
+    bf1[31] = vaddq_s32(bf0[24], bf0[31]);
 
-        // stage 8
-        bf0[0]  = vaddq_s32(bf1[0], bf1[15]);
-        bf0[1]  = vaddq_s32(bf1[1], bf1[14]);
-        bf0[2]  = vaddq_s32(bf1[2], bf1[13]);
-        bf0[3]  = vaddq_s32(bf1[3], bf1[12]);
-        bf0[4]  = vaddq_s32(bf1[4], bf1[11]);
-        bf0[5]  = vaddq_s32(bf1[5], bf1[10]);
-        bf0[6]  = vaddq_s32(bf1[6], bf1[9]);
-        bf0[7]  = vaddq_s32(bf1[7], bf1[8]);
-        bf0[8]  = vsubq_s32(bf1[7], bf1[8]);
-        bf0[9]  = vsubq_s32(bf1[6], bf1[9]);
-        bf0[10] = vsubq_s32(bf1[5], bf1[10]);
-        bf0[11] = vsubq_s32(bf1[4], bf1[11]);
-        bf0[12] = vsubq_s32(bf1[3], bf1[12]);
-        bf0[13] = vsubq_s32(bf1[2], bf1[13]);
-        bf0[14] = vsubq_s32(bf1[1], bf1[14]);
-        bf0[15] = vsubq_s32(bf1[0], bf1[15]);
-        bf0[16] = bf1[16];
-        bf0[17] = bf1[17];
-        bf0[18] = bf1[18];
-        bf0[19] = bf1[19];
-        bf0[20] = half_btf_neon(&cospim32, &bf1[20], &cospi32, &bf1[27], bit);
-        bf0[21] = half_btf_neon(&cospim32, &bf1[21], &cospi32, &bf1[26], bit);
-        bf0[22] = half_btf_neon(&cospim32, &bf1[22], &cospi32, &bf1[25], bit);
-        bf0[23] = half_btf_neon(&cospim32, &bf1[23], &cospi32, &bf1[24], bit);
-        bf0[24] = half_btf_neon(&cospi32, &bf1[23], &cospi32, &bf1[24], bit);
-        bf0[25] = half_btf_neon(&cospi32, &bf1[22], &cospi32, &bf1[25], bit);
-        bf0[26] = half_btf_neon(&cospi32, &bf1[21], &cospi32, &bf1[26], bit);
-        bf0[27] = half_btf_neon(&cospi32, &bf1[20], &cospi32, &bf1[27], bit);
-        bf0[28] = bf1[28];
-        bf0[29] = bf1[29];
-        bf0[30] = bf1[30];
-        bf0[31] = bf1[31];
+    // stage 8
+    bf0[0]  = vaddq_s32(bf1[0], bf1[15]);
+    bf0[1]  = vaddq_s32(bf1[1], bf1[14]);
+    bf0[2]  = vaddq_s32(bf1[2], bf1[13]);
+    bf0[3]  = vaddq_s32(bf1[3], bf1[12]);
+    bf0[4]  = vaddq_s32(bf1[4], bf1[11]);
+    bf0[5]  = vaddq_s32(bf1[5], bf1[10]);
+    bf0[6]  = vaddq_s32(bf1[6], bf1[9]);
+    bf0[7]  = vaddq_s32(bf1[7], bf1[8]);
+    bf0[8]  = vsubq_s32(bf1[7], bf1[8]);
+    bf0[9]  = vsubq_s32(bf1[6], bf1[9]);
+    bf0[10] = vsubq_s32(bf1[5], bf1[10]);
+    bf0[11] = vsubq_s32(bf1[4], bf1[11]);
+    bf0[12] = vsubq_s32(bf1[3], bf1[12]);
+    bf0[13] = vsubq_s32(bf1[2], bf1[13]);
+    bf0[14] = vsubq_s32(bf1[1], bf1[14]);
+    bf0[15] = vsubq_s32(bf1[0], bf1[15]);
+    bf0[16] = bf1[16];
+    bf0[17] = bf1[17];
+    bf0[18] = bf1[18];
+    bf0[19] = bf1[19];
+    bf0[20] = half_btf_neon(&cospim32, &bf1[20], &cospi32, &bf1[27], bit);
+    bf0[21] = half_btf_neon(&cospim32, &bf1[21], &cospi32, &bf1[26], bit);
+    bf0[22] = half_btf_neon(&cospim32, &bf1[22], &cospi32, &bf1[25], bit);
+    bf0[23] = half_btf_neon(&cospim32, &bf1[23], &cospi32, &bf1[24], bit);
+    bf0[24] = half_btf_neon(&cospi32, &bf1[23], &cospi32, &bf1[24], bit);
+    bf0[25] = half_btf_neon(&cospi32, &bf1[22], &cospi32, &bf1[25], bit);
+    bf0[26] = half_btf_neon(&cospi32, &bf1[21], &cospi32, &bf1[26], bit);
+    bf0[27] = half_btf_neon(&cospi32, &bf1[20], &cospi32, &bf1[27], bit);
+    bf0[28] = bf1[28];
+    bf0[29] = bf1[29];
+    bf0[30] = bf1[30];
+    bf0[31] = bf1[31];
 
-        // stage 9
-        out[0 * 8 + col]  = vaddq_s32(bf0[0], bf0[31]);
-        out[1 * 8 + col]  = vaddq_s32(bf0[1], bf0[30]);
-        out[2 * 8 + col]  = vaddq_s32(bf0[2], bf0[29]);
-        out[3 * 8 + col]  = vaddq_s32(bf0[3], bf0[28]);
-        out[4 * 8 + col]  = vaddq_s32(bf0[4], bf0[27]);
-        out[5 * 8 + col]  = vaddq_s32(bf0[5], bf0[26]);
-        out[6 * 8 + col]  = vaddq_s32(bf0[6], bf0[25]);
-        out[7 * 8 + col]  = vaddq_s32(bf0[7], bf0[24]);
-        out[8 * 8 + col]  = vaddq_s32(bf0[8], bf0[23]);
-        out[9 * 8 + col]  = vaddq_s32(bf0[9], bf0[22]);
-        out[10 * 8 + col] = vaddq_s32(bf0[10], bf0[21]);
-        out[11 * 8 + col] = vaddq_s32(bf0[11], bf0[20]);
-        out[12 * 8 + col] = vaddq_s32(bf0[12], bf0[19]);
-        out[13 * 8 + col] = vaddq_s32(bf0[13], bf0[18]);
-        out[14 * 8 + col] = vaddq_s32(bf0[14], bf0[17]);
-        out[15 * 8 + col] = vaddq_s32(bf0[15], bf0[16]);
-        out[16 * 8 + col] = vsubq_s32(bf0[15], bf0[16]);
-        out[17 * 8 + col] = vsubq_s32(bf0[14], bf0[17]);
-        out[18 * 8 + col] = vsubq_s32(bf0[13], bf0[18]);
-        out[19 * 8 + col] = vsubq_s32(bf0[12], bf0[19]);
-        out[20 * 8 + col] = vsubq_s32(bf0[11], bf0[20]);
-        out[21 * 8 + col] = vsubq_s32(bf0[10], bf0[21]);
-        out[22 * 8 + col] = vsubq_s32(bf0[9], bf0[22]);
-        out[23 * 8 + col] = vsubq_s32(bf0[8], bf0[23]);
-        out[24 * 8 + col] = vsubq_s32(bf0[7], bf0[24]);
-        out[25 * 8 + col] = vsubq_s32(bf0[6], bf0[25]);
-        out[26 * 8 + col] = vsubq_s32(bf0[5], bf0[26]);
-        out[27 * 8 + col] = vsubq_s32(bf0[4], bf0[27]);
-        out[28 * 8 + col] = vsubq_s32(bf0[3], bf0[28]);
-        out[29 * 8 + col] = vsubq_s32(bf0[2], bf0[29]);
-        out[30 * 8 + col] = vsubq_s32(bf0[1], bf0[30]);
-        out[31 * 8 + col] = vsubq_s32(bf0[0], bf0[31]);
-    }
+    // stage 9
+    out[0]  = vaddq_s32(bf0[0], bf0[31]);
+    out[1]  = vaddq_s32(bf0[1], bf0[30]);
+    out[2]  = vaddq_s32(bf0[2], bf0[29]);
+    out[3]  = vaddq_s32(bf0[3], bf0[28]);
+    out[4]  = vaddq_s32(bf0[4], bf0[27]);
+    out[5]  = vaddq_s32(bf0[5], bf0[26]);
+    out[6]  = vaddq_s32(bf0[6], bf0[25]);
+    out[7]  = vaddq_s32(bf0[7], bf0[24]);
+    out[8]  = vaddq_s32(bf0[8], bf0[23]);
+    out[9]  = vaddq_s32(bf0[9], bf0[22]);
+    out[10] = vaddq_s32(bf0[10], bf0[21]);
+    out[11] = vaddq_s32(bf0[11], bf0[20]);
+    out[12] = vaddq_s32(bf0[12], bf0[19]);
+    out[13] = vaddq_s32(bf0[13], bf0[18]);
+    out[14] = vaddq_s32(bf0[14], bf0[17]);
+    out[15] = vaddq_s32(bf0[15], bf0[16]);
+    out[16] = vsubq_s32(bf0[15], bf0[16]);
+    out[17] = vsubq_s32(bf0[14], bf0[17]);
+    out[18] = vsubq_s32(bf0[13], bf0[18]);
+    out[19] = vsubq_s32(bf0[12], bf0[19]);
+    out[20] = vsubq_s32(bf0[11], bf0[20]);
+    out[21] = vsubq_s32(bf0[10], bf0[21]);
+    out[22] = vsubq_s32(bf0[9], bf0[22]);
+    out[23] = vsubq_s32(bf0[8], bf0[23]);
+    out[24] = vsubq_s32(bf0[7], bf0[24]);
+    out[25] = vsubq_s32(bf0[6], bf0[25]);
+    out[26] = vsubq_s32(bf0[5], bf0[26]);
+    out[27] = vsubq_s32(bf0[4], bf0[27]);
+    out[28] = vsubq_s32(bf0[3], bf0[28]);
+    out[29] = vsubq_s32(bf0[2], bf0[29]);
+    out[30] = vsubq_s32(bf0[1], bf0[30]);
+    out[31] = vsubq_s32(bf0[0], bf0[31]);
 }
 
-static INLINE void load_buffer_32x32(const int32_t *coeff, int32x4_t in[]) {
-    for (int32_t i = 0; i < 256; ++i) {
-        in[i] = vld1q_s32(coeff);
-        coeff += 4;
-    }
+static INLINE void idct32_xn_neon(int32x4_t in[], int32x4_t out[], int32_t bit, int howmany) {
+    const int stride = 32;
+    int       i      = 0;
+    do { idct32_x4_neon(in + i * stride, out + i * stride, bit); } while (++i < howmany);
 }
 
-static INLINE void transpose_8nx8n(const int32x4_t input[], int32x4_t output[], const int width, const int height) {
-    const int numcol = height >> 2;
-    const int numrow = width >> 2;
-    for (int j = 0; j < numrow; j++) {
-        for (int i = 0; i < numcol; i++) {
-            TRANSPOSE_4X4(input[i * width + j + (numrow * 0)],
-                          input[i * width + j + (numrow * 1)],
-                          input[i * width + j + (numrow * 2)],
-                          input[i * width + j + (numrow * 3)],
-                          output[j * height + i + (numcol * 0)],
-                          output[j * height + i + (numcol * 1)],
-                          output[j * height + i + (numcol * 2)],
-                          output[j * height + i + (numcol * 3)]);
-        }
+static INLINE void load_buffer_s32(const int32_t *input, int32x4_t *in, const int col, const int row) {
+    for (int i = 0; i < col; i++) {
+        for (int j = 0; j < row >> 2; j++) { in[i + j * col] = vld1q_s32(input + i * row + j * 4); }
     }
 }
 
 void svt_av1_inv_txfm2d_add_32x32_neon(const int32_t *input, uint16_t *output_r, int32_t stride_r, uint16_t *output_w,
                                        int32_t stride_w, TxType tx_type, int32_t bd) {
     int32x4_t     in[256], out[256];
-    const int8_t *shift   = svt_aom_inv_txfm_shift_ls[TX_32X32];
-    const int32_t txw_idx = get_txw_idx(TX_32X32);
-    const int32_t txh_idx = get_txh_idx(TX_32X32);
+    const int8_t *shift = svt_aom_inv_txfm_shift_ls[TX_32X32];
 
     switch (tx_type) {
     case DCT_DCT:
-        load_buffer_32x32(input, in);
-        transpose_8nx8n(in, out, 32, 32);
-        idct32_neon(out, in, inv_cos_bit_row[txw_idx][txh_idx]);
-        round_shift_32x32(in, -shift[0]);
-        transpose_8nx8n(in, out, 32, 32);
-        idct32_neon(out, in, inv_cos_bit_col[txw_idx][txh_idx]);
-        write_buffer_32x32(in, output_r, stride_r, output_w, stride_w, 0, 0, -shift[1], bd);
+        load_buffer_s32(input, in, 32, 32);
+        transpose_arrays_s32_32x32(in, out);
+        idct32_xn_neon(out, in, inv_cos_bit_row[3][3], 8);
+        round_shift_neon(in, shift[0], 256);
+        transpose_arrays_s32_32x32(in, out);
+        idct32_xn_neon(out, in, inv_cos_bit_col[3][3], 8);
+        write_buffer_32x32_(in, output_r, stride_r, output_w, stride_w, shift[1], bd);
         break;
     case IDTX:
-        load_buffer_32x32(input, in);
-        write_buffer_32x32(in, output_r, stride_r, output_w, stride_w, 0, 0, (-shift[0] - shift[1] - 4), bd);
+        load_buffer_s32(input, in, 32, 32);
+        write_buffer_32x32_(in, output_r, stride_r, output_w, stride_w, shift[0] + shift[1] + 4, bd);
         break;
     default: assert(0);
     }
@@ -1765,12 +1786,6 @@ static INLINE void iidentity16_xn_neon(int32x4_t *in, int32x4_t *out, int bit, i
     const int stride = 16;
     int       i      = 0;
     do { iidentity16_x4_neon(in + i * stride, out + i * stride, bit); } while (++i < howmany);
-}
-
-static INLINE void load_buffer_s32(const int32_t *input, int32x4_t *in, const int col, const int row) {
-    for (int i = 0; i < col; i++) {
-        for (int j = 0; j < row >> 2; j++) { in[i + j * col] = vld1q_s32(input + i * row + j * 4); }
-    }
 }
 
 void svt_av1_inv_txfm2d_add_16x16_neon(const int32_t *input, uint16_t *output_r, int32_t stride_r, uint16_t *output_w,
