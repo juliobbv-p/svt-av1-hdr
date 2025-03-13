@@ -65,6 +65,7 @@ set(arch_neutral_files
     unit_test_utility.h
     FilmGrainExpectedResult.h
     FilmGrainTest.cc
+    FwdTxfm2dApproxTest.cc
     GlobalMotionUtilTest.cc
     IntraBcUtilTest.cc
     ResizeTest.cc
