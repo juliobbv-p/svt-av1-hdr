@@ -125,3 +125,117 @@ void svt_av1_compute_stats_sve(int32_t wiener_win, const uint8_t *dgd, const uin
 
     svt_aom_free(d);
 }
+
+int64_t svt_av1_lowbd_pixel_proj_error_sve(const uint8_t *src8, int32_t width, int32_t height, int32_t src_stride,
+                                           const uint8_t *dat8, int32_t dat_stride, int32_t *flt0, int32_t flt0_stride,
+                                           int32_t *flt1, int32_t flt1_stride, int32_t xq[2],
+                                           const SgrParamsType *params) {
+    if (width % 16 != 0) {
+        return svt_av1_lowbd_pixel_proj_error_c(
+            src8, width, height, src_stride, dat8, dat_stride, flt0, flt0_stride, flt1, flt1_stride, xq, params);
+    }
+
+    int64x2_t sse_s64 = vdupq_n_s64(0);
+
+    if (params->r[0] > 0 && params->r[1] > 0) {
+        int32x2_t xq_v     = vld1_s32(xq);
+        int16x4_t xq_sum_v = vreinterpret_s16_s32(vshl_n_s32(vpadd_s32(xq_v, xq_v), SGRPROJ_RST_BITS));
+
+        do {
+            int j = 0;
+
+            do {
+                const uint8x8_t d      = vld1_u8(&dat8[j]);
+                const uint8x8_t s      = vld1_u8(&src8[j]);
+                int32x4_t       flt0_0 = vld1q_s32(&flt0[j]);
+                int32x4_t       flt0_1 = vld1q_s32(&flt0[j + 4]);
+                int32x4_t       flt1_0 = vld1q_s32(&flt1[j]);
+                int32x4_t       flt1_1 = vld1q_s32(&flt1[j + 4]);
+
+                int32x4_t offset = vdupq_n_s32(1 << (SGRPROJ_RST_BITS + SGRPROJ_PRJ_BITS - 1));
+                int32x4_t v0     = vmlaq_lane_s32(offset, flt0_0, xq_v, 0);
+                int32x4_t v1     = vmlaq_lane_s32(offset, flt0_1, xq_v, 0);
+
+                v0 = vmlaq_lane_s32(v0, flt1_0, xq_v, 1);
+                v1 = vmlaq_lane_s32(v1, flt1_1, xq_v, 1);
+
+                int16x8_t d_s16 = vreinterpretq_s16_u16(vmovl_u8(d));
+                v0              = vmlsl_lane_s16(v0, vget_low_s16(d_s16), xq_sum_v, 0);
+                v1              = vmlsl_lane_s16(v1, vget_high_s16(d_s16), xq_sum_v, 0);
+
+                int16x4_t vr0 = vshrn_n_s32(v0, SGRPROJ_RST_BITS + SGRPROJ_PRJ_BITS);
+                int16x4_t vr1 = vshrn_n_s32(v1, SGRPROJ_RST_BITS + SGRPROJ_PRJ_BITS);
+
+                int16x8_t diff = vreinterpretq_s16_u16(vsubl_u8(d, s));
+                int16x8_t e    = vaddq_s16(vcombine_s16(vr0, vr1), diff);
+                sse_s64        = svt_sdotq_s16(sse_s64, e, e);
+
+                j += 8;
+            } while (j != width);
+
+            dat8 += dat_stride;
+            src8 += src_stride;
+            flt0 += flt0_stride;
+            flt1 += flt1_stride;
+        } while (--height != 0);
+    } else if (params->r[0] > 0 || params->r[1] > 0) {
+        const int32_t  xq_active  = (params->r[0] > 0) ? xq[0] : xq[1];
+        const int32_t *flt        = (params->r[0] > 0) ? flt0 : flt1;
+        const int32_t  flt_stride = (params->r[0] > 0) ? flt0_stride : flt1_stride;
+        int32x2_t      xq_v       = vdup_n_s32(xq_active);
+
+        do {
+            int j = 0;
+
+            do {
+                const uint8x8_t d     = vld1_u8(&dat8[j]);
+                const uint8x8_t s     = vld1_u8(&src8[j]);
+                int32x4_t       flt_0 = vld1q_s32(&flt[j]);
+                int32x4_t       flt_1 = vld1q_s32(&flt[j + 4]);
+                int16x8_t       d_s16 = vreinterpretq_s16_u16(vshll_n_u8(d, SGRPROJ_RST_BITS));
+
+                int32x4_t sub_0 = vsubw_s16(flt_0, vget_low_s16(d_s16));
+                int32x4_t sub_1 = vsubw_s16(flt_1, vget_high_s16(d_s16));
+
+                int32x4_t offset = vdupq_n_s32(1 << (SGRPROJ_RST_BITS + SGRPROJ_PRJ_BITS - 1));
+                int32x4_t v0     = vmlaq_lane_s32(offset, sub_0, xq_v, 0);
+                int32x4_t v1     = vmlaq_lane_s32(offset, sub_1, xq_v, 0);
+
+                int16x4_t vr0 = vshrn_n_s32(v0, SGRPROJ_RST_BITS + SGRPROJ_PRJ_BITS);
+                int16x4_t vr1 = vshrn_n_s32(v1, SGRPROJ_RST_BITS + SGRPROJ_PRJ_BITS);
+
+                int16x8_t diff = vreinterpretq_s16_u16(vsubl_u8(d, s));
+                int16x8_t e    = vaddq_s16(vcombine_s16(vr0, vr1), diff);
+                sse_s64        = svt_sdotq_s16(sse_s64, e, e);
+
+                j += 8;
+            } while (j != width);
+
+            dat8 += dat_stride;
+            src8 += src_stride;
+            flt += flt_stride;
+        } while (--height != 0);
+    } else {
+        uint32x4_t sse_u32 = vdupq_n_u32(0);
+
+        do {
+            int j = 0;
+            do {
+                const uint8x16_t d    = vld1q_u8(&dat8[j]);
+                const uint8x16_t s    = vld1q_u8(&src8[j]);
+                uint8x16_t       diff = vabdq_u8(d, s);
+
+                sse_u32 = vdotq_u32(sse_u32, diff, diff);
+
+                j += 16;
+            } while (j != width);
+
+            dat8 += dat_stride;
+            src8 += src_stride;
+        } while (--height != 0);
+
+        return (int64_t)vaddlvq_u32(sse_u32);
+    }
+
+    return vaddvq_s64(sse_s64);
+}

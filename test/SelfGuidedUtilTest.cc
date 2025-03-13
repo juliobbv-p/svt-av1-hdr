@@ -353,6 +353,13 @@ INSTANTIATE_TEST_SUITE_P(
     NEON, PixelProjErrorLbdTest,
     ::testing::Values(make_tuple(svt_av1_lowbd_pixel_proj_error_neon,
                                  svt_av1_lowbd_pixel_proj_error_c)));
+
+#if HAVE_SVE
+INSTANTIATE_TEST_SUITE_P(
+    SVE, PixelProjErrorLbdTest,
+    ::testing::Values(make_tuple(svt_av1_lowbd_pixel_proj_error_sve,
+                                 svt_av1_lowbd_pixel_proj_error_c)));
+#endif  // HAVE_SVE
 #endif  // ARCH_AARCH64
 
 class PixelProjErrorHbdTest : public PixelProjErrorTest<uint16_t> {
