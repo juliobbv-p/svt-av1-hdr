@@ -529,7 +529,7 @@ INSTANTIATE_TEST_SUITE_P(AVX512, InvTxfm2dAsmType1Test,
 #endif  // ARCH_X86_64
 
 #ifdef ARCH_AARCH64
-static const InvRectTxfmType1TestParam rect_type1_ref_funcs_neon[16] = {
+static const InvRectTxfmType1TestParam rect_type1_ref_funcs_neon[20] = {
     // clang-format off
     { svt_av1_inv_txfm2d_add_8x16_c, svt_av1_inv_txfm2d_add_8x16_neon,
       TX_8X16, 8 },
@@ -563,6 +563,14 @@ static const InvRectTxfmType1TestParam rect_type1_ref_funcs_neon[16] = {
       TX_32X64, 8 },
     { svt_av1_inv_txfm2d_add_32x64_c, svt_av1_inv_txfm2d_add_32x64_neon,
       TX_32X64, 10 },
+    { svt_av1_inv_txfm2d_add_64x16_c, svt_av1_inv_txfm2d_add_64x16_neon,
+      TX_64X16, 8 },
+    { svt_av1_inv_txfm2d_add_64x16_c, svt_av1_inv_txfm2d_add_64x16_neon,
+      TX_64X16, 10 },
+    { svt_av1_inv_txfm2d_add_64x32_c, svt_av1_inv_txfm2d_add_64x32_neon,
+      TX_64X32, 8 },
+    { svt_av1_inv_txfm2d_add_64x32_c, svt_av1_inv_txfm2d_add_64x32_neon,
+      TX_64X32, 10 },
 };
 
 INSTANTIATE_TEST_SUITE_P(NEON, InvTxfm2dAsmType1Test,
