@@ -851,6 +851,11 @@ EbErrorType svt_av1_verify_settings(SequenceControlSet *scs) {
         return_error = EB_ErrorBadParameter;
     }
 
+    if (config->kf_tf_strength > 4) {
+        SVT_ERROR("Keyframe temporal filtering strength must be between 0 and 4\n");
+        return_error = EB_ErrorBadParameter;
+    }
+
     return return_error;
 }
 
@@ -1011,6 +1016,7 @@ EbErrorType svt_av1_set_default_params(EbSvtAv1EncConfiguration *config_ptr) {
     config_ptr->extended_crf_qindex_offset        = 0;
     config_ptr->ac_bias                           = 1.0;
     config_ptr->noise_norm_strength               = 1;
+    config_ptr->kf_tf_strength                    = 1;
     return return_error;
 }
 
@@ -1152,11 +1158,11 @@ void svt_av1_print_lib_params(SequenceControlSet *scs) {
 
         switch (config->enable_tf) {
         case 1:
-            if (config->tf_strength != 3)
-                SVT_INFO("SVT [config]: temporal filtering strength \t\t\t\t\t: %d\n", config->tf_strength);
+            SVT_INFO("SVT [config]: Temporal Filtering / keyframe strength \t\t\t: %d / %d \n",
+                     config->tf_strength,
+                     config->kf_tf_strength);
             break;
-        case 2: SVT_INFO("SVT [config]: temporal filtering strength \t\t\t\t\t: auto\n"); break;
-        default: break;
+        case 2: SVT_INFO("SVT [config]: Temporal Filtering strength\t\t\t\t\t: auto\n"); break;
         }
 
         SVT_INFO("SVT [config]: QP scale compress strength \t\t\t\t\t: %d\n", config->qp_scale_compress_strength);
@@ -2106,6 +2112,7 @@ EB_API EbErrorType svt_av1_enc_parse_parameter(EbSvtAv1EncConfiguration *config_
         {"tf-strength", &config_struct->tf_strength},
         {"max-tx-size", &config_struct->max_tx_size},
         {"noise-norm-strength", &config_struct->noise_norm_strength},
+        {"kf-tf-strength", &config_struct->kf_tf_strength},
     };
     const size_t uint8_opts_size = sizeof(uint8_opts) / sizeof(uint8_opts[0]);
 
