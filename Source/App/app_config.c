@@ -214,6 +214,7 @@
 #define HBD_MDS_TOKEN "--hbd-mds"
 #define ENABLE_INTRABC_TOKEN "--enable-intrabc"
 #define NOISE_NORM_STRENGTH_TOKEN "--noise-norm-strength"
+#define KF_TF_STRENGTH_FILTER_TOKEN "--kf-tf-strength"
 
 static EbErrorType validate_error(EbErrorType err, const char* token, const char* value) {
     switch (err) {
@@ -1051,6 +1052,8 @@ ConfigDescription config_entry_psychovisual[] = {
      "High Bit-Depth Mode Decision, default is -1 [-1: preset-determined, 0 = 8-bit, 1 = 10-bit, 2 = hybrid 8/10-bit]"},
     // Noise normalization strength
     {NOISE_NORM_STRENGTH_TOKEN, "Noise normalization strength, default is 1 [0-4]"},
+    // Keyframe temporal filtering strength
+    {KF_TF_STRENGTH_FILTER_TOKEN, "Adjust TF strength on keyframes, default is 1 (4x weaker than mainline) [0-4]"},
     // Termination
     {NULL, NULL}};
 
@@ -1271,6 +1274,9 @@ ConfigEntry config_entry[] = {
 
     // Noise normalization strength
     {NOISE_NORM_STRENGTH_TOKEN, "NoiseNormStrength", set_cfg_generic_token},
+
+    //Keyframe temporal filtering strength
+    {KF_TF_STRENGTH_FILTER_TOKEN, "KeyframeTemporalFilteringStrength", set_cfg_generic_token},
 
     // Termination
     {NULL, NULL, NULL}};
