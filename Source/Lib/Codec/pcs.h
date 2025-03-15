@@ -1238,6 +1238,7 @@ typedef struct PictureControlSetInitData {
     bool    use_flat_ipp;
     int     hbd_mds;
     uint8_t noise_norm_strength;
+    uint8_t kf_tf_strength;
 } PictureControlSetInitData;
 
 /**************************************
