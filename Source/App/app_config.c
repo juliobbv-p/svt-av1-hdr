@@ -212,6 +212,7 @@
 #define MAX_32_TX_SIZE_TOKEN "--max-32-tx-size"
 
 #define NOISE_NORM_STRENGTH_TOKEN "--noise-norm-strength"
+#define KF_TF_STRENGTH_FILTER_TOKEN "--kf-tf-strength"
 
 static EbErrorType validate_error(EbErrorType err, const char *token, const char *value) {
     switch (err) {
@@ -998,6 +999,8 @@ ConfigDescription config_entry_variance_boost[] = {
     // Max 32 tx size
     {MAX_32_TX_SIZE_TOKEN, "[PSY] Limits the allowed transform sizes to a maximum of 32x32, default is 0 [0-1]"},
     {NOISE_NORM_STRENGTH_TOKEN, "[PSY] Noise normalization strength, default is 0 [0-4]"},
+    //Alt-ref temporal filtering strength on keyframes
+    {KF_TF_STRENGTH_FILTER_TOKEN, "[PSY] Adjust TF strength on keyframes, default is 1 (4x weaker than mainline) [0-4]"},
     // Termination
     {NULL, NULL}};
 
@@ -1205,6 +1208,9 @@ ConfigEntry config_entry[] = {
     {QP_SCALE_COMPRESS_STRENGTH_TOKEN, "QpScaleCompressStrength", set_cfg_generic_token},
     // Noise normalization strength
     {NOISE_NORM_STRENGTH_TOKEN, "NoiseNormStrength", set_cfg_generic_token},
+
+    //Alt-ref temporal filtering strength on keyframes
+    {KF_TF_STRENGTH_FILTER_TOKEN, "KeyframeTemporalFilteringStrength", set_cfg_generic_token},
 
     // Termination
     {NULL, NULL, NULL}};
