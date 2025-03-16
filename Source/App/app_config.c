@@ -998,6 +998,7 @@ ConfigDescription config_entry_variance_boost[] = {
     {QP_SCALE_COMPRESS_STRENGTH_TOKEN, "[PSY] QP scale compress strength, default is 1 [0-3]"},
     // Max 32 tx size
     {MAX_32_TX_SIZE_TOKEN, "[PSY] Limits the allowed transform sizes to a maximum of 32x32, default is 0 [0-1]"},
+    // Noise normalization strength
     {NOISE_NORM_STRENGTH_TOKEN, "[PSY] Noise normalization strength, default is 0 [0-4]"},
     //Alt-ref temporal filtering strength on keyframes
     {KF_TF_STRENGTH_FILTER_TOKEN, "[PSY] Adjust TF strength on keyframes, default is 1 (4x weaker than mainline) [0-4]"},
