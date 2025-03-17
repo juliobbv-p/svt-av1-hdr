@@ -841,11 +841,11 @@ ConfigDescription config_entry_rc[] = {
 #endif
     {ROI_MAP_FILE_TOKEN, "Enable Region Of Interest and specify a picture based QP Offset map file, default is off"},
     // TF Strength
-    {TF_STRENGTH_FILTER_TOKEN, "[PSY] Adjust temporal filtering strength, default is 1 [0-4]"},
+    {TF_STRENGTH_FILTER_TOKEN, "[PSY] Adjust alt-ref temporal filtering strength, default is 1 (4x weaker than mainline) [0-4]"},
     // Frame-level luminance-based QP bias
     {LUMINANCE_QP_BIAS_TOKEN, "Adjusts a frame's QP based on its average luma value, default is 0 [0-100]"},
     // Sharpness
-    {SHARPNESS_TOKEN, "Bias towards decreased/increased sharpness, default is 1 [-7 to 7]"},
+    {SHARPNESS_TOKEN, "Bias towards decreased/increased sharpness, default is 1 [0 to 7]"},
     // Termination
     {NULL, NULL}};
 
@@ -1004,11 +1004,11 @@ ConfigDescription config_entry_variance_boost[] = {
     // Max 32 tx size
     {MAX_32_TX_SIZE_TOKEN, "[PSY] Limits the allowed transform sizes to a maximum of 32x32, default is 0 [0-1]"},
     // Noise normalization strength
-    {NOISE_NORM_STRENGTH_TOKEN, "[PSY] Noise normalization strength, default is 0 [0-4]"},
+    {NOISE_NORM_STRENGTH_TOKEN, "[PSY] Noise normalization strength, default is 0, default for tune=3 is 3 [0-4]"},
     //Alt-ref temporal filtering strength on keyframes
-    {KF_TF_STRENGTH_FILTER_TOKEN, "[PSY] Adjust TF strength on keyframes, default is 1 (4x weaker than mainline) [0-4]"},
+    {KF_TF_STRENGTH_FILTER_TOKEN, "[PSY] Adjust alt-ref TF strength on keyframes, default is 1 (4x weaker than mainline) [0-4]"},
     //Psy-rd
-    {PSY_RD_TOKEN, "[PSY] Psychovisual rate distortion strength, default is 0 [0.0-6.0]"},
+    {PSY_RD_TOKEN, "[PSY] Psychovisual rate distortion strength, default is 0.5 [0.0-6.0]"},
     //Spy-rd
     {SPY_RD_TOKEN, "[PSY] Alternative psychovisual rate distortion, default is 0 [0-1]"},
     //Sharp-tx
