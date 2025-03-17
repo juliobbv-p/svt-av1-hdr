@@ -40,7 +40,7 @@ using svt_av1_test_reference::reference_txfm_2d;
 using svt_av1_test_tool::SVTRandom;
 namespace {
 
-using FwdTxfm2dParam = std::tuple<TxSize, TxType, int>;
+using FwdTxfm2dParam = std::tuple<TxSize, TxType, double, int>;
 /**
  * @brief Unit test for forward 2d tx functions:
  * - Av1TransformTwoD_{4x4, 8x8, 16x16, 32x32, 64x64}
@@ -66,7 +66,8 @@ class AV1FwdTxfm2dTest : public ::testing::TestWithParam<FwdTxfm2dParam> {
     AV1FwdTxfm2dTest()
         : max_error_(TEST_GET_PARAM(2)),
           txfm_size_(TEST_GET_PARAM(0)),
-          txfm_type_(TEST_GET_PARAM(1)) {
+          txfm_type_(TEST_GET_PARAM(1)),
+          bd_(TEST_GET_PARAM(3)) {
         svt_aom_transform_config(txfm_type_, txfm_size_, &cfg_);
     }
 
@@ -90,8 +91,7 @@ class AV1FwdTxfm2dTest : public ::testing::TestWithParam<FwdTxfm2dParam> {
 
   protected:
     void run_fwd_accuracy_check() {
-        const int bd = 10;
-        SVTRandom rnd(bd, false);
+        SVTRandom rnd(bd_, false);
         const int count_test_block = 1000;
         const int width = tx_size_wide[cfg_.tx_size];
         const int height = tx_size_high[cfg_.tx_size];
@@ -112,7 +112,7 @@ class AV1FwdTxfm2dTest : public ::testing::TestWithParam<FwdTxfm2dParam> {
                                            output_test_,
                                            tx_size_wide[cfg_.tx_size],
                                            txfm_type_,
-                                           bd);
+                                           bd_);
 
             // calculate in reference forward transform functions
             fwd_txfm_2d_reference(input_ref_, output_ref_);
@@ -130,7 +130,8 @@ class AV1FwdTxfm2dTest : public ::testing::TestWithParam<FwdTxfm2dParam> {
             test_max_error /= scale_factor_;
             ASSERT_GE(max_error_, test_max_error)
                 << "fwd txfm 2d test tx_type: " << txfm_type_
-                << " tx_size: " << txfm_size_ << " loop: " << ti;
+                << " tx_size: " << txfm_size_ << " bd: " << bd_
+                << " loop: " << ti;
         }
     }
 
@@ -227,6 +228,7 @@ class AV1FwdTxfm2dTest : public ::testing::TestWithParam<FwdTxfm2dParam> {
     const double max_error_;
     const TxSize txfm_size_;
     const TxType txfm_type_;
+    const int bd_;
     double scale_factor_;
     Txfm2dFlipCfg cfg_;
     int16_t *input_test_;
@@ -258,19 +260,19 @@ static double max_error_ls[TX_SIZES_ALL] = {
     21,   // 8x32 transform
     13,   // 32x8 transform
     30,   // 16x64 transform
-    36,   // 64x16 transform
+    41,   // 64x16 transform
 };
 
 static std::vector<FwdTxfm2dParam> gen_txfm_2d_params() {
     std::vector<FwdTxfm2dParam> param_vec;
-    for (int s = 0; s < TX_SIZES; ++s) {
-        const double max_error = max_error_ls[s];
+    for (int s = 0; s < TX_SIZES_ALL; ++s) {
+        double max_error = max_error_ls[s];
         for (int t = 0; t < TX_TYPES; ++t) {
             const TxType txfm_type = static_cast<TxType>(t);
             const TxSize txfm_size = static_cast<TxSize>(s);
             if (is_txfm_allowed(txfm_type, txfm_size)) {
                 param_vec.push_back(
-                    FwdTxfm2dParam(txfm_size, txfm_type, (int)max_error));
+                    FwdTxfm2dParam(txfm_size, txfm_type, max_error, 10));
             }
         }
     }

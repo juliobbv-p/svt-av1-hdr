@@ -72,9 +72,9 @@ void reference_txfm_2d(const double *in, double *out, TxType tx_type,
                           tx_height);
     }
     // matrix transposition
-    for (int r = 0; r < tx_height; ++r) {
-        for (int c = 0; c < tx_width; ++c) {
-            out[c * tx_height + r] = tmp_output[r * tx_width + c];
+    for (int r = 0; r < tx_width; ++r) {
+        for (int c = 0; c < tx_height; ++c) {
+            out[c * tx_width + r] = tmp_output[r * tx_height + c];
         }
     }
 
