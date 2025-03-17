@@ -1216,6 +1216,7 @@ typedef void (*fwd_transform_1d_row_many_neon)(const int32x4_t *in, int32x4_t *o
 #define TRANSFORM_ROW_RECT_ONE(name, n)                                                                 \
     static void highbd_##name##_row_rect_neon(const int32x4_t *input, int32x4_t *output, int cos_bit) { \
         highbd_##name##_x4_neon(input, output, cos_bit);                                                \
+        round_rect_array_s32_neon(output, output, (n));                                                 \
     }
 
 #define TRANSFORM_ROW_MANY(name, n)                                                                                    \
@@ -1374,7 +1375,7 @@ static const fwd_transform_1d_col_many_neon col_highbd_txfm4_xn_arr[TX_TYPES] = 
     highbd_fidentity4_col_many_neon // H_FLIPADST
 };
 
-static const fwd_transform_1d_row_neon row_highbd_txfm8_x4_arr[TX_TYPES] = {
+static const fwd_transform_1d_row_neon row_rect_highbd_txfm8_x4_arr[TX_TYPES] = {
     highbd_fdct8_row_rect_neon, // DCT_DCT
     highbd_fdct8_row_rect_neon, // ADST_DCT
     highbd_fadst8_row_rect_neon, // DCT_ADST
@@ -1504,7 +1505,7 @@ void svt_av1_fwd_txfm2d_8x4_neon(int16_t *input, int32_t *coeff, uint32_t stride
     const int                            bitcol   = fwd_cos_bit_col[1][0];
     const int                            bitrow   = fwd_cos_bit_row[1][0];
     const fwd_transform_1d_col_many_neon col_txfm = col_highbd_txfm4_xn_arr[tx_type];
-    const fwd_transform_1d_row_neon      row_txfm = row_highbd_txfm8_x4_arr[tx_type];
+    const fwd_transform_1d_row_neon      row_txfm = row_rect_highbd_txfm8_x4_arr[tx_type];
 
     int ud_flip, lr_flip;
     get_flip_cfg(tx_type, &ud_flip, &lr_flip);
@@ -1537,8 +1538,7 @@ void svt_av1_fwd_txfm2d_8x4_neon(int16_t *input, int32_t *coeff, uint32_t stride
 
     // Row-wise transform.
     row_txfm(buf1, buf0, bitrow);
-    round_rect_array_s32_neon(buf0, buf1, 8);
-    transpose_8xh(buf1, (int32x4_t *)coeff, 8);
+    transpose_8xh(buf0, (int32x4_t *)coeff, 8);
 }
 
 void svt_av1_fwd_txfm2d_8x16_neon(int16_t *input, int32_t *coeff, uint32_t stride, TxType tx_type, uint8_t bd) {
