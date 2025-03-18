@@ -416,6 +416,13 @@ INSTANTIATE_TEST_SUITE_P(
     NEON, PixelProjErrorHbdTest,
     ::testing::Values(make_tuple(svt_av1_highbd_pixel_proj_error_neon,
                                  svt_av1_highbd_pixel_proj_error_c)));
+
+#if HAVE_SVE
+INSTANTIATE_TEST_SUITE_P(
+    SVE, PixelProjErrorHbdTest,
+    ::testing::Values(make_tuple(svt_av1_highbd_pixel_proj_error_sve,
+                                 svt_av1_highbd_pixel_proj_error_c)));
+#endif  // HAVE_SVE
 #endif  // ARCH_AARCH64
 
 typedef void (*GetProjSubspaceFunc)(const uint8_t *src8, int32_t width,
