@@ -1760,7 +1760,7 @@ static void highbd_fidentity32_x4_neon(const int32x4_t *input, int32x4_t *output
 TRANSFORM_COL_MANY(fdct32, 32)
 TRANSFORM_COL_MANY(fidentity32, 32)
 
-static const fwd_transform_1d_col_many_neon col_highbd_txfm32_x4_arr[TX_TYPES] = {
+static const fwd_transform_1d_col_many_neon col_highbd_txfm32_xn_arr[TX_TYPES] = {
     highbd_fdct32_col_many_neon, // DCT_DCT
     NULL, // ADST_DCT
     NULL, // DCT_ADST
@@ -1781,7 +1781,7 @@ static const fwd_transform_1d_col_many_neon col_highbd_txfm32_x4_arr[TX_TYPES] =
 
 void svt_av1_fwd_txfm2d_8x32_neon(int16_t *input, int32_t *coeff, uint32_t stride, TxType tx_type, uint8_t bd) {
     (void)bd;
-    const fwd_transform_1d_col_many_neon col_txfm = col_highbd_txfm32_x4_arr[tx_type];
+    const fwd_transform_1d_col_many_neon col_txfm = col_highbd_txfm32_xn_arr[tx_type];
     const fwd_transform_1d_row_many_neon row_txfm = row_highbd_txfm8_xn_arr[tx_type];
     int                                  bitcol   = fwd_cos_bit_col[1][3];
     int                                  bitrow   = fwd_cos_bit_row[1][3];
@@ -1956,7 +1956,7 @@ void svt_av1_fwd_txfm2d_16x8_neon(int16_t *input, int32_t *coeff, uint32_t strid
 
 void svt_av1_fwd_txfm2d_16x32_neon(int16_t *input, int32_t *coeff, uint32_t stride, TxType tx_type, uint8_t bd) {
     (void)bd;
-    const fwd_transform_1d_col_many_neon col_txfm = col_highbd_txfm32_x4_arr[tx_type];
+    const fwd_transform_1d_col_many_neon col_txfm = col_highbd_txfm32_xn_arr[tx_type];
     const fwd_transform_1d_row_many_neon row_txfm = row_rect_highbd_txfm16_xn_arr[tx_type];
     int                                  bitcol   = fwd_cos_bit_col[2][3];
     int                                  bitrow   = fwd_cos_bit_row[2][3];
@@ -2488,7 +2488,7 @@ void svt_av1_fwd_txfm2d_32x16_neon(int16_t *input, int32_t *output, uint32_t str
 
 void svt_av1_fwd_txfm2d_32x32_neon(int16_t *input, int32_t *output, uint32_t stride, TxType tx_type, uint8_t bd) {
     (void)bd;
-    const fwd_transform_1d_col_many_neon col_txfm = col_highbd_txfm32_x4_arr[tx_type];
+    const fwd_transform_1d_col_many_neon col_txfm = col_highbd_txfm32_xn_arr[tx_type];
     const fwd_transform_1d_row_many_neon row_txfm = row_highbd_txfm32_x4_arr[tx_type];
 
     // Column-wise transform.
