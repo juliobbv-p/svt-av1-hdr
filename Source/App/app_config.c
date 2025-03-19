@@ -1010,7 +1010,7 @@ ConfigDescription config_entry_variance_boost[] = {
     //Psy-rd
     {PSY_RD_TOKEN, "[PSY] Psychovisual rate distortion strength, default is 0.5 [0.0-6.0]"},
     //Spy-rd
-    {SPY_RD_TOKEN, "[PSY] Alternative psychovisual rate distortion, default is 0 [0-1]"},
+    {SPY_RD_TOKEN, "[PSY] Alternative psychovisual rate distortion pathways, default is 0 [0-2]; 1 = full, 2 = partial"},
     //Sharp-tx
     {SHARP_TX_TOKEN, "[PSY] Sharp transform optimization, default is 1; best used in combination with psy-rd [0-1]"},
     //HBD Mode Decisions

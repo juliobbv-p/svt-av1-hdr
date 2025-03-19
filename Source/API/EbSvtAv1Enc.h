@@ -1008,10 +1008,11 @@ typedef struct EbSvtAv1EncConfiguration {
      * @brief Enable spy-rd, an alternate RD metric that biases towards sharpness/detail retention,
      * at the possible expense of increased blocking and banding
      * 0: disabled
-     * 1: enabled
+     * 1: full
+     * 2: partial (interpolation filter tweaks only)
      * Default is 0
      */
-    bool spy_rd;
+    uint8_t spy_rd;
 
     /**
      * @brief Enable sharp-tx, a toggle that enables much sharper transforms decisions for higher fidelity ouput,
@@ -1036,7 +1037,6 @@ typedef struct EbSvtAv1EncConfiguration {
     uint8_t padding[128 - (sizeof(uint8_t) * 2)
         - sizeof(bool)
     ];
-    // clang-format on
 } EbSvtAv1EncConfiguration;
 
 /**
