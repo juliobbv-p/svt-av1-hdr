@@ -318,6 +318,8 @@ INSTANTIATE_TEST_SUITE_P(PalleteMode, KMeansTest,
 
 typedef void (*av1_k_means_func)(const int *data, int *centroids,
                                  uint8_t *indices, int n, int k, int max_itr);
+typedef void (*av1_k_means_indices_func)(const int *data, const int *centroids,
+                                         uint8_t *indices, int n, int k);
 
 #define MAX_BLOCK_SIZE (MAX_SB_SIZE * MAX_SB_SIZE)
 typedef std::tuple<int, int> BlockSize;
@@ -339,64 +341,36 @@ BlockSize TEST_BLOCK_SIZES[] = {BlockSize(4, 4),
                                 BlockSize(128, 128)};
 TestPattern TEST_PATTERNS[] = {MIN, MAX, RANDOM};
 
-static void svt_av1_calc_indices_dim1_c_wrap(const int *data, int *centroids,
-                                             uint8_t *indices, int n, int k,
-                                             int max_itr) {
-    (void)max_itr;
-    svt_av1_calc_indices_dim1_c(data, centroids, indices, n, k);
+static void av1_k_means_wrapper(av1_k_means_func func, const int *data,
+                                int *centroids, uint8_t *indices, int n, int k,
+                                int max_itr) {
+    func(data, centroids, indices, n, k, max_itr);
 }
 
-static void svt_av1_calc_indices_dim1_avx2_wrap(const int *data, int *centroids,
-                                                uint8_t *indices, int n, int k,
-                                                int max_itr) {
+static void av1_k_means_wrapper(av1_k_means_indices_func func, const int *data,
+                                int *centroids, uint8_t *indices, int n, int k,
+                                int max_itr) {
     (void)max_itr;
-    svt_av1_calc_indices_dim1_avx2(data, centroids, indices, n, k);
+    func(data, centroids, indices, n, k);
 }
 
-static void svt_av1_calc_indices_dim2_c_wrap(const int *data, int *centroids,
-                                             uint8_t *indices, int n, int k,
-                                             int max_itr) {
-    (void)max_itr;
-    svt_av1_calc_indices_dim2_c(data, centroids, indices, n, k);
-}
+template <typename FuncType>
+using Av1KMeansDimParam =
+    std::tuple<TestPattern, BlockSize, std::tuple<FuncType, FuncType>>;
 
-static void svt_av1_calc_indices_dim2_avx2_wrap(const int *data, int *centroids,
-                                                uint8_t *indices, int n, int k,
-                                                int max_itr) {
-    (void)max_itr;
-    svt_av1_calc_indices_dim2_avx2(data, centroids, indices, n, k);
-}
-
-typedef std::tuple<av1_k_means_func, av1_k_means_func> FuncPair;
-FuncPair TEST_FUNC_PAIRS[] = {
-    FuncPair(svt_av1_calc_indices_dim1_c_wrap,
-             svt_av1_calc_indices_dim1_avx2_wrap),
-    FuncPair(svt_av1_k_means_dim1_c, svt_av1_k_means_dim1_avx2),
-    FuncPair(svt_av1_calc_indices_dim2_c_wrap,
-             svt_av1_calc_indices_dim2_avx2_wrap),
-    FuncPair(svt_av1_k_means_dim2_c, svt_av1_k_means_dim2_avx2)};
-
-typedef std::tuple<TestPattern, BlockSize, FuncPair> Av1KMeansDimParam;
-
-class Av1KMeansDim : public ::testing::WithParamInterface<Av1KMeansDimParam>,
-                     public ::testing::Test {
+template <typename FuncType>
+class Av1KMeansDim
+    : public ::testing::WithParamInterface<Av1KMeansDimParam<FuncType>>,
+      public ::testing::Test {
   public:
     Av1KMeansDim() {
         rnd8_ = new SVTRandom(0, ((1 << 8) - 1));
         rnd32_ = new SVTRandom(-((1 << 14) - 1), ((1 << 14) - 1));
-        pattern_ = TEST_GET_PARAM(0);
-        block_ = TEST_GET_PARAM(1);
-        func_ref_ = std::get<0>(TEST_GET_PARAM(2));
-        func_tst_ = std::get<1>(TEST_GET_PARAM(2));
-
-        n_ = std::get<0>(block_) * std::get<1>(block_);
 
         // Additonal *2 to account possibility of write into extra memory
         centroids_size_ = 2 * PALETTE_MAX_SIZE * 2;
         indices_size_ = MAX_SB_SQUARE * 2;
 
-        //*2 to account of AV1_K_MEANS_DIM = 2
-        data_ = new int[n_ * 2];
         centroids_ref_ = new int[centroids_size_];
         centroids_tst_ = new int[centroids_size_];
         indices_ref_ = new uint8_t[indices_size_];
@@ -462,8 +436,20 @@ class Av1KMeansDim : public ::testing::WithParamInterface<Av1KMeansDimParam>,
         for (int k = PALETTE_MIN_SIZE; k <= PALETTE_MAX_SIZE; k++) {
             for (size_t i = 0; i < test_num; i++) {
                 prepare_data();
-                func_ref_(data_, centroids_ref_, indices_ref_, n_, k, MaxItr);
-                func_tst_(data_, centroids_tst_, indices_tst_, n_, k, MaxItr);
+                av1_k_means_wrapper(func_ref_,
+                                    data_,
+                                    centroids_ref_,
+                                    indices_ref_,
+                                    n_,
+                                    k,
+                                    MaxItr);
+                av1_k_means_wrapper(func_tst_,
+                                    data_,
+                                    centroids_tst_,
+                                    indices_tst_,
+                                    n_,
+                                    k,
+                                    MaxItr);
                 check_output();
             }
         }
@@ -482,7 +468,13 @@ class Av1KMeansDim : public ::testing::WithParamInterface<Av1KMeansDimParam>,
 
         for (uint64_t i = 0; i < num_loop; i++) {
             for (int k = PALETTE_MIN_SIZE; k <= PALETTE_MAX_SIZE; k++) {
-                func_ref_(data_, centroids_ref_, indices_ref_, n_, k, MaxItr);
+                av1_k_means_wrapper(func_ref_,
+                                    data_,
+                                    centroids_ref_,
+                                    indices_ref_,
+                                    n_,
+                                    k,
+                                    MaxItr);
             }
         }
 
@@ -490,7 +482,13 @@ class Av1KMeansDim : public ::testing::WithParamInterface<Av1KMeansDimParam>,
 
         for (uint64_t i = 0; i < num_loop; i++) {
             for (int k = PALETTE_MIN_SIZE; k <= PALETTE_MAX_SIZE; k++) {
-                func_tst_(data_, centroids_tst_, indices_tst_, n_, k, MaxItr);
+                av1_k_means_wrapper(func_tst_,
+                                    data_,
+                                    centroids_tst_,
+                                    indices_tst_,
+                                    n_,
+                                    k,
+                                    MaxItr);
             }
         }
 
@@ -513,8 +511,8 @@ class Av1KMeansDim : public ::testing::WithParamInterface<Av1KMeansDimParam>,
   protected:
     SVTRandom *rnd32_;
     SVTRandom *rnd8_;
-    av1_k_means_func func_ref_;
-    av1_k_means_func func_tst_;
+    FuncType func_ref_;
+    FuncType func_tst_;
     int *data_;
     int *centroids_ref_;
     int *centroids_tst_;
@@ -528,18 +526,76 @@ class Av1KMeansDim : public ::testing::WithParamInterface<Av1KMeansDimParam>,
     int n_;
 };
 
-TEST_P(Av1KMeansDim, RunCheckOutput) {
+class Av1KMeansDimTest : public Av1KMeansDim<av1_k_means_func> {
+  public:
+    Av1KMeansDimTest() {
+        pattern_ = TEST_GET_PARAM(0);
+        block_ = TEST_GET_PARAM(1);
+        func_ref_ = std::get<0>(TEST_GET_PARAM(2));
+        func_tst_ = std::get<1>(TEST_GET_PARAM(2));
+        n_ = std::get<0>(block_) * std::get<1>(block_);
+
+        //*2 to account of AV1_K_MEANS_DIM = 2
+        data_ = new int[n_ * 2];
+    }
+};
+
+class Av1KMeansIndicesDimTest : public Av1KMeansDim<av1_k_means_indices_func> {
+  public:
+    Av1KMeansIndicesDimTest() {
+        pattern_ = TEST_GET_PARAM(0);
+        block_ = TEST_GET_PARAM(1);
+        func_ref_ = std::get<0>(TEST_GET_PARAM(2));
+        func_tst_ = std::get<1>(TEST_GET_PARAM(2));
+        n_ = std::get<0>(block_) * std::get<1>(block_);
+
+        //*2 to account of AV1_K_MEANS_DIM = 2
+        data_ = new int[n_ * 2];
+    }
+};
+
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(Av1KMeansDimTest);
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(Av1KMeansIndicesDimTest);
+
+TEST_P(Av1KMeansDimTest, RunCheckOutput) {
     run_test();
 };
 
-TEST_P(Av1KMeansDim, DISABLED_speed) {
+TEST_P(Av1KMeansDimTest, DISABLED_speed) {
     speed();
 };
 
+TEST_P(Av1KMeansIndicesDimTest, RunCheckOutput) {
+    run_test();
+};
+
+TEST_P(Av1KMeansIndicesDimTest, DISABLED_speed) {
+    speed();
+};
+
+#if ARCH_X86_64
+std::tuple<av1_k_means_func, av1_k_means_func> TEST_FUNC_PAIRS[] = {
+    std::make_tuple(svt_av1_k_means_dim1_c, svt_av1_k_means_dim1_avx2),
+    std::make_tuple(svt_av1_k_means_dim2_c, svt_av1_k_means_dim2_avx2)};
+
+std::tuple<av1_k_means_indices_func, av1_k_means_indices_func>
+    TEST_INDICES_FUNC_PAIRS[] = {
+        std::make_tuple(svt_av1_calc_indices_dim1_c,
+                        svt_av1_calc_indices_dim1_avx2),
+        std::make_tuple(svt_av1_calc_indices_dim2_c,
+                        svt_av1_calc_indices_dim2_avx2)};
+
 INSTANTIATE_TEST_SUITE_P(
-    Av1KMeansDim, Av1KMeansDim,
+    AVX2, Av1KMeansDimTest,
     ::testing::Combine(::testing::ValuesIn(TEST_PATTERNS),
                        ::testing::ValuesIn(TEST_BLOCK_SIZES),
                        ::testing::ValuesIn(TEST_FUNC_PAIRS)));
 
+INSTANTIATE_TEST_SUITE_P(
+    AVX2, Av1KMeansIndicesDimTest,
+    ::testing::Combine(::testing::ValuesIn(TEST_PATTERNS),
+                       ::testing::ValuesIn(TEST_BLOCK_SIZES),
+                       ::testing::ValuesIn(TEST_INDICES_FUNC_PAIRS)));
+
+#endif  // ARCH_X86_64
 }  // namespace
