@@ -223,25 +223,16 @@ static const FwdTxfm2dFunc fwd_txfm_2d_neon_func[TX_SIZES_ALL] = {
 };
 
 static const FwdTxfm2dFunc fwd_txfm_2d_N4_neon_func[TX_SIZES_ALL] = {
-    svt_av1_fwd_txfm2d_4x4_N4_neon,
-    svt_av1_fwd_txfm2d_8x8_N4_neon,
-    svt_av1_fwd_txfm2d_16x16_N4_neon,
-    svt_av1_fwd_txfm2d_32x32_N4_neon,
-    svt_av1_fwd_txfm2d_64x64_N4_neon,
-    svt_av1_fwd_txfm2d_4x8_N4_neon,
-    svt_av1_fwd_txfm2d_8x4_N4_neon,
-    svt_av1_fwd_txfm2d_8x16_N4_neon,
-    svt_av1_fwd_txfm2d_16x8_N4_neon,
-    svt_av1_fwd_txfm2d_16x32_N4_neon,
-    svt_av1_fwd_txfm2d_32x16_N4_neon,
-    svt_av1_fwd_txfm2d_32x64_N4_neon,
-    NULL,
-    svt_av1_fwd_txfm2d_4x16_N4_neon,
-    svt_av1_fwd_txfm2d_16x4_N4_neon,
-    svt_av1_fwd_txfm2d_8x32_N4_neon,
-    svt_av1_fwd_txfm2d_32x8_N4_neon,
-    svt_av1_fwd_txfm2d_16x64_N4_neon,
-    NULL,
+    svt_av1_fwd_txfm2d_4x4_N4_neon,   svt_av1_fwd_txfm2d_8x8_N4_neon,
+    svt_av1_fwd_txfm2d_16x16_N4_neon, svt_av1_fwd_txfm2d_32x32_N4_neon,
+    svt_av1_fwd_txfm2d_64x64_N4_neon, svt_av1_fwd_txfm2d_4x8_N4_neon,
+    svt_av1_fwd_txfm2d_8x4_N4_neon,   svt_av1_fwd_txfm2d_8x16_N4_neon,
+    svt_av1_fwd_txfm2d_16x8_N4_neon,  svt_av1_fwd_txfm2d_16x32_N4_neon,
+    svt_av1_fwd_txfm2d_32x16_N4_neon, svt_av1_fwd_txfm2d_32x64_N4_neon,
+    svt_av1_fwd_txfm2d_64x32_N4_neon, svt_av1_fwd_txfm2d_4x16_N4_neon,
+    svt_av1_fwd_txfm2d_16x4_N4_neon,  svt_av1_fwd_txfm2d_8x32_N4_neon,
+    svt_av1_fwd_txfm2d_32x8_N4_neon,  svt_av1_fwd_txfm2d_16x64_N4_neon,
+    svt_av1_fwd_txfm2d_64x16_N4_neon,
 };
 
 static const FwdTxfm2dFunc fwd_txfm_2d_N2_neon_func[TX_SIZES_ALL] = {
