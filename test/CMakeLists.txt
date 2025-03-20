@@ -96,6 +96,7 @@ set(multi_arch_files
     OBMCSadTest.cc
     OBMCVarianceTest.cc
     PackUnPackTest.cc
+    PaletteModeUtilTest.cc
     PictureOperatorTest.cc
     QuantAsmTest.cc
     ResidualTest.cc
@@ -135,7 +136,6 @@ if(HAVE_X86_PLATFORM)
       InvTxfm1dTest.cc
       FwdTxfm2dTest.cc
       MotionEstimationTest.cc
-      PaletteModeUtilTest.cc
       PsnrTest.cc
       dwt_test.cc
       frame_error_test.cc)

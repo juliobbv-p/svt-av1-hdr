@@ -20,6 +20,7 @@ target_sources(
   PUBLIC aom_sum_squares_neon.c
   PUBLIC av1_inv_txfm_neon.c
   PUBLIC av1_inv_txfm_neon.c
+  PUBLIC av1_k_means_neon.c
   PUBLIC av1_quantize_neon.c
   PUBLIC blend_a64_mask_neon.c
   PUBLIC block_error_neon.c

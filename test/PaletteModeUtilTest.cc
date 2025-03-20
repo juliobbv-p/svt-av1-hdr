@@ -555,7 +555,6 @@ class Av1KMeansIndicesDimTest : public Av1KMeansDim<av1_k_means_indices_func> {
 };
 
 GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(Av1KMeansDimTest);
-GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(Av1KMeansIndicesDimTest);
 
 TEST_P(Av1KMeansDimTest, RunCheckOutput) {
     run_test();
@@ -598,4 +597,16 @@ INSTANTIATE_TEST_SUITE_P(
                        ::testing::ValuesIn(TEST_INDICES_FUNC_PAIRS)));
 
 #endif  // ARCH_X86_64
+
+#if ARCH_AARCH64
+std::tuple<av1_k_means_indices_func, av1_k_means_indices_func>
+    TEST_INDICES_FUNC_PAIRS[] = {std::make_tuple(
+        svt_av1_calc_indices_dim1_c, svt_av1_calc_indices_dim1_neon)};
+
+INSTANTIATE_TEST_SUITE_P(
+    NEON, Av1KMeansIndicesDimTest,
+    ::testing::Combine(::testing::ValuesIn(TEST_PATTERNS),
+                       ::testing::ValuesIn(TEST_BLOCK_SIZES),
+                       ::testing::ValuesIn(TEST_INDICES_FUNC_PAIRS)));
+#endif  // ARCH_AARCH64
 }  // namespace
