@@ -600,8 +600,11 @@ INSTANTIATE_TEST_SUITE_P(
 
 #if ARCH_AARCH64
 std::tuple<av1_k_means_indices_func, av1_k_means_indices_func>
-    TEST_INDICES_FUNC_PAIRS[] = {std::make_tuple(
-        svt_av1_calc_indices_dim1_c, svt_av1_calc_indices_dim1_neon)};
+    TEST_INDICES_FUNC_PAIRS[] = {
+        std::make_tuple(svt_av1_calc_indices_dim1_c,
+                        svt_av1_calc_indices_dim1_neon),
+        std::make_tuple(svt_av1_calc_indices_dim2_c,
+                        svt_av1_calc_indices_dim2_neon)};
 
 INSTANTIATE_TEST_SUITE_P(
     NEON, Av1KMeansIndicesDimTest,
