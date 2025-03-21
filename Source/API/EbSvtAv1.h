@@ -26,7 +26,7 @@ struct SvtMetadataArray;
 // API Version
 #define SVT_AV1_VERSION_MAJOR 3
 #define SVT_AV1_VERSION_MINOR 0
-#define SVT_AV1_VERSION_PATCHLEVEL 1
+#define SVT_AV1_VERSION_PATCHLEVEL 2
 
 #define SVT_AV1_CHECK_VERSION(major, minor, patch)                                                               \
     (SVT_AV1_VERSION_MAJOR > (major) || (SVT_AV1_VERSION_MAJOR == (major) && SVT_AV1_VERSION_MINOR > (minor)) || \

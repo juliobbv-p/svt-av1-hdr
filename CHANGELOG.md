@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.0.2] - 2025-3-21
+
+Encoder
+
+- More Arm simd improvements (!2401, !2402, !2403, !2405, !2409, !2410)
+- Fixed mising initalization of lossless and avif (#2255, !2404)
+
+Documentation
+- Add missing `--luminance-qp-bias` documentation (!2407)
+
 ## [3.0.1] - 2025-3-10
 
 Encoder cleanup and bug fixes
