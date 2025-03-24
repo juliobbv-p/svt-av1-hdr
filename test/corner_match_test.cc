@@ -155,6 +155,7 @@ TEST_P(AV1CornerMatchTest, DISABLED_Speed) {
     RunCheckOutput(1000);
 }
 
+#ifdef ARCH_X86_64
 INSTANTIATE_TEST_SUITE_P(
     SSE4_1, AV1CornerMatchTest,
     ::testing::Combine(
@@ -166,5 +167,14 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::Combine(
         testing::Values(0, 1), testing::Range(3, 16, 2),
         testing::Values(svt_av1_compute_cross_correlation_avx2)));
+#endif  // ARCH_X86_64
+
+#ifdef ARCH_AARCH64
+INSTANTIATE_TEST_SUITE_P(
+    NEON, AV1CornerMatchTest,
+    ::testing::Combine(
+        testing::Values(0, 1), testing::Range(3, 16, 2),
+        testing::Values(svt_av1_compute_cross_correlation_neon)));
+#endif  // ARCH_AARCH64
 
 }  // namespace

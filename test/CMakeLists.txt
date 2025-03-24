@@ -110,6 +110,7 @@ set(multi_arch_files
     av1_convolve_scale_test.cc
     compute_mean_test.cc
     convolve_test.cc
+    corner_match_test.cc
     hadamard_test.cc
     intrapred_cfl_test.cc
     intrapred_dr_test.cc
@@ -136,7 +137,6 @@ if(HAVE_X86_PLATFORM)
       MotionEstimationTest.cc
       PaletteModeUtilTest.cc
       PsnrTest.cc
-      corner_match_test.cc
       dwt_test.cc
       frame_error_test.cc)
 endif()
