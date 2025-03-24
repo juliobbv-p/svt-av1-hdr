@@ -14,96 +14,63 @@
 
 #include <arm_neon.h>
 
-static INLINE void energy_computation_kernel_neon(const int32_t *const in, uint64x2_t *const sum256) {
-    const int32x4_t  input     = vld1q_s32(in);
-    const int32x2_t  in_lo     = vget_low_s32(input);
-    const int32x2_t  in_hi     = vget_high_s32(input);
-    const uint64x2_t energy_lo = vreinterpretq_u64_s64(vmull_s32(in_lo, in_lo));
-    const uint64x2_t energy_hi = vreinterpretq_u64_s64(vmull_s32(in_hi, in_hi));
-    *sum256                    = vaddq_u64(*sum256, vaddq_u64(energy_lo, energy_hi));
+static INLINE void energy_computation_kernel_neon(const int32_t *const in, int64x2_t *const sum0,
+                                                  int64x2_t *const sum1) {
+    const int32x4_t input0 = vld1q_s32(in);
+    const int32x4_t input1 = vld1q_s32(in + 4);
+    *sum0                  = vmlal_s32(*sum0, vget_low_s32(input0), vget_low_s32(input0));
+    *sum0                  = vmlal_s32(*sum0, vget_high_s32(input0), vget_high_s32(input0));
+    *sum1                  = vmlal_s32(*sum1, vget_low_s32(input1), vget_low_s32(input1));
+    *sum1                  = vmlal_s32(*sum1, vget_high_s32(input1), vget_high_s32(input1));
 }
 
-static INLINE uint64_t hadd64_neon(const uint64x2_t sum256) {
-    const uint64x2_t partial_sum = vpaddq_u64(sum256, sum256);
-    return vgetq_lane_u64(partial_sum, 0);
-}
-
-static INLINE uint64_t energy_computation_neon(const int32_t *const in, const uint32_t size) {
-    uint64x2_t sum = vdupq_n_u64(0);
-    uint32_t   i   = 0;
+static INLINE uint64_t energy_computation_wxh_neon(const int32_t *in, const int stride, uint32_t width,
+                                                   uint32_t height) {
+    int64x2_t sum0 = vdupq_n_s64(0);
+    int64x2_t sum1 = vdupq_n_s64(0);
 
     do {
-        energy_computation_kernel_neon(in + i + 0, &sum);
-        energy_computation_kernel_neon(in + i + 4, &sum);
-        i += 8;
-    } while (i < size);
+        int            w      = width;
+        const int32_t *in_ptr = in;
+        do {
+            energy_computation_kernel_neon(in_ptr + 0 * 8, &sum0, &sum1);
+            energy_computation_kernel_neon(in_ptr + 1 * 8, &sum0, &sum1);
 
-    return hadd64_neon(sum);
-}
+            in_ptr += 16;
+            w -= 16;
+        } while (w != 0);
+        in += stride;
+    } while (--height != 0);
 
-static INLINE uint64_t energy_computation_64_neon(const int32_t *in, const uint32_t height) {
-    uint64x2_t sum = vdupq_n_u64(0);
-    uint32_t   i   = height;
-
-    do {
-        energy_computation_kernel_neon(in + 0 * 8 + 0, &sum);
-        energy_computation_kernel_neon(in + 0 * 8 + 4, &sum);
-        energy_computation_kernel_neon(in + 1 * 8 + 0, &sum);
-        energy_computation_kernel_neon(in + 1 * 8 + 4, &sum);
-        energy_computation_kernel_neon(in + 2 * 8 + 0, &sum);
-        energy_computation_kernel_neon(in + 2 * 8 + 4, &sum);
-        energy_computation_kernel_neon(in + 3 * 8 + 0, &sum);
-        energy_computation_kernel_neon(in + 3 * 8 + 4, &sum);
-        in += 64;
-    } while (--i);
-
-    return hadd64_neon(sum);
-}
-
-static INLINE void copy_32_bytes_neon(const int32_t *src, int32_t *dst) {
-    const int32x4x2_t val = vld2q_s32(src + 0 * 8);
-    vst2q_s32(dst + 0 * 8, val);
-}
-
-static INLINE void copy_256x_bytes_neon(const int32_t *src, int32_t *dst, const uint32_t height) {
-    uint32_t h = height;
-
-    do {
-        copy_32_bytes_neon(src + 0 * 8, dst + 0 * 8);
-        copy_32_bytes_neon(src + 1 * 8, dst + 1 * 8);
-        copy_32_bytes_neon(src + 2 * 8, dst + 2 * 8);
-        copy_32_bytes_neon(src + 3 * 8, dst + 3 * 8);
-        src += 64;
-        dst += 32;
-    } while (--h);
+    return vaddvq_s64(vaddq_s64(sum0, sum1));
 }
 
 uint64_t svt_handle_transform16x64_neon(int32_t *output) {
     //bottom 16x32 area.
-    const uint64_t three_quad_energy = energy_computation_neon(output + 16 * 32, 16 * 32);
+    const uint64_t three_quad_energy = energy_computation_wxh_neon(output + 16 * 32, 16, 16, 32);
     return three_quad_energy;
 }
 
 uint64_t svt_handle_transform32x64_neon(int32_t *output) {
     //bottom 32x32 area.
-    const uint64_t three_quad_energy = energy_computation_neon(output + 32 * 32, 32 * 32);
+    const uint64_t three_quad_energy = energy_computation_wxh_neon(output + 32 * 32, 32, 32, 32);
     return three_quad_energy;
 }
 
 uint64_t svt_handle_transform64x16_neon(int32_t *output) {
     // top - right 32x16 area.
-    const uint64_t three_quad_energy = energy_computation_64_neon(output + 32, 16);
+    const uint64_t three_quad_energy = energy_computation_wxh_neon(output + 32, 64, 32, 16);
     // Re-pack non-zero coeffs in the first 32x16 indices.
-    copy_256x_bytes_neon(output + 64, output + 32, 15);
+    for (int32_t row = 1; row < 16; ++row) memcpy(output + row * 32, output + row * 64, 32 * sizeof(*output));
 
     return three_quad_energy;
 }
 
 uint64_t svt_handle_transform64x32_neon(int32_t *output) {
     // top - right 32x32 area.
-    const uint64_t three_quad_energy = energy_computation_64_neon(output + 32, 32);
+    const uint64_t three_quad_energy = energy_computation_wxh_neon(output + 32, 64, 32, 32);
     // Re-pack non-zero coeffs in the first 32x32 indices.
-    copy_256x_bytes_neon(output + 64, output + 32, 31);
+    for (int32_t row = 1; row < 32; ++row) memcpy(output + row * 32, output + row * 64, 32 * sizeof(*output));
 
     return three_quad_energy;
 }
@@ -112,11 +79,11 @@ uint64_t svt_handle_transform64x64_neon(int32_t *output) {
     uint64_t three_quad_energy;
 
     // top - right 32x32 area.
-    three_quad_energy = energy_computation_64_neon(output + 32, 32);
+    three_quad_energy = energy_computation_wxh_neon(output + 32, 64, 32, 32);
     //bottom 64x32 area.
-    three_quad_energy += energy_computation_neon(output + 32 * 64, 64 * 32);
+    three_quad_energy += energy_computation_wxh_neon(output + 32 * 64, 64, 64, 32);
     // Re-pack non-zero coeffs in the first 32x32 indices.
-    copy_256x_bytes_neon(output + 64, output + 32, 31);
+    for (int32_t row = 1; row < 32; ++row) memcpy(output + row * 32, output + row * 64, 32 * sizeof(*output));
 
     return three_quad_energy;
 }
@@ -133,18 +100,18 @@ uint64_t svt_handle_transform32x64_N2_N4_neon(int32_t *output) {
 
 uint64_t svt_handle_transform64x16_N2_N4_neon(int32_t *output) {
     // Re-pack non-zero coeffs in the first 32x16 indices.
-    copy_256x_bytes_neon(output + 64, output + 32, 15);
+    for (int32_t row = 1; row < 16; ++row) memcpy(output + row * 32, output + row * 64, 32 * sizeof(*output));
     return 0;
 }
 
 uint64_t svt_handle_transform64x32_N2_N4_neon(int32_t *output) {
     // Re-pack non-zero coeffs in the first 32x32 indices.
-    copy_256x_bytes_neon(output + 64, output + 32, 31);
+    for (int32_t row = 1; row < 32; ++row) memcpy(output + row * 32, output + row * 64, 32 * sizeof(*output));
     return 0;
 }
 
 uint64_t svt_handle_transform64x64_N2_N4_neon(int32_t *output) {
     // Re-pack non-zero coeffs in the first 32x32 indices.
-    copy_256x_bytes_neon(output + 64, output + 32, 31);
+    for (int32_t row = 1; row < 32; ++row) memcpy(output + row * 32, output + row * 64, 32 * sizeof(*output));
     return 0;
 }
