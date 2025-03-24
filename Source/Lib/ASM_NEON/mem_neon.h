@@ -1255,6 +1255,12 @@ static INLINE void load_u32_4x4(uint32_t *s, int32_t p, uint32x4_t *s1, uint32x4
     *s4 = vld1q_u32(s);
 }
 
+static INLINE void store_u32_4x2(uint32_t *s, int32_t p, uint32x4_t s1, uint32x4_t s2) {
+    vst1q_u32(s, s1);
+    s += p;
+    vst1q_u32(s, s2);
+}
+
 static INLINE void store_u32_4x4(uint32_t *s, int32_t p, uint32x4_t s1, uint32x4_t s2, uint32x4_t s3, uint32x4_t s4) {
     vst1q_u32(s, s1);
     s += p;
