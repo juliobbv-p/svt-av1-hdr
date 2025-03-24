@@ -1276,6 +1276,9 @@ extern "C" {
 
     void svt_av1_apply_temporal_filter_planewise_medium_neon(struct MeContext *me_ctx, const uint8_t *y_src, int y_src_stride, const uint8_t *y_pre, int y_pre_stride, const uint8_t *u_src, const uint8_t *v_src, int uv_src_stride, const uint8_t *u_pre, const uint8_t *v_pre, int uv_pre_stride, unsigned int block_width, unsigned int block_height, int ss_x, int ss_y, uint32_t *y_accum, uint16_t *y_count, uint32_t *u_accum, uint16_t *u_count, uint32_t *v_accum, uint16_t *v_count);
 
+    void svt_ext_sad_calculation_32x32_64x64_neon(uint32_t *p_sad16x16, uint32_t *p_best_sad_32x32,
+                                                  uint32_t *p_best_sad_64x64, uint32_t *p_best_mv32x32,
+                                                  uint32_t *p_best_mv64x64, uint32_t mv, uint32_t *p_sad32x32);
     void svt_ext_eight_sad_calculation_32x32_64x64_neon(uint32_t p_sad16x16[16][8], uint32_t *p_best_sad_32x32,
                                                         uint32_t *p_best_sad_64x64, uint32_t *p_best_mv32x32,
                                                         uint32_t *p_best_mv64x64, uint32_t mv, uint32_t p_sad32x32[4][8]);

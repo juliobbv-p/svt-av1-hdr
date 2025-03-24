@@ -1794,3 +1794,32 @@ void svt_ext_eight_sad_calculation_32x32_64x64_neon(uint32_t p_sad16x16[16][8], 
         }
     }
 }
+
+void svt_ext_sad_calculation_32x32_64x64_neon(uint32_t *p_sad16x16, uint32_t *p_best_sad_32x32,
+                                              uint32_t *p_best_sad_64x64, uint32_t *p_best_mv32x32,
+                                              uint32_t *p_best_mv64x64, uint32_t mv, uint32_t *p_sad32x32) {
+    uint32x4_t sad4d[4];
+    load_u32_4x4(p_sad16x16, 4, &sad4d[0], &sad4d[1], &sad4d[2], &sad4d[3]);
+
+    uint32x4_t sad = horizontal_add_4d_u32x4(sad4d);
+    vst1q_u32(p_sad32x32, sad);
+
+    uint32x4_t best_sad = vld1q_u32(p_best_sad_32x32);
+
+    uint32x4_t comp = vcltq_u32(sad, best_sad);
+
+    best_sad = vbslq_u32(comp, sad, best_sad);
+    vst1q_u32(p_best_sad_32x32, best_sad);
+
+    uint32x4_t best_mv = vld1q_u32(p_best_mv32x32);
+    uint32x4_t mv_u32  = vdupq_n_u32(mv);
+
+    best_mv = vbslq_u32(comp, mv_u32, best_mv);
+    vst1q_u32(p_best_mv32x32, best_mv);
+
+    uint32_t sad64x64 = vaddvq_u32(sad);
+    if (sad64x64 < p_best_sad_64x64[0]) {
+        p_best_sad_64x64[0] = sad64x64;
+        p_best_mv64x64[0]   = mv;
+    }
+}

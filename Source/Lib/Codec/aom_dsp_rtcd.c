@@ -860,7 +860,7 @@ void svt_aom_setup_rtcd_internal(EbCpuFlags flags) {
     SET_NEON(apply_filtering_central_highbd, svt_aom_apply_filtering_central_highbd_c, svt_aom_apply_filtering_central_highbd_neon);
     SET_NEON(downsample_2d, svt_aom_downsample_2d_c, svt_aom_downsample_2d_neon);
     SET_NEON(svt_ext_sad_calculation_8x8_16x16, svt_ext_sad_calculation_8x8_16x16_c, svt_ext_sad_calculation_8x8_16x16_neon_intrin);
-    SET_ONLY_C(svt_ext_sad_calculation_32x32_64x64, svt_ext_sad_calculation_32x32_64x64_c);
+    SET_NEON(svt_ext_sad_calculation_32x32_64x64, svt_ext_sad_calculation_32x32_64x64_c, svt_ext_sad_calculation_32x32_64x64_neon);
     SET_NEON(svt_ext_all_sad_calculation_8x8_16x16, svt_ext_all_sad_calculation_8x8_16x16_c, svt_ext_all_sad_calculation_8x8_16x16_neon);
     SET_NEON(svt_ext_eight_sad_calculation_32x32_64x64, svt_ext_eight_sad_calculation_32x32_64x64_c, svt_ext_eight_sad_calculation_32x32_64x64_neon);
     SET_ONLY_C(svt_initialize_buffer_32bits, svt_initialize_buffer_32bits_c);

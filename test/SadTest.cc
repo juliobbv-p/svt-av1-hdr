@@ -1209,6 +1209,15 @@ INSTANTIATE_TEST_SUITE_P(
         ::testing::Values(svt_ext_sad_calculation_32x32_64x64_sse4_intrin)));
 #endif  // ARCH_X86_64
 
+#ifdef ARCH_AARCH64
+INSTANTIATE_TEST_SUITE_P(
+    NEON, Extsad32x32_CalculationTest,
+    ::testing::Combine(
+        ::testing::ValuesIn(TEST_PATTERNS),
+        ::testing::ValuesIn(TEST_SAD_PATTERNS),
+        ::testing::Values(svt_ext_sad_calculation_32x32_64x64_neon)));
+#endif  // ARCH_AARCH64
+
 typedef void (*InitBufferFunc)(uint32_t *pointer, uint32_t count128,
                                uint32_t count32, uint32_t value);
 
