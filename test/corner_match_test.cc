@@ -156,10 +156,15 @@ TEST_P(AV1CornerMatchTest, DISABLED_Speed) {
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    AV1CornerMatchTest, AV1CornerMatchTest,
-    ::testing::Values(make_tuple(0, &svt_av1_compute_cross_correlation_sse4_1),
-                      make_tuple(1, &svt_av1_compute_cross_correlation_sse4_1),
-                      make_tuple(0, &svt_av1_compute_cross_correlation_avx2),
-                      make_tuple(1, &svt_av1_compute_cross_correlation_avx2)));
+    SSE4_1, AV1CornerMatchTest,
+    ::testing::Combine(
+        testing::Values(0, 1),
+        testing::Values(svt_av1_compute_cross_correlation_sse4_1)));
+
+INSTANTIATE_TEST_SUITE_P(
+    AVX2, AV1CornerMatchTest,
+    ::testing::Combine(
+        testing::Values(0, 1),
+        testing::Values(svt_av1_compute_cross_correlation_avx2)));
 
 }  // namespace
