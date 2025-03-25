@@ -175,6 +175,15 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::Combine(
         testing::Values(0, 1), testing::Range(3, 16, 2),
         testing::Values(svt_av1_compute_cross_correlation_neon)));
+
+#if HAVE_NEON_DOTPROD
+INSTANTIATE_TEST_SUITE_P(
+    NEON_DOTPROD, AV1CornerMatchTest,
+    ::testing::Combine(
+        testing::Values(0, 1), testing::Range(3, 16, 2),
+        testing::Values(svt_av1_compute_cross_correlation_neon_dotprod)));
+#endif  // HAVE_NEON_DOTPROD
+
 #endif  // ARCH_AARCH64
 
 }  // namespace
