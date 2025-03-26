@@ -20,10 +20,6 @@
 #include "acm_random.h"
 #include "corner_match.h"
 
-#define MATCH_SZ 13
-#define MATCH_SZ_BY2 ((MATCH_SZ - 1) / 2)
-#define MATCH_SZ_SQ (MATCH_SZ * MATCH_SZ)
-
 using libaom_test::ACMRandom;
 
 namespace {
@@ -34,7 +30,7 @@ typedef double (*ComputeCrossCorrFunc)(unsigned char *im1, int stride1, int x1,
 
 using ::testing::make_tuple;
 using ::testing::tuple;
-typedef tuple<int, ComputeCrossCorrFunc> CornerMatchParam;
+typedef tuple<int, int, ComputeCrossCorrFunc> CornerMatchParam;
 
 class AV1CornerMatchTest : public ::testing::TestWithParam<CornerMatchParam> {
   public:
@@ -45,7 +41,9 @@ class AV1CornerMatchTest : public ::testing::TestWithParam<CornerMatchParam> {
 
   protected:
     void RunCheckOutput(int run_times);
-    ComputeCrossCorrFunc target_func;
+    int mode_;
+    int match_sz_;
+    ComputeCrossCorrFunc target_func_;
 
     libaom_test::ACMRandom rnd_;
 };
@@ -54,13 +52,16 @@ AV1CornerMatchTest::~AV1CornerMatchTest() {
 }
 void AV1CornerMatchTest::SetUp() {
     rnd_.Reset(ACMRandom::DeterministicSeed());
-    target_func = TEST_GET_PARAM(1);
+    mode_ = TEST_GET_PARAM(0);
+    match_sz_ = TEST_GET_PARAM(1);
+    target_func_ = TEST_GET_PARAM(2);
 }
 void AV1CornerMatchTest::TearDown() {
 }
 
 void AV1CornerMatchTest::RunCheckOutput(int run_times) {
     const int w = 128, h = 128;
+    const int match_sz_by2 = ((match_sz_ - 1) / 2);
     const int num_iters = 10000;
     int i, j;
     uint64_t start_time_seconds, start_time_useconds;
@@ -74,14 +75,13 @@ void AV1CornerMatchTest::RunCheckOutput(int run_times) {
     // Test the two extreme cases:
     // i) Random data, should have correlation close to 0
     // ii) Linearly related data + noise, should have correlation close to 1
-    int mode = TEST_GET_PARAM(0);
-    if (mode == 0) {
+    if (mode_ == 0) {
         for (i = 0; i < h; ++i)
             for (j = 0; j < w; ++j) {
                 input1[i * w + j] = rnd_.Rand8();
                 input2[i * w + j] = rnd_.Rand8();
             }
-    } else if (mode == 1) {
+    } else if (mode_ == 1) {
         for (i = 0; i < h; ++i)
             for (j = 0; j < w; ++j) {
                 int v = rnd_.Rand8();
@@ -91,26 +91,26 @@ void AV1CornerMatchTest::RunCheckOutput(int run_times) {
     }
 
     for (i = 0; i < num_iters; ++i) {
-        int x1 = MATCH_SZ_BY2 + rnd_.PseudoUniform(w - 2 * MATCH_SZ_BY2);
-        int y1 = MATCH_SZ_BY2 + rnd_.PseudoUniform(h - 2 * MATCH_SZ_BY2);
-        int x2 = MATCH_SZ_BY2 + rnd_.PseudoUniform(w - 2 * MATCH_SZ_BY2);
-        int y2 = MATCH_SZ_BY2 + rnd_.PseudoUniform(h - 2 * MATCH_SZ_BY2);
+        int x1 = match_sz_by2 + rnd_.PseudoUniform(w - 2 * match_sz_by2);
+        int y1 = match_sz_by2 + rnd_.PseudoUniform(h - 2 * match_sz_by2);
+        int x2 = match_sz_by2 + rnd_.PseudoUniform(w - 2 * match_sz_by2);
+        int y2 = match_sz_by2 + rnd_.PseudoUniform(h - 2 * match_sz_by2);
 
         double res_c = svt_av1_compute_cross_correlation_c(
-            input1, w, x1, y1, input2, w, x2, y2, MATCH_SZ);
+            input1, w, x1, y1, input2, w, x2, y2, match_sz_);
         double res_simd =
-            target_func(input1, w, x1, y1, input2, w, x2, y2, MATCH_SZ);
+            target_func_(input1, w, x1, y1, input2, w, x2, y2, match_sz_);
 
         if (run_times > 1) {
             svt_av1_get_time(&start_time_seconds, &start_time_useconds);
             for (j = 0; j < run_times; j++) {
                 svt_av1_compute_cross_correlation_c(
-                    input1, w, x1, y1, input2, w, x2, y2, MATCH_SZ);
+                    input1, w, x1, y1, input2, w, x2, y2, match_sz_);
             }
             svt_av1_get_time(&middle_time_seconds, &middle_time_useconds);
 
             for (j = 0; j < run_times; j++) {
-                target_func(input1, w, x1, y1, input2, w, x2, y2, MATCH_SZ);
+                target_func_(input1, w, x1, y1, input2, w, x2, y2, match_sz_);
             }
 
             svt_av1_get_time(&finish_time_seconds, &finish_time_useconds);
@@ -158,13 +158,13 @@ TEST_P(AV1CornerMatchTest, DISABLED_Speed) {
 INSTANTIATE_TEST_SUITE_P(
     SSE4_1, AV1CornerMatchTest,
     ::testing::Combine(
-        testing::Values(0, 1),
+        testing::Values(0, 1), testing::Range(3, 16, 2),
         testing::Values(svt_av1_compute_cross_correlation_sse4_1)));
 
 INSTANTIATE_TEST_SUITE_P(
     AVX2, AV1CornerMatchTest,
     ::testing::Combine(
-        testing::Values(0, 1),
+        testing::Values(0, 1), testing::Range(3, 16, 2),
         testing::Values(svt_av1_compute_cross_correlation_avx2)));
 
 }  // namespace
