@@ -1298,7 +1298,6 @@ class AomHighbdSubtractBlockTest
   private:
     SVTRandom rnd_;
 };
-GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(AomHighbdSubtractBlockTest);
 
 TEST_P(AomHighbdSubtractBlockTest, MatchTest) {
     run_test();
@@ -1310,5 +1309,12 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::Combine(::testing::Range(BLOCK_4X4, BlockSizeS_ALL),
                        ::testing::Values(svt_aom_highbd_subtract_block_sse2)));
 #endif  // ARCH_X86_64
+
+#ifdef ARCH_AARCH64
+INSTANTIATE_TEST_SUITE_P(
+    NEON, AomHighbdSubtractBlockTest,
+    ::testing::Combine(::testing::Range(BLOCK_4X4, BlockSizeS_ALL),
+                       ::testing::Values(svt_aom_highbd_subtract_block_neon)));
+#endif  // ARCH_AARCH64
 
 }  // namespace
