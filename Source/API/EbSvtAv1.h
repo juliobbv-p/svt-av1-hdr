@@ -401,8 +401,11 @@ typedef uint64_t EbCpuFlags;
 #define EB_CPU_FLAGS_AVX512F (1 << 9)
 #define EB_CPU_FLAGS_AVX512CD (1 << 10)
 #define EB_CPU_FLAGS_AVX512DQ (1 << 11)
+#if !SVT_AV1_CHECK_VERSION(4, 0, 0)
+// Deprecated as they were never used.
 #define EB_CPU_FLAGS_AVX512ER (1 << 12)
 #define EB_CPU_FLAGS_AVX512PF (1 << 13)
+#endif
 #define EB_CPU_FLAGS_AVX512BW (1 << 14)
 #define EB_CPU_FLAGS_AVX512VL (1 << 15)
 // AVX512 extensions supported on Icelake and later (Zen 4 and later on AMD)
