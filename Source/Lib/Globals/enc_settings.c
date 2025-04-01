@@ -1209,10 +1209,9 @@ void svt_av1_print_lib_params(SequenceControlSet *scs) {
                      config->film_grain_denoise_apply,
                      config->film_grain_denoise_strength);
         }
-        SVT_INFO("SVT [config]: sharpness / luminance-based QP bias \t\t\t: %d / %d\n",
+        SVT_INFO("SVT [config]: sharpness / luminance-based QP bias \t\t\t\t: %d / %d\n",
                  config->sharpness,
                  config->luminance_qp_bias);
-        SVT_INFO("");
 
         switch (config->enable_tf) {
         case 1:
