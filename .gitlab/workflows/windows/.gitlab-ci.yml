@@ -31,7 +31,7 @@
     - svt-windows-docker
   before_script:
     - Move-Item C:/*.zst .
-    - zstd -d *.zst
+    - zstd -d $(Get-ChildItem *.zst)
 
 .windows-unit-test-base:
   extends: .windows-test-base
