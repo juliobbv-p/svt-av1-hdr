@@ -8948,7 +8948,8 @@ static void md_encode_block_light_pd1(PictureControlSet *pcs, ModeDecisionContex
     //Get the new lambda for current block
     if (pcs->ppcs->blk_lambda_tuning) {
         svt_aom_set_tuned_blk_lambda(ctx, pcs);
-    } else if (pcs->ppcs->scs->static_config.tune == 2 || pcs->ppcs->scs->static_config.tune == 3 || pcs->ppcs->scs->static_config.tune == 4) {
+    } else if (pcs->ppcs->scs->static_config.tune == 2 || pcs->ppcs->scs->static_config.tune == 3
+        || pcs->ppcs->scs->static_config.tune == 4) {
         int mi_row = ctx->blk_org_y / 4;
         int mi_col = ctx->blk_org_x / 4;
         aom_av1_set_ssim_rdmult(ctx, pcs, mi_row, mi_col);

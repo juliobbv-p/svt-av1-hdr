@@ -4599,13 +4599,14 @@ void aom_av1_set_ssim_rdmult(struct ModeDecisionContext *ctx, PictureControlSet 
   }
   geom_mean_of_scale = exp(geom_mean_of_scale / num_of_mi);
 
-  const bool is_tune_3 = pcs->ppcs->scs->static_config.tune == 3;
-  if (!pcs->ppcs->blk_lambda_tuning) {
-      ctx->full_lambda_md[EB_8_BIT_MD] = (uint32_t)((double)ctx->ed_ctx->pic_full_lambda[EB_8_BIT_MD] * pow(geom_mean_of_scale, geom_mean_of_scale <= 1.0 ? (is_tune_3 ? 1.5 : 1.0) : (is_tune_3 ? 0.5 : 1.0)) + 0.5);
-      ctx->full_lambda_md[EB_10_BIT_MD] = (uint32_t)((double)ctx->ed_ctx->pic_full_lambda[EB_10_BIT_MD] * pow(geom_mean_of_scale, geom_mean_of_scale <= 1.0 ? (is_tune_3 ? 1.5 : 1.0) : (is_tune_3 ? 0.5 : 1.0)) + 0.5);
 
-      ctx->fast_lambda_md[EB_8_BIT_MD] = (uint32_t)((double)ctx->ed_ctx->pic_fast_lambda[EB_8_BIT_MD] * pow(geom_mean_of_scale, geom_mean_of_scale <= 1.0 ? (is_tune_3 ? 1.5 : 1.0) : (is_tune_3 ? 0.5 : 1.0)) + 0.5);
-      ctx->fast_lambda_md[EB_10_BIT_MD] = (uint32_t)((double)ctx->ed_ctx->pic_fast_lambda[EB_10_BIT_MD] * pow(geom_mean_of_scale, geom_mean_of_scale <= 1.0 ? (is_tune_3 ? 1.5 : 1.0) : (is_tune_3 ? 0.5 : 1.0)) + 0.5);
+  if (!pcs->ppcs->blk_lambda_tuning) {
+      ctx->full_lambda_md[EB_8_BIT_MD] = (uint32_t)((double)ctx->ed_ctx->pic_full_lambda[EB_8_BIT_MD] * geom_mean_of_scale + 0.5);
+      ctx->full_lambda_md[EB_10_BIT_MD] = (uint32_t)((double)ctx->ed_ctx->pic_full_lambda[EB_10_BIT_MD] * geom_mean_of_scale + 0.5);
+
+      ctx->fast_lambda_md[EB_8_BIT_MD] = (uint32_t)((double)ctx->ed_ctx->pic_fast_lambda[EB_8_BIT_MD] * geom_mean_of_scale + 0.5);
+      ctx->fast_lambda_md[EB_10_BIT_MD] = (uint32_t)((double)ctx->ed_ctx->pic_fast_lambda[EB_10_BIT_MD] * geom_mean_of_scale + 0.5);
+
   }else {
       ctx->full_lambda_md[EB_8_BIT_MD] = (uint32_t)((double)ctx->full_lambda_md[EB_8_BIT_MD] * geom_mean_of_scale + 0.5);
       ctx->full_lambda_md[EB_10_BIT_MD] = (uint32_t)((double)ctx->full_lambda_md[EB_10_BIT_MD] * geom_mean_of_scale + 0.5);
@@ -4667,14 +4668,13 @@ void  svt_aom_set_tuned_blk_lambda(struct ModeDecisionContext *ctx, PictureContr
 
     geom_mean_of_scale = exp(geom_mean_of_scale / base_block_count);
 
-    const bool is_tune_3 = ppcs->scs->static_config.tune == 3;
-    ctx->full_lambda_md[EB_8_BIT_MD] = (uint32_t)((double)ctx->ed_ctx->pic_full_lambda[EB_8_BIT_MD] * pow(geom_mean_of_scale, geom_mean_of_scale <= 1.0 ? (is_tune_3 ? 0.5 : 1.0) : (is_tune_3 ? 0.25 : 1.0)) + 0.5);
-    ctx->full_lambda_md[EB_10_BIT_MD] = (uint32_t)((double)ctx->ed_ctx->pic_full_lambda[EB_10_BIT_MD] * pow(geom_mean_of_scale, geom_mean_of_scale <= 1.0 ? (is_tune_3 ? 0.5 : 1.0) : (is_tune_3 ? 0.25 : 1.0)) + 0.5);
+    ctx->full_lambda_md[EB_8_BIT_MD] = (uint32_t)((double)ctx->ed_ctx->pic_full_lambda[EB_8_BIT_MD] * geom_mean_of_scale + 0.5);
+    ctx->full_lambda_md[EB_10_BIT_MD] = (uint32_t)((double)ctx->ed_ctx->pic_full_lambda[EB_10_BIT_MD] * geom_mean_of_scale + 0.5);
 
-    ctx->fast_lambda_md[EB_8_BIT_MD] = (uint32_t)((double)ctx->ed_ctx->pic_fast_lambda[EB_8_BIT_MD] * pow(geom_mean_of_scale, geom_mean_of_scale <= 1.0 ? (is_tune_3 ? 0.5 : 1.0) : (is_tune_3 ? 0.25 : 1.0)) + 0.5);
-    ctx->fast_lambda_md[EB_10_BIT_MD] = (uint32_t)((double)ctx->ed_ctx->pic_fast_lambda[EB_10_BIT_MD] * pow(geom_mean_of_scale, geom_mean_of_scale <= 1.0 ? (is_tune_3 ? 0.5 : 1.0) : (is_tune_3 ? 0.25 : 1.0)) + 0.5);
+    ctx->fast_lambda_md[EB_8_BIT_MD] = (uint32_t)((double)ctx->ed_ctx->pic_fast_lambda[EB_8_BIT_MD] * geom_mean_of_scale + 0.5);
+    ctx->fast_lambda_md[EB_10_BIT_MD] = (uint32_t)((double)ctx->ed_ctx->pic_fast_lambda[EB_10_BIT_MD] * geom_mean_of_scale + 0.5);
 
-    if (ppcs->scs->static_config.tune == 2 || is_tune_3 || pcs->ppcs->scs->static_config.tune == 4) {
+    if (ppcs->scs->static_config.tune == 2 || ppcs->scs->static_config.tune == 3; || pcs->ppcs->scs->static_config.tune == 4) {
         aom_av1_set_ssim_rdmult(ctx, pcs, mi_row, mi_col);
     }
 }

@@ -3389,15 +3389,11 @@ void *svt_aom_rate_control_kernel(void *input_ptr) {
                                 (int32_t)(new_qindex));
                         }
 
-                        if (scs->static_config.use_fixed_qindex_offsets || scs->static_config.tune == 3 || scs->static_config.extended_crf_qindex_offset) {
+                        if (scs->static_config.use_fixed_qindex_offsets || scs->static_config.extended_crf_qindex_offset) {
                             int32_t qindex = scs->static_config.use_fixed_qindex_offsets == 1
                                 ? quantizer_to_qindex[scs_qp]
                                 : frm_hdr->quantization_params
                                       .base_q_idx; // do not shut the auto QPS if use_fixed_qindex_offsets 2
-
-                            if (scs->static_config.tune == 3 && scs->static_config.qp_scale_compress_strength == 0) {
-                                qindex += (int32_t)rint(-pow(qindex / 48.0, 0.5) * pcs->temporal_layer_index); // Adaptive qindex offset based on temporal layer index (later is more boosted)
-                            }
 
                             if (!frame_is_intra_only(pcs->ppcs))
                                 qindex += scs->static_config.qindex_offsets[pcs->temporal_layer_index];
