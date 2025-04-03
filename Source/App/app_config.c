@@ -754,17 +754,16 @@ ConfigEntry config_entry_global_options[] = {
      "Number of frames to encode. If `n` is larger than the input, the encoder will loop back and "
      "continue encoding, default is 0 [0: until EOF, 1-`(2^63)-1`]",
      set_cfg_frames_to_be_encoded},
-
-    {SINGLE_INPUT,
-     NUMBER_OF_PICTURES_TO_SKIP,
-     "Number of frames to skip. Default is 0 [0: don`t skip, 1-`(2^63)-1`]",
-     set_cfg_frames_to_be_skipped},
-
     {SINGLE_INPUT,
      NUMBER_OF_PICTURES_LONG_TOKEN,
      "Number of frames to encode. If `n` is larger than the input, the encoder will loop back and "
      "continue encoding, default is 0 [0: until EOF, 1-`(2^63)-1`]",
      set_cfg_frames_to_be_encoded},
+
+    {SINGLE_INPUT,
+     NUMBER_OF_PICTURES_TO_SKIP,
+     "Number of frames to skip. Default is 0 [0: don`t skip, 1-`(2^63)-1`]",
+     set_cfg_frames_to_be_skipped},
 
     {SINGLE_INPUT,
      BUFFERED_INPUT_TOKEN,
