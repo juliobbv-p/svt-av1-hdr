@@ -70,6 +70,9 @@ macOS (Static, Tests):
     EXTRA_CXXFLAGS: -Wno-error -g
     PREFIX_DIR: ${CI_PROJECT_DIR}/SVT-Install/
     TARGET: install
+  parallel:
+    matrix:
+      - CMAKE_BUILD_TYPE: [Release, Debug]
   artifacts:
     expire_in: 1 day
     paths:
@@ -90,10 +93,13 @@ macOS (Static, Tests, m1):
     EXTRA_CXXFLAGS: -Wno-error -g
     PREFIX_DIR: ${CI_PROJECT_DIR}/SVT-Install/
     TARGET: install
+  parallel:
+    matrix:
+      - CMAKE_BUILD_TYPE: [Release, Debug]
   artifacts:
     expire_in: 1 day
     paths:
-      - Bin/Release/*
+      - Bin/Release/* # We only care about getting the release binaries since debug mode is too slow to do anything with.
       - SVT-Install/*
 
 #
