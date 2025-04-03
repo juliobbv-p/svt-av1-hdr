@@ -32,15 +32,15 @@ svt_av1_frwd_txfm_func av1_frwd_txfm_func_ptr_array_base[9] = {
     svt_av1_fwd_txfm2d_16x32_avx2,
     svt_av1_fwd_txfm2d_32x16_avx2};
 svt_av1_frwd_txfm_func av1_frwd_txfm_func_ptr_array_opt[9] = {
-    av1_fwd_txfm2d_16x16_avx512,
-    av1_fwd_txfm2d_32x32_avx512,
-    av1_fwd_txfm2d_64x64_avx512,
-    av1_fwd_txfm2d_16x64_avx512,
-    av1_fwd_txfm2d_64x16_avx512,
-    av1_fwd_txfm2d_32x64_avx512,
-    av1_fwd_txfm2d_64x32_avx512,
-    av1_fwd_txfm2d_16x32_avx512,
-    av1_fwd_txfm2d_32x16_avx512};
+    svt_av1_fwd_txfm2d_16x16_avx512,
+    svt_av1_fwd_txfm2d_32x32_avx512,
+    svt_av1_fwd_txfm2d_64x64_avx512,
+    svt_av1_fwd_txfm2d_16x64_avx512,
+    svt_av1_fwd_txfm2d_64x16_avx512,
+    svt_av1_fwd_txfm2d_32x64_avx512,
+    svt_av1_fwd_txfm2d_64x32_avx512,
+    svt_av1_fwd_txfm2d_16x32_avx512,
+    svt_av1_fwd_txfm2d_32x16_avx512};
 int tx_16[] = {DCT_DCT, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
 int tx_32[] = {DCT_DCT, IDTX};
 int tx_64[] = {DCT_DCT, IDTX};
