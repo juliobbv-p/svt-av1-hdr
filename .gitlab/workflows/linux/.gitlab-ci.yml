@@ -483,6 +483,8 @@ Linux FFmpeg (n7.1, Static):
     - |
       conflicts=$(
         nm -Ag --defined-only ${PREFIX_DIR}/lib/lib{SvtAv1Enc,aom,dav1d,vpx,vmaf}.a 2>/dev/null |
+        # Ignore weak symbols
+        grep -v ' W ' |
         sort -k3 |
         uniq -D -f2 |
         sed '/:$/d;/^$/d'

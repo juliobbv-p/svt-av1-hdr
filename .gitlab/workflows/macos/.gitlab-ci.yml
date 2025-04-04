@@ -195,6 +195,8 @@ macOS FFmpeg (Static):
     - |
       conflicts=$(
         nm -Ag --defined-only ${PREFIX_DIR}/lib/lib{SvtAv1Enc,aom,dav1d,vpx,vmaf}.a 2>/dev/null |
+        # Ignore weak symbols
+        grep -v ' W ' |
         cut -d' ' -f 4 |
         sort |
         uniq -d
