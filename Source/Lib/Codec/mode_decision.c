@@ -4260,12 +4260,13 @@ uint32_t svt_aom_product_full_mode_decision(
             for (uint32_t i = 0; i < candidate_total_count; ++i) {
                 uint32_t cand_index = best_candidate_index_array[i];
                 uint64_t cost = *(buffer_ptr_array[cand_index]->full_cost);
-                if (scs->vq_ctrls.sharpness_ctrls.unipred_bias && scs->static_config.tune == 3 &&
+                //Replaced with tune 5 temporarily; doing this is much faster than removing stuff
+                if (scs->vq_ctrls.sharpness_ctrls.unipred_bias && scs->static_config.tune == 5 &&
                     (is_inter_singleref_mode(buffer_ptr_array[cand_index]->cand->pred_mode) || pcs->ppcs->slice_type == B_SLICE)) {
                     cost = (cost * uni_psy_bias[pcs->picture_qp]) / 100;
                 }
-
-                if (scs->vq_ctrls.sharpness_ctrls.unipred_bias && scs->static_config.tune == 3 &&
+                //Replaced with tune 5 temporarily; doing this is much faster than removing stuff
+                if (scs->vq_ctrls.sharpness_ctrls.unipred_bias && scs->static_config.tune == 5 &&
                     (is_inter_singleref_mode(buffer_ptr_array[cand_index]->cand->pred_mode) || pcs->ppcs->slice_type == B_SLICE)) { // Only somewhat reverse the uni psy bias on B-Frames, prevents sharp / squiggling(lack of a better term?) artifacting
                     cost = (cost * bi_psy_bias[pcs->picture_qp]) / 100;
                 }
@@ -4284,12 +4285,13 @@ uint32_t svt_aom_product_full_mode_decision(
 
                 uint64_t ssim_cost = *(buffer_ptr_array[cand_index]->full_cost_ssim);
                 uint64_t ssd_cost = *(buffer_ptr_array[cand_index]->full_cost);
-                if (scs->vq_ctrls.sharpness_ctrls.unipred_bias && scs->static_config.tune == 3 &&
+                //Replaced with tune 5 temporarily; doing this is much faster than removing stuff
+                if (scs->vq_ctrls.sharpness_ctrls.unipred_bias && scs->static_config.tune == 5 &&
                     (is_inter_singleref_mode(buffer_ptr_array[cand_index]->cand->pred_mode) || pcs->ppcs->slice_type == B_SLICE)) {
                     ssim_cost = (ssim_cost * uni_psy_bias[pcs->picture_qp]) / 100; // Adjust only the ssim_cost here
                 }
-
-                if (scs->vq_ctrls.sharpness_ctrls.unipred_bias && scs->static_config.tune == 3 &&
+                //Replaced with tune 5 temporarily; doing this is much faster than removing stuff
+                if (scs->vq_ctrls.sharpness_ctrls.unipred_bias && scs->static_config.tune == 5 &&
                     (is_inter_singleref_mode(buffer_ptr_array[cand_index]->cand->pred_mode) || pcs->ppcs->slice_type == B_SLICE)) { // Only somewhat reverse the uni psy bias on B-Frames, prevents sharp / squiggling(lack of a better term?) artifacting
                     ssim_cost = (ssim_cost * bi_psy_bias[pcs->picture_qp]) / 100;
                 }
@@ -4314,14 +4316,15 @@ uint32_t svt_aom_product_full_mode_decision(
                 uint32_t cand_index = best_candidate_index_array[i];
 
                 uint64_t cost = *(buffer_ptr_array[cand_index]->full_cost);
+                //Replaced with tune 5 temporarily; doing this is much faster than removing stuff
                 if ((scs->vq_ctrls.sharpness_ctrls.unipred_bias && pcs->ppcs->is_noise_level &&
                     is_inter_singleref_mode(buffer_ptr_array[cand_index]->cand->pred_mode)) ||
-                    (scs->vq_ctrls.sharpness_ctrls.unipred_bias && scs->static_config.tune == 3 &&
+                    (scs->vq_ctrls.sharpness_ctrls.unipred_bias && scs->static_config.tune == 5 &&
                     (is_inter_singleref_mode(buffer_ptr_array[cand_index]->cand->pred_mode) || pcs->ppcs->slice_type == B_SLICE))) {
                     cost = (cost * uni_psy_bias[pcs->picture_qp]) / 100;
                 }
-
-                if (scs->vq_ctrls.sharpness_ctrls.unipred_bias && scs->static_config.tune == 3 &&
+                //Replaced with tune 5 temporarily; doing this is much faster than removing stuff
+                if (scs->vq_ctrls.sharpness_ctrls.unipred_bias && scs->static_config.tune == 5 &&
                     (is_inter_singleref_mode(buffer_ptr_array[cand_index]->cand->pred_mode) || pcs->ppcs->slice_type == B_SLICE)) { // Only somewhat reverse the uni psy bias on B-Frames, prevents sharp / squiggling(lack of a better term?) artifacting
                     cost = (cost * bi_psy_bias[pcs->picture_qp]) / 100;
                 }
