@@ -822,7 +822,8 @@ static int crf_qindex_calc(PictureControlSet *pcs, RATE_CONTROL *rc, int qindex)
     // r0 scaling
     // TPL may only look at a subset of available pictures in tpl group, which may affect the r0 calcuation.
     // As a result, we defined a factor to adjust r0 (to compensate for TPL not using all available frames).
-    if (pcs->scs->static_config.tune == 3 ? svt_aom_frame_is_kf_gf_arf(ppcs) : frame_is_intra_only(ppcs)) {
+    //Temporarily changed tune 3 to 5; easier
+    if (pcs->scs->static_config.tune == 5 ? svt_aom_frame_is_kf_gf_arf(ppcs) : frame_is_intra_only(ppcs)) {
         if (ppcs->tpl_ctrls.r0_adjust_factor) {
             ppcs->r0 /= ppcs->tpl_ctrls.r0_adjust_factor;
         }
@@ -865,7 +866,8 @@ static int crf_qindex_calc(PictureControlSet *pcs, RATE_CONTROL *rc, int qindex)
         assert(r0_weight_idx <= 2);
         double weight = r0_weight[r0_weight_idx];
         // adjust the weight for base layer frames with shorter minigops
-        if (scs->lad_mg && (pcs->scs->static_config.tune == 3 ? !svt_aom_frame_is_kf_gf_arf(ppcs) : !frame_is_intra_only(ppcs)) &&
+        //Temporarily changed tune 3 to 5
+        if (scs->lad_mg && (pcs->scs->static_config.tune == 5 ? !svt_aom_frame_is_kf_gf_arf(ppcs) : !frame_is_intra_only(ppcs)) &&
             (ppcs->tpl_group_size < (uint32_t)(2 << pcs->ppcs->hierarchical_levels)))
             weight = MIN(weight + 0.1, 1);
 
@@ -879,7 +881,8 @@ static int crf_qindex_calc(PictureControlSet *pcs, RATE_CONTROL *rc, int qindex)
 #if DEBUG_QP_SCALING
         printf("  qstep based calc: r0 weight %f, qstep ratio %f, qindex from qstep ratio %i\n", weight, qstep_ratio, qindex_from_qstep_ratio);
 #endif
-        if (pcs->scs->static_config.tune == 3 ? !svt_aom_frame_is_kf_gf_arf(ppcs) : !frame_is_intra_only(ppcs))
+        //Temporarily changed tune 3 to 5
+        if (pcs->scs->static_config.tune == 5 ? !svt_aom_frame_is_kf_gf_arf(ppcs) : !frame_is_intra_only(ppcs))
             rc->arf_q = qindex_from_qstep_ratio;
         active_best_quality  = clamp(qindex_from_qstep_ratio, rc->best_quality, qindex);
         active_worst_quality = (active_best_quality + (3 * active_worst_quality) + 2) / 4;
@@ -1215,9 +1218,10 @@ static int compute_deltaq(struct PictureParentControlSet *ppcs, RATE_CONTROL *rc
     if ((-deltaq) > ppcs->cyclic_refresh.max_qdelta_perc * q / 100) {
         deltaq = -ppcs->cyclic_refresh.max_qdelta_perc * q / 100;
     }
+    //Temporarily changed tune 3 to 5
     // RA uses a scale factor of 4 for the deltaQ range. Found it beneficial for low delay to have a larger deltaQ range, so we scale by 8
-    deltaq = AOMMIN(deltaq, ppcs->frm_hdr.delta_q_params.delta_q_res * 9 * (ppcs->scs->static_config.tune == 3 ? 16 : 8) - 1);
-    deltaq = AOMMAX(deltaq, -ppcs->frm_hdr.delta_q_params.delta_q_res * 9 * (ppcs->scs->static_config.tune == 3 ? 16 : 8) + 1);
+    deltaq = AOMMIN(deltaq, ppcs->frm_hdr.delta_q_params.delta_q_res * 9 * (ppcs->scs->static_config.tune == 5 ? 16 : 8) - 1);
+    deltaq = AOMMAX(deltaq, -ppcs->frm_hdr.delta_q_params.delta_q_res * 9 * (ppcs->scs->static_config.tune == 5 ? 16 : 8) + 1);
     return deltaq;
 }
 static int av1_estimate_bits_at_q(FrameType frame_type, int q, int mbs, double correction_factor, EbBitDepth bit_depth,
@@ -1374,9 +1378,9 @@ static void generate_b64_me_qindex_map(PictureControlSet *pcs) {
                     ? (int)((max_offset[pcs->ppcs->temporal_layer_index] * diff_dist) / (int)(max_dist - avg_me_dist))
                     : 0;
             }
-
-            offset                      = AOMMIN(offset, pcs->ppcs->frm_hdr.delta_q_params.delta_q_res * 9 * (pcs->ppcs->scs->static_config.tune == 3 ? 8 : 4) - 1);
-            offset                      = AOMMAX(offset, -pcs->ppcs->frm_hdr.delta_q_params.delta_q_res * 9 * (pcs->ppcs->scs->static_config.tune == 3 ? 8 : 4) + 1);
+            //Temporarily changed tune 3 to 5
+            offset                      = AOMMIN(offset, pcs->ppcs->frm_hdr.delta_q_params.delta_q_res * 9 * (pcs->ppcs->scs->static_config.tune == 5 ? 8 : 4) - 1);
+            offset                      = AOMMAX(offset, -pcs->ppcs->frm_hdr.delta_q_params.delta_q_res * 9 * (pcs->ppcs->scs->static_config.tune == 5 ? 8 : 4) + 1);
             pcs->b64_me_qindex[b64_idx] = CLIP3(
                 pcs->ppcs->frm_hdr.delta_q_params.delta_q_res,
                 255 - pcs->ppcs->frm_hdr.delta_q_params.delta_q_res,
@@ -1642,8 +1646,9 @@ void svt_aom_sb_qp_derivation_tpl_la(PictureControlSet *pcs) {
             double      beta   = ppcs_ptr->pa_me_data->tpl_beta[sb_addr];
             int         offset = svt_av1_get_deltaq_offset(
                 scs->static_config.encoder_bit_depth, sb_ptr->qindex, beta, pcs->ppcs->slice_type == I_SLICE);
-            offset         = AOMMIN(offset, pcs->ppcs->frm_hdr.delta_q_params.delta_q_res * 9 * (pcs->ppcs->scs->static_config.tune == 3 ? 8 : 4) - 1);
-            offset         = AOMMAX(offset, -pcs->ppcs->frm_hdr.delta_q_params.delta_q_res * 9 * (pcs->ppcs->scs->static_config.tune == 3 ? 8 : 4) + 1);
+            //Temporarily changed tune 3 to 5
+            offset         = AOMMIN(offset, pcs->ppcs->frm_hdr.delta_q_params.delta_q_res * 9 * (pcs->ppcs->scs->static_config.tune == 5 ? 8 : 4) - 1);
+            offset         = AOMMAX(offset, -pcs->ppcs->frm_hdr.delta_q_params.delta_q_res * 9 * (pcs->ppcs->scs->static_config.tune == 5 ? 8 : 4) + 1);
 
 #if DEBUG_VAR_BOOST_STATS
             printf("%4d ", -offset);

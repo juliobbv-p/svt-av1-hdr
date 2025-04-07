@@ -952,8 +952,9 @@ static void tpl_mc_flow_dispenser_sb_generic(EncodeContext *enc_ctx, SequenceCon
                 get_quantize_error(&mb_plane, best_coeff, qcoeff, dqcoeff, tx_size, &eob, &recon_error, &sse);
 
                 int rate_cost        = pcs->tpl_ctrls.compute_rate ? rate_estimator(qcoeff, eob, tx_size) : 0;
-                tpl_stats.srcrf_rate = (rate_cost << (pcs->scs->static_config.tune == 3 ? 1 : TPL_DEP_COST_SCALE_LOG2)) << tpl_ctrls->subsample_tx; // Experimental tune 3 change, likely to be modified in the future.
-                tpl_stats.srcrf_dist = (recon_error << (pcs->scs->static_config.tune == 3 ? 1 : TPL_DEP_COST_SCALE_LOG2)) << tpl_ctrls->subsample_tx;
+                //Temporarily changed tune 3 to 5
+                tpl_stats.srcrf_rate = (rate_cost << (pcs->scs->static_config.tune == 5 ? 1 : TPL_DEP_COST_SCALE_LOG2)) << tpl_ctrls->subsample_tx; // Experimental tune 3 change, likely to be modified in the future.
+                tpl_stats.srcrf_dist = (recon_error << (pcs->scs->static_config.tune == 5 ? 1 : TPL_DEP_COST_SCALE_LOG2)) << tpl_ctrls->subsample_tx;
             }
             if (scs->tpl_lad_mg > 0) {
                 //store src based stats
@@ -1179,12 +1180,12 @@ static void tpl_mc_flow_dispenser_sb_generic(EncodeContext *enc_ctx, SequenceCon
                 }
             }
         }
-
-        tpl_stats.recrf_dist = (recon_error << (pcs->scs->static_config.tune == 3 ? 1 : TPL_DEP_COST_SCALE_LOG2)) << tpl_ctrls->subsample_tx;
-        tpl_stats.recrf_rate = (rate_cost << (pcs->scs->static_config.tune == 3 ? 1 : TPL_DEP_COST_SCALE_LOG2)) << tpl_ctrls->subsample_tx;
+        //Temporarily changed tune 3 to 5
+        tpl_stats.recrf_dist = (recon_error << (pcs->scs->static_config.tune == 5 ? 1 : TPL_DEP_COST_SCALE_LOG2)) << tpl_ctrls->subsample_tx;
+        tpl_stats.recrf_rate = (rate_cost << (pcs->scs->static_config.tune == 5 ? 1 : TPL_DEP_COST_SCALE_LOG2)) << tpl_ctrls->subsample_tx;
         if (best_mode != NEWMV) {
-            tpl_stats.srcrf_dist = (recon_error << (pcs->scs->static_config.tune == 3 ? 1 : TPL_DEP_COST_SCALE_LOG2)) << tpl_ctrls->subsample_tx;
-            tpl_stats.srcrf_rate = (rate_cost << (pcs->scs->static_config.tune == 3 ? 1 : TPL_DEP_COST_SCALE_LOG2)) << tpl_ctrls->subsample_tx;
+            tpl_stats.srcrf_dist = (recon_error << (pcs->scs->static_config.tune == 5 ? 1 : TPL_DEP_COST_SCALE_LOG2)) << tpl_ctrls->subsample_tx;
+            tpl_stats.srcrf_rate = (rate_cost << (pcs->scs->static_config.tune == 5 ? 1 : TPL_DEP_COST_SCALE_LOG2)) << tpl_ctrls->subsample_tx;
         }
 
         tpl_stats.recrf_dist = AOMMAX(tpl_stats.srcrf_dist, tpl_stats.recrf_dist);
