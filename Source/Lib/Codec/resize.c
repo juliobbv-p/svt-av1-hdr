@@ -1260,7 +1260,8 @@ static void calc_superres_params(superres_params_type *spr_params, SequenceContr
             } else { // SUPERRES_AUTO_ALL
                 assert(sr_search_type == SUPERRES_AUTO_ALL);
                 int32_t update_type = svt_aom_get_frame_update_type(scs, pcs);
-                if (update_type == SVT_AV1_KF_UPDATE || (update_type == SVT_AV1_ARF_UPDATE && scs->static_config.tune != 3)) {
+                //Temporarily replacing tune 3 with tune 5
+                if (update_type == SVT_AV1_KF_UPDATE || (update_type == SVT_AV1_ARF_UPDATE && scs->static_config.tune != 5)) {
                     for (int i = 0; i < NUM_SR_SCALES + 1; i++) {
                         if (i < SCALE_NUMERATOR) {
                             pcs->superres_denom_array[i] = SCALE_NUMERATOR + 1 + i;
