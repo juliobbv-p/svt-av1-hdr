@@ -1102,6 +1102,9 @@ static EbErrorType compute_block_mean_compute_variance(
     mean_of_64x64_blocks = (mean_of_32x32_blocks[0] + mean_of_32x32_blocks[1] + mean_of_32x32_blocks[2] +
                             mean_of_32x32_blocks[3]) >>
         2;
+
+    pcs->mean[sb_index] = mean_of_64x64_blocks;
+
     mean_of64x64_squared_values_blocks = (mean_of32x32_squared_values_blocks[0] +
                                           mean_of32x32_squared_values_blocks[1] +
                                           mean_of32x32_squared_values_blocks[2] +
@@ -1109,273 +1112,36 @@ static EbErrorType compute_block_mean_compute_variance(
         2;
     // 8x8 variances
     if (scs->static_config.enable_adaptive_quantization == 1 || scs->static_config.variance_octile) {
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_0] = (uint16_t)((mean_of_8x8_squared_values_blocks[0] -
-                                                                     (mean_of8x8_blocks[0] * mean_of8x8_blocks[0])) >>
-                                                                    VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_1] = (uint16_t)((mean_of_8x8_squared_values_blocks[1] -
-                                                                     (mean_of8x8_blocks[1] * mean_of8x8_blocks[1])) >>
-                                                                    VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_2] = (uint16_t)((mean_of_8x8_squared_values_blocks[2] -
-                                                                     (mean_of8x8_blocks[2] * mean_of8x8_blocks[2])) >>
-                                                                    VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_3] = (uint16_t)((mean_of_8x8_squared_values_blocks[3] -
-                                                                     (mean_of8x8_blocks[3] * mean_of8x8_blocks[3])) >>
-                                                                    VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_4] = (uint16_t)((mean_of_8x8_squared_values_blocks[4] -
-                                                                     (mean_of8x8_blocks[4] * mean_of8x8_blocks[4])) >>
-                                                                    VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_5] = (uint16_t)((mean_of_8x8_squared_values_blocks[5] -
-                                                                     (mean_of8x8_blocks[5] * mean_of8x8_blocks[5])) >>
-                                                                    VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_6] = (uint16_t)((mean_of_8x8_squared_values_blocks[6] -
-                                                                     (mean_of8x8_blocks[6] * mean_of8x8_blocks[6])) >>
-                                                                    VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_7] = (uint16_t)((mean_of_8x8_squared_values_blocks[7] -
-                                                                     (mean_of8x8_blocks[7] * mean_of8x8_blocks[7])) >>
-                                                                    VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_8] = (uint16_t)((mean_of_8x8_squared_values_blocks[8] -
-                                                                     (mean_of8x8_blocks[8] * mean_of8x8_blocks[8])) >>
-                                                                    VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_9] = (uint16_t)((mean_of_8x8_squared_values_blocks[9] -
-                                                                     (mean_of8x8_blocks[9] * mean_of8x8_blocks[9])) >>
-                                                                    VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_10] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[10] - (mean_of8x8_blocks[10] * mean_of8x8_blocks[10])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_11] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[11] - (mean_of8x8_blocks[11] * mean_of8x8_blocks[11])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_12] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[12] - (mean_of8x8_blocks[12] * mean_of8x8_blocks[12])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_13] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[13] - (mean_of8x8_blocks[13] * mean_of8x8_blocks[13])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_14] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[14] - (mean_of8x8_blocks[14] * mean_of8x8_blocks[14])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_15] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[15] - (mean_of8x8_blocks[15] * mean_of8x8_blocks[15])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_16] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[16] - (mean_of8x8_blocks[16] * mean_of8x8_blocks[16])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_17] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[17] - (mean_of8x8_blocks[17] * mean_of8x8_blocks[17])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_18] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[18] - (mean_of8x8_blocks[18] * mean_of8x8_blocks[18])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_19] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[19] - (mean_of8x8_blocks[19] * mean_of8x8_blocks[19])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_20] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[20] - (mean_of8x8_blocks[20] * mean_of8x8_blocks[20])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_21] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[21] - (mean_of8x8_blocks[21] * mean_of8x8_blocks[21])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_22] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[22] - (mean_of8x8_blocks[22] * mean_of8x8_blocks[22])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_23] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[23] - (mean_of8x8_blocks[23] * mean_of8x8_blocks[23])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_24] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[24] - (mean_of8x8_blocks[24] * mean_of8x8_blocks[24])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_25] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[25] - (mean_of8x8_blocks[25] * mean_of8x8_blocks[25])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_26] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[26] - (mean_of8x8_blocks[26] * mean_of8x8_blocks[26])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_27] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[27] - (mean_of8x8_blocks[27] * mean_of8x8_blocks[27])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_28] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[28] - (mean_of8x8_blocks[28] * mean_of8x8_blocks[28])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_29] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[29] - (mean_of8x8_blocks[29] * mean_of8x8_blocks[29])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_30] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[30] - (mean_of8x8_blocks[30] * mean_of8x8_blocks[30])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_31] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[31] - (mean_of8x8_blocks[31] * mean_of8x8_blocks[31])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_32] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[32] - (mean_of8x8_blocks[32] * mean_of8x8_blocks[32])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_33] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[33] - (mean_of8x8_blocks[33] * mean_of8x8_blocks[33])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_34] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[34] - (mean_of8x8_blocks[34] * mean_of8x8_blocks[34])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_35] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[35] - (mean_of8x8_blocks[35] * mean_of8x8_blocks[35])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_36] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[36] - (mean_of8x8_blocks[36] * mean_of8x8_blocks[36])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_37] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[37] - (mean_of8x8_blocks[37] * mean_of8x8_blocks[37])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_38] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[38] - (mean_of8x8_blocks[38] * mean_of8x8_blocks[38])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_39] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[39] - (mean_of8x8_blocks[39] * mean_of8x8_blocks[39])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_40] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[40] - (mean_of8x8_blocks[40] * mean_of8x8_blocks[40])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_41] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[41] - (mean_of8x8_blocks[41] * mean_of8x8_blocks[41])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_42] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[42] - (mean_of8x8_blocks[42] * mean_of8x8_blocks[42])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_43] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[43] - (mean_of8x8_blocks[43] * mean_of8x8_blocks[43])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_44] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[44] - (mean_of8x8_blocks[44] * mean_of8x8_blocks[44])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_45] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[45] - (mean_of8x8_blocks[45] * mean_of8x8_blocks[45])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_46] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[46] - (mean_of8x8_blocks[46] * mean_of8x8_blocks[46])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_47] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[47] - (mean_of8x8_blocks[47] * mean_of8x8_blocks[47])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_48] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[48] - (mean_of8x8_blocks[48] * mean_of8x8_blocks[48])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_49] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[49] - (mean_of8x8_blocks[49] * mean_of8x8_blocks[49])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_50] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[50] - (mean_of8x8_blocks[50] * mean_of8x8_blocks[50])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_51] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[51] - (mean_of8x8_blocks[51] * mean_of8x8_blocks[51])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_52] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[52] - (mean_of8x8_blocks[52] * mean_of8x8_blocks[52])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_53] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[53] - (mean_of8x8_blocks[53] * mean_of8x8_blocks[53])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_54] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[54] - (mean_of8x8_blocks[54] * mean_of8x8_blocks[54])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_55] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[55] - (mean_of8x8_blocks[55] * mean_of8x8_blocks[55])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_56] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[56] - (mean_of8x8_blocks[56] * mean_of8x8_blocks[56])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_57] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[57] - (mean_of8x8_blocks[57] * mean_of8x8_blocks[57])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_58] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[58] - (mean_of8x8_blocks[58] * mean_of8x8_blocks[58])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_59] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[59] - (mean_of8x8_blocks[59] * mean_of8x8_blocks[59])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_60] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[60] - (mean_of8x8_blocks[60] * mean_of8x8_blocks[60])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_61] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[61] - (mean_of8x8_blocks[61] * mean_of8x8_blocks[61])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_62] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[62] - (mean_of8x8_blocks[62] * mean_of8x8_blocks[62])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_8x8_63] =
-            (uint16_t)((mean_of_8x8_squared_values_blocks[63] - (mean_of8x8_blocks[63] * mean_of8x8_blocks[63])) >>
-                       VARIANCE_PRECISION);
+        for (uint64_t idx = ME_TIER_ZERO_PU_8x8_0; idx <= ME_TIER_ZERO_PU_8x8_63; idx++) {
+            uint64_t mean_idx = idx - ME_TIER_ZERO_PU_8x8_0;
+
+            pcs->variance[sb_index][idx] = (double)(mean_of_8x8_squared_values_blocks[mean_idx] -
+                                                    (mean_of8x8_blocks[mean_idx] * mean_of8x8_blocks[mean_idx])) /
+                (1 << VARIANCE_PRECISION);
+        }
 
         // 16x16 variances
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_16x16_0] =
-            (uint16_t)((mean_of16x16_squared_values_blocks[0] - (mean_of_16x16_blocks[0] * mean_of_16x16_blocks[0])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_16x16_1] =
-            (uint16_t)((mean_of16x16_squared_values_blocks[1] - (mean_of_16x16_blocks[1] * mean_of_16x16_blocks[1])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_16x16_2] =
-            (uint16_t)((mean_of16x16_squared_values_blocks[2] - (mean_of_16x16_blocks[2] * mean_of_16x16_blocks[2])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_16x16_3] =
-            (uint16_t)((mean_of16x16_squared_values_blocks[3] - (mean_of_16x16_blocks[3] * mean_of_16x16_blocks[3])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_16x16_4] =
-            (uint16_t)((mean_of16x16_squared_values_blocks[4] - (mean_of_16x16_blocks[4] * mean_of_16x16_blocks[4])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_16x16_5] =
-            (uint16_t)((mean_of16x16_squared_values_blocks[5] - (mean_of_16x16_blocks[5] * mean_of_16x16_blocks[5])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_16x16_6] =
-            (uint16_t)((mean_of16x16_squared_values_blocks[6] - (mean_of_16x16_blocks[6] * mean_of_16x16_blocks[6])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_16x16_7] =
-            (uint16_t)((mean_of16x16_squared_values_blocks[7] - (mean_of_16x16_blocks[7] * mean_of_16x16_blocks[7])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_16x16_8] =
-            (uint16_t)((mean_of16x16_squared_values_blocks[8] - (mean_of_16x16_blocks[8] * mean_of_16x16_blocks[8])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_16x16_9] =
-            (uint16_t)((mean_of16x16_squared_values_blocks[9] - (mean_of_16x16_blocks[9] * mean_of_16x16_blocks[9])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_16x16_10] = (uint16_t)((mean_of16x16_squared_values_blocks[10] -
-                                                                        (mean_of_16x16_blocks[10] *
-                                                                         mean_of_16x16_blocks[10])) >>
-                                                                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_16x16_11] = (uint16_t)((mean_of16x16_squared_values_blocks[11] -
-                                                                        (mean_of_16x16_blocks[11] *
-                                                                         mean_of_16x16_blocks[11])) >>
-                                                                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_16x16_12] = (uint16_t)((mean_of16x16_squared_values_blocks[12] -
-                                                                        (mean_of_16x16_blocks[12] *
-                                                                         mean_of_16x16_blocks[12])) >>
-                                                                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_16x16_13] = (uint16_t)((mean_of16x16_squared_values_blocks[13] -
-                                                                        (mean_of_16x16_blocks[13] *
-                                                                         mean_of_16x16_blocks[13])) >>
-                                                                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_16x16_14] = (uint16_t)((mean_of16x16_squared_values_blocks[14] -
-                                                                        (mean_of_16x16_blocks[14] *
-                                                                         mean_of_16x16_blocks[14])) >>
-                                                                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_16x16_15] = (uint16_t)((mean_of16x16_squared_values_blocks[15] -
-                                                                        (mean_of_16x16_blocks[15] *
-                                                                         mean_of_16x16_blocks[15])) >>
-                                                                       VARIANCE_PRECISION);
+        for (uint64_t idx = ME_TIER_ZERO_PU_16x16_0; idx <= ME_TIER_ZERO_PU_16x16_15; idx++) {
+            uint64_t mean_idx = idx - ME_TIER_ZERO_PU_16x16_0;
+
+            pcs->variance[sb_index][idx] = (double)(mean_of16x16_squared_values_blocks[mean_idx] -
+                                                    (mean_of_16x16_blocks[mean_idx] * mean_of_16x16_blocks[mean_idx])) /
+                (1 << VARIANCE_PRECISION);
+        }
 
         // 32x32 variances
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_32x32_0] =
-            (uint16_t)((mean_of32x32_squared_values_blocks[0] - (mean_of_32x32_blocks[0] * mean_of_32x32_blocks[0])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_32x32_1] =
-            (uint16_t)((mean_of32x32_squared_values_blocks[1] - (mean_of_32x32_blocks[1] * mean_of_32x32_blocks[1])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_32x32_2] =
-            (uint16_t)((mean_of32x32_squared_values_blocks[2] - (mean_of_32x32_blocks[2] * mean_of_32x32_blocks[2])) >>
-                       VARIANCE_PRECISION);
-        pcs->variance[sb_index][ME_TIER_ZERO_PU_32x32_3] =
-            (uint16_t)((mean_of32x32_squared_values_blocks[3] - (mean_of_32x32_blocks[3] * mean_of_32x32_blocks[3])) >>
-                       VARIANCE_PRECISION);
+        for (uint64_t idx = ME_TIER_ZERO_PU_32x32_0; idx <= ME_TIER_ZERO_PU_32x32_3; idx++) {
+            uint64_t mean_idx = idx - ME_TIER_ZERO_PU_32x32_0;
+
+            pcs->variance[sb_index][idx] = (double)(mean_of32x32_squared_values_blocks[mean_idx] -
+                                                    (mean_of_32x32_blocks[mean_idx] * mean_of_32x32_blocks[mean_idx])) /
+                (1 << VARIANCE_PRECISION);
+        }
     }
     // 64x64 variance
-    pcs->variance[sb_index][ME_TIER_ZERO_PU_64x64] = (uint16_t)((mean_of64x64_squared_values_blocks -
-                                                                 (mean_of_64x64_blocks * mean_of_64x64_blocks)) >>
-                                                                VARIANCE_PRECISION);
+    pcs->variance[sb_index][ME_TIER_ZERO_PU_64x64] = (double)(mean_of64x64_squared_values_blocks -
+                                                              (mean_of_64x64_blocks * mean_of_64x64_blocks)) /
+        (1 << VARIANCE_PRECISION);
 
     return return_error;
 }
