@@ -1123,6 +1123,10 @@ static void picture_parent_control_set_dctor(EbPtr ptr) {
         EB_DELETE(obj->chroma_downsampled_pic);
     }
 
+    if (obj->mean) {
+        EB_FREE_ARRAY(obj->mean);
+    }
+
     if (obj->variance) {
         EB_FREE_2D(obj->variance);
     }
@@ -1271,6 +1275,7 @@ static EbErrorType picture_parent_control_set_ctor(PictureParentControlSet* obje
         } else {
             block_count = 1;
         }
+        EB_MALLOC_ARRAY(object_ptr->mean, object_ptr->b64_total_count);
         EB_MALLOC_2D(object_ptr->variance, object_ptr->b64_total_count, block_count);
     }
     if (init_data_ptr->calc_hist) {
