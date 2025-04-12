@@ -3791,6 +3791,11 @@ uint32_t svt_aom_product_full_mode_decision(
                     cost = (cost * uni_psy_bias[pcs->picture_qp]) / 100;
                 }
 
+                if (scs->static_config.tune == 3 &&
+                    is_inter_singleref_mode(buffer_ptr_array[cand_index]->cand->block_mi.mode)) {
+                    cost = (cost * bi_psy_bias[pcs->picture_qp]) / 100;
+                }
+
                 if (cost < lowest_cost) {
                     lowest_cost_index = cand_index;
                     lowest_cost = cost;
@@ -4088,7 +4093,7 @@ void  svt_aom_set_tuned_blk_lambda(struct ModeDecisionContext *ctx, PictureContr
     ctx->fast_lambda_md[EB_8_BIT_MD] = (uint32_t)((double)ctx->ed_ctx->pic_fast_lambda[EB_8_BIT_MD] * geom_mean_of_scale + 0.5);
     ctx->fast_lambda_md[EB_10_BIT_MD] = (uint32_t)((double)ctx->ed_ctx->pic_fast_lambda[EB_10_BIT_MD] * geom_mean_of_scale + 0.5);
 
-    if (ppcs->scs->static_config.tune == 2) {
+    if (ppcs->scs->static_config.tune == 2 || ppcs->scs->static_config.tune == 3) {
         aom_av1_set_ssim_rdmult(ctx, pcs, mi_row, mi_col);
     }
 }
