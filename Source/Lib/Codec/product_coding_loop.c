@@ -9944,9 +9944,12 @@ static bool var_skip_sub_depth(PictureControlSet *pcs, ModeDecisionContext *ctx)
 
     get_blk_var_map(ctx->blk_geom->sq_size, ctx->blk_geom->org_x, ctx->blk_geom->org_y, &blk_idx, sub_idx);
 
-    uint16_t *sb_var = pcs->ppcs->variance[ctx->sb_index];
+    double *sb_var = pcs->ppcs->variance[ctx->sb_index];
 
-    uint32_t sub_var[4] = {sb_var[sub_idx[0]], sb_var[sub_idx[1]], sb_var[sub_idx[2]], sb_var[sub_idx[3]]};
+    uint32_t sub_var[4] = {(uint32_t)sb_var[sub_idx[0]],
+                           (uint32_t)sb_var[sub_idx[1]],
+                           (uint32_t)sb_var[sub_idx[2]],
+                           (uint32_t)sb_var[sub_idx[3]]};
 
     uint32_t min_var = UINT32_MAX;
     uint32_t max_var = 0;
