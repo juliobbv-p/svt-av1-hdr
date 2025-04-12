@@ -982,7 +982,7 @@ ConfigDescription config_entry_psychovisual[] = {
     {ENABLE_VARIANCE_BOOST_TOKEN, "Enable Variance Boost, default is 1 [0-1]"},
     {VARIANCE_BOOST_STRENGTH_TOKEN, "Variance Boost strength, default is 2 [1-4]"},
     {VARIANCE_OCTILE_TOKEN, "Octile for Variance Boost, default is 5 [1-8]"},
-    {VARIANCE_BOOST_CURVE_TOKEN, "Curve for Variance Boost, default is 0 [0-2]"},
+    {VARIANCE_BOOST_CURVE_TOKEN, "Curve for Variance Boost, default is 0 [0-3]"},
     // QP scale compress
     {QP_SCALE_COMPRESS_STRENGTH_TOKEN, "QP scale compress strength, default is 1 [0-3]"},
     // Adaptive film grain
