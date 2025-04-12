@@ -3236,7 +3236,16 @@ static void derive_vq_params(SequenceControlSet* scs) {
         vq_ctrl->sharpness_ctrls.restoration      = 1;
         vq_ctrl->sharpness_ctrls.rdoq             = 1;
     }
-    else {
+    else if (scs->static_config.tune == 3) {
+
+        vq_ctrl->sharpness_ctrls.scene_transition = 1;
+        vq_ctrl->sharpness_ctrls.tf               = 1;
+        vq_ctrl->sharpness_ctrls.unipred_bias     = 1;
+        vq_ctrl->sharpness_ctrls.ifs              = 1;
+        vq_ctrl->sharpness_ctrls.cdef             = 1;
+        vq_ctrl->sharpness_ctrls.restoration      = 1;
+        vq_ctrl->sharpness_ctrls.rdoq             = 1;
+    } else {
 
         // Sharpness
         vq_ctrl->sharpness_ctrls.scene_transition = 1;
