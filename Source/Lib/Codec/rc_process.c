@@ -1389,8 +1389,15 @@ static void generate_b64_me_qindex_map(PictureControlSet *pcs) {
     }
 }
 
-int variance_comp_int(const void *a, const void *b) { return (int)*(uint16_t *)a - *(uint16_t *)b; }
+int variance_comp_double(const void *a, const void *b) {
+    double aval = *(double *)a;
+    double bval = *(double *)b;
 
+    return aval > bval ? 1 : (aval < bval ? -1 : 0);
+}
+
+#define VAR_BOOST_MAX_PQ_DELTAQ_RANGE 120
+#define VAR_BOOST_MAX_PQ_QSTEP_RATIO_BOOST 14
 #define VAR_BOOST_MAX_DELTAQ_RANGE 80
 #define VAR_BOOST_MAX_QSTEP_RATIO_BOOST 8
 
@@ -1400,7 +1407,7 @@ int variance_comp_int(const void *a, const void *b) { return (int)*(uint16_t *)a
 #define SUBBLOCKS_IN_SB (SUBBLOCKS_IN_SB_DIM * SUBBLOCKS_IN_SB_DIM)
 #define SUBBLOCKS_IN_OCTILE (SUBBLOCKS_IN_SB / 8)
 
-static int av1_get_deltaq_sb_variance_boost(uint8_t base_q_idx, uint16_t *variances, uint8_t strength,
+static int av1_get_deltaq_sb_variance_boost(uint8_t base_q_idx, uint64_t mean, double *variances, uint8_t strength,
                                             EbBitDepth bit_depth, uint8_t octile, uint8_t curve) {
     // boost q_index based on empirical visual testing, strength 2
     // variance     qstep_ratio boost (@ base_q_idx 255)
@@ -1411,37 +1418,39 @@ static int av1_get_deltaq_sb_variance_boost(uint8_t base_q_idx, uint16_t *varian
     // 1            4.806
 
     // copy sb 8x8 variance values to an array for ordering
-    uint16_t ordered_variances[64];
-    memcpy(&ordered_variances, variances + ME_TIER_ZERO_PU_8x8_0, sizeof(uint16_t) * 64);
-    qsort(&ordered_variances, 64, sizeof(uint16_t), variance_comp_int);
+    double ordered_variances[64];
+    memcpy(&ordered_variances, variances + ME_TIER_ZERO_PU_8x8_0, sizeof(double) * 64);
+    qsort(&ordered_variances, 64, sizeof(double), variance_comp_double);
 
-    // Sample three 8x8 variance values: at the specified octile, previous octile,
-    // and next octile. Make sure we use the last subblock in each octile as the
-    // representative of the octile.
     assert(octile >= 1 && octile <= 8);
+
+    // Sample three 8x8 variance values:
+    // - at the specified octile
+    // - previous octile
+    // - next octile
+    // Make sure we use the last subblock in each octile as the
+    // representative of the octile.
     const int mid_idx = octile * SUBBLOCKS_IN_OCTILE - 1;
     const int low_idx = AOMMAX(SUBBLOCKS_IN_OCTILE - 1, mid_idx - SUBBLOCKS_IN_OCTILE);
     const int upp_idx = AOMMIN(SUBBLOCKS_IN_SB - 1, mid_idx + SUBBLOCKS_IN_OCTILE);
 
-    // Weigh the three variances in a 1:2:1 ratio, with rounding (the +2 term).
+    // Weigh the three variances in a 1:2:1 ratio.
     // This allows for smoother delta-q transitions among superblocks with
     // mixed-variance features.
-    uint16_t variance = (ordered_variances[low_idx] + (ordered_variances[mid_idx] * 2) + ordered_variances[upp_idx] +
-                         2) /
-        4;
+    double variance = (ordered_variances[low_idx] + 2 * ordered_variances[mid_idx] + ordered_variances[upp_idx]) / 4;
 
 #if DEBUG_VAR_BOOST
     SVT_INFO("64x64 variance: %d\n", variances[ME_TIER_ZERO_PU_64x64]);
-    SVT_INFO("8x8 min %d, 1st oct %d, median %d, max %d\n",
+    SVT_INFO("8x8 min %f, 1st oct %f, median %f, max %f\n",
              ordered_variances[0],
              ordered_variances[7],
              ordered_variances[31],
              ordered_variances[63]);
     SVT_INFO("8x8 variances\n");
-    uint16_t *variances_row = variances + ME_TIER_ZERO_PU_8x8_0;
+    double *variances_row = variances + ME_TIER_ZERO_PU_8x8_0;
 
     for (int row = 0; row < 8; row++) {
-        SVT_INFO("%5d %5d %5d %5d %5d %5d %5d %5d\n",
+        SVT_INFO("%5f %5f %5f %5f %5f %5f %5f %5f\n",
                  variances_row[0],
                  variances_row[1],
                  variances_row[2],
@@ -1454,10 +1463,17 @@ static int av1_get_deltaq_sb_variance_boost(uint8_t base_q_idx, uint16_t *varian
     }
 #endif
 
-    // variance = 0 areas are either completely flat patches or very fine gradients
-    // SVT-AV1 doesn't have enough resolution to tell them apart, so let's assume they're not flat and boost them
-    if (variance == 0)
-        variance = 1;
+    // clip minimum variance to 1 or 0.25 (PQ transfer)
+    if (curve == 3) {
+        if (variance < 0.25) {
+            variance = 0.25;
+        }
+    }
+    else {
+        if (variance < 1) {
+            variance = 1;
+        }
+    }
 
     // compute a boost based on a fast-growing formula
     // high and medium variance sbs essentially get no boost, while increasingly lower variance sbs get stronger boosts
@@ -1467,16 +1483,33 @@ static int av1_get_deltaq_sb_variance_boost(uint8_t base_q_idx, uint16_t *varian
 
     switch (curve) {
     case 1: /* 1: low-medium contrast boosting curve */
-        qstep_ratio = 0.25 * strength * (-log2((double)variance) + 8) + 1;
+        qstep_ratio = 0.25 * strength * (-log2(variance) + 8) + 1;
         break;
     case 2: /* 2: still picture curve, tuned for SSIMULACRA2 performance on CID22 */
-        qstep_ratio = 0.15 * strength * (-log2((double)variance) + 10) + 1;
+        qstep_ratio = 0.15 * strength * (-log2(variance) + 10) + 1;
         break;
-    default: /* 0: default q step ratio curve */
-        qstep_ratio = pow(1.018, strengths[strength] * (-10 * log2((double)variance) + 80));
+    default: /* 0, 3: default q step ratio curve */
+        qstep_ratio = pow(1.018, strengths[strength] * (-10 * log2(variance) + 80));
         break;
     }
-    qstep_ratio = CLIP3(1, VAR_BOOST_MAX_QSTEP_RATIO_BOOST, qstep_ratio);
+
+    // PQ curve dark bias adjustment, reduce boost the darker the block
+    if (curve == 3 && mean <= 25000) {
+        // From 0.25 to 1.0
+        double dark_attenuation_ratio = 0.25 + 0.75 * ((mean * mean) / (25000.0 * 25000.0));
+        // Check if entire superblock is mixed variance, and don't apply adjustment otherwise
+        bool should_protect_block = variances[ME_TIER_ZERO_PU_64x64] > 256;
+
+        if (!should_protect_block) {
+            qstep_ratio = ((qstep_ratio - 1) * dark_attenuation_ratio + 1);
+        }
+    }
+
+    if (curve == 3) {
+        qstep_ratio = CLIP3(1, VAR_BOOST_MAX_PQ_QSTEP_RATIO_BOOST, qstep_ratio);
+    } else {
+        qstep_ratio = CLIP3(1, VAR_BOOST_MAX_QSTEP_RATIO_BOOST, qstep_ratio);
+    }
 
     int32_t base_q   = svt_av1_convert_qindex_to_q_fp8(base_q_idx, bit_depth);
     int32_t target_q = (int32_t)(base_q / qstep_ratio);
@@ -1486,14 +1519,19 @@ static int av1_get_deltaq_sb_variance_boost(uint8_t base_q_idx, uint16_t *varian
     case 2: /* still picture boost, tuned for SSIMULACRA2 performance on CID22 */
         boost = (int32_t)((base_q_idx + 496) * -svt_av1_compute_qdelta_fp(base_q, target_q, bit_depth) / (255 + 1024));
         break;
+    case 3: /* HDR-optimized perceptual curve scaling */
+        boost = (int32_t)((base_q_idx + 2000) * -svt_av1_compute_qdelta_fp(base_q, target_q, bit_depth) / (255 + 2000));
+        break;
     default: /* curve 0 & 1 boost (default) */
         boost = (int32_t)((base_q_idx + 40) * -svt_av1_compute_qdelta_fp(base_q, target_q, bit_depth) / (255 + 40));
         break;
     }
-    boost = AOMMIN(VAR_BOOST_MAX_DELTAQ_RANGE, boost);
+
+    int32_t max_range = (curve == 3) ? VAR_BOOST_MAX_PQ_DELTAQ_RANGE : VAR_BOOST_MAX_DELTAQ_RANGE;
+    boost = AOMMIN(max_range, boost);
 
 #if DEBUG_VAR_BOOST
-    SVT_INFO("Variance: %d, Strength: %d, Q-step ratio: %f, Boost: %d, Base q: %d, Target q: %d\n",
+    SVT_INFO("Variance: %f, Strength: %d, Q-step ratio: %f, Boost: %d, Base q: %d, Target q: %d\n",
              variance,
              strength,
              qstep_ratio,
@@ -1521,6 +1559,8 @@ void svt_variance_adjust_qp(PictureControlSet *pcs, bool readjust_base_q_idx) {
 
     uint8_t min_qindex = MAX_Q_INDEX;
     uint8_t max_qindex = MIN_Q_INDEX;
+    int32_t max_range = (scs->static_config.variance_boost_curve == 3) ?
+        VAR_BOOST_MAX_PQ_DELTAQ_RANGE : VAR_BOOST_MAX_DELTAQ_RANGE;
 
 #if DEBUG_VAR_BOOST_STATS
     printf("TPL/CQP SB qindex, frame %llu, temp. level %i\n", pcs->picture_number, pcs->temporal_layer_index);
@@ -1542,6 +1582,7 @@ void svt_variance_adjust_qp(PictureControlSet *pcs, bool readjust_base_q_idx) {
 
         // adjust deltaq based on sb variance, with lower variance resulting in a lower qindex
         boost = av1_get_deltaq_sb_variance_boost(ppcs_ptr->frm_hdr.quantization_params.base_q_idx,
+                                                 ppcs_ptr->mean[sb_addr],
                                                  ppcs_ptr->variance[sb_addr],
                                                  scs->static_config.variance_boost_strength,
                                                  scs->static_config.encoder_bit_depth,
@@ -1567,7 +1608,7 @@ void svt_variance_adjust_qp(PictureControlSet *pcs, bool readjust_base_q_idx) {
 
     // normalize and clamp frame qindex value to maximize deltaq range
     int range                 = max_qindex - min_qindex;
-    range                     = AOMMIN(range, VAR_BOOST_MAX_DELTAQ_RANGE);
+    range                     = AOMMIN(range, max_range);
     int normalized_base_q_idx = (int)min_qindex + (range >> 1);
 
 #if DEBUG_VAR_BOOST_QP
@@ -1595,8 +1636,8 @@ void svt_variance_adjust_qp(PictureControlSet *pcs, bool readjust_base_q_idx) {
         sb_ptr = pcs->sb_ptr_array[sb_addr];
 
         int offset = (int)sb_ptr->qindex - normalized_base_q_idx;
-        offset     = AOMMIN(offset, VAR_BOOST_MAX_DELTAQ_RANGE >> 1);
-        offset     = AOMMAX(offset, -VAR_BOOST_MAX_DELTAQ_RANGE >> 1);
+        offset     = AOMMIN(offset, max_range >> 1);
+        offset     = AOMMAX(offset, -max_range >> 1);
 
         uint8_t normalized_qindex = CLIP3(1, // q_index 0 is lossless, and is currently not supported in SVT-AV1
                                           MAX_Q_INDEX,

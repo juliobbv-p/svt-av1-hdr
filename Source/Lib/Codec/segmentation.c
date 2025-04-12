@@ -20,7 +20,7 @@
 #endif
 #include "deblocking_filter.h"
 
-static uint16_t get_variance_for_cu(const BlockGeom *blk_geom, uint16_t *variance_ptr) {
+static double get_variance_for_cu(const BlockGeom *blk_geom, double *variance_ptr) {
     int index0, index1;
     //Assumes max CU size is 64
     switch (blk_geom->bsize) {
@@ -76,7 +76,7 @@ static uint16_t get_variance_for_cu(const BlockGeom *blk_geom, uint16_t *varianc
     case BLOCK_64X16:
     default: index0 = index1 = 0; break;
     }
-    return (variance_ptr[index0] + variance_ptr[index1]) >> 1;
+    return (variance_ptr[index0] + variance_ptr[index1]) / 2;
 }
 
 static void roi_map_apply_segmentation_based_quantization(const BlockGeom *blk_geom, PictureControlSet *pcs,
@@ -127,7 +127,7 @@ void svt_aom_apply_segmentation_based_quantization(const BlockGeom *blk_geom, Pi
         roi_map_apply_segmentation_based_quantization(blk_geom, pcs, sb_ptr, blk_ptr);
         return;
     }
-    uint16_t           *variance_ptr        = pcs->ppcs->variance[sb_ptr->index];
+    double             *variance_ptr        = pcs->ppcs->variance[sb_ptr->index];
     SegmentationParams *segmentation_params = &pcs->ppcs->frm_hdr.segmentation_params;
     uint16_t            variance            = get_variance_for_cu(blk_geom, variance_ptr);
     blk_ptr->segment_id                     = 0;
@@ -253,7 +253,7 @@ void find_segment_qps(SegmentationParams *segmentation_params,
 
     // get range of variance
     for (uint32_t sb_idx = 0; sb_idx < pcs->b64_total_count; ++sb_idx) {
-        uint16_t *variance_ptr = pcs->ppcs->variance[sb_idx];
+        double   *variance_ptr = pcs->ppcs->variance[sb_idx];
         uint32_t  var_index, local_avg = 0;
         // Loop over all 8x8s in a 64x64
         for (var_index = ME_TIER_ZERO_PU_8x8_0; var_index <= ME_TIER_ZERO_PU_8x8_63; var_index++) {
