@@ -2323,32 +2323,32 @@ static void lpd0_detector_allintra(PictureControlSet* pcs, ModeDecisionContext* 
         return;
     }
 
-    uint16_t* sb_var = pcs->ppcs->variance[md_ctx->sb_index];
+    double* sb_var = pcs->ppcs->variance[md_ctx->sb_index];
 
     // Variance accumulation
-    int32_t var64 = sb_var[ME_TIER_ZERO_PU_64x64];
+    double var64 = sb_var[ME_TIER_ZERO_PU_64x64];
 
-    int32_t var32 = 0;
+    double var32 = 0;
     for (int i = ME_TIER_ZERO_PU_32x32_0; i <= ME_TIER_ZERO_PU_32x32_3; ++i) {
         var32 += sb_var[i];
     }
 
-    int32_t var16 = 0;
+    double var16 = 0;
     for (int i = ME_TIER_ZERO_PU_16x16_0; i <= ME_TIER_ZERO_PU_16x16_15; ++i) {
         var16 += sb_var[i];
     }
 
     // Normalize per block
-    var32 >>= 2; // 4 x 32x32
-    var16 >>= 4; // 16 x 16x16
+    var32 /= 4; // 4 x 32x32
+    var16 /= 16; // 16 x 16x16
 
     // Normalize per pixel
     const int32_t scale_32 = (64 * 64) / (32 * 32); // 4
     const int32_t scale_16 = (64 * 64) / (16 * 16); // 16
 
-    int32_t norm_v64 = var64;
-    int32_t norm_v32 = var32 * scale_32;
-    int32_t norm_v16 = var16 * scale_16;
+    int32_t norm_v64 = (int32_t)var64;
+    int32_t norm_v32 = (int32_t)(var32 * scale_32);
+    int32_t norm_v16 = (int32_t)(var16 * scale_16);
 
     // QP-scaled thresholds
     uint32_t q_weight, q_weight_denom;

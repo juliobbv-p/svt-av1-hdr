@@ -7695,8 +7695,8 @@ static INLINE uint32_t compute_vlpd0_cost_allintra(PictureControlSet* pcs, ModeD
     const Position blk_org = {.x = ctx->blk_org_x - ctx->sb_origin_x, .y = ctx->blk_org_y - ctx->sb_origin_y};
     svt_aom_get_blk_var_map(ctx->blk_geom->sq_size, blk_org.x, blk_org.y, &blk_idx, sub_idx);
 
-    uint16_t* sb_var  = pcs->ppcs->variance[ctx->sb_index];
-    uint32_t  blk_var = sb_var[blk_idx];
+    double*  sb_var  = pcs->ppcs->variance[ctx->sb_index];
+    uint32_t blk_var = (uint32_t)sb_var[blk_idx];
 
     uint32_t blk_size = ctx->blk_geom->sq_size;
     uint32_t area     = blk_size * blk_size;
@@ -7712,7 +7712,7 @@ static INLINE uint32_t compute_vlpd0_cost_allintra(PictureControlSet* pcs, ModeD
         uint32_t max_var = 0;
 
         for (int i = 0; i < 4; i++) {
-            uint32_t v = sb_var[sub_idx[i]];
+            uint32_t v = (uint32_t)sb_var[sub_idx[i]];
             min_var    = MIN(min_var, v);
             max_var    = MAX(max_var, v);
         }
