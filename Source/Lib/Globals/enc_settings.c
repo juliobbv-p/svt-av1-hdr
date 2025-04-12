@@ -872,8 +872,8 @@ EbErrorType svt_av1_verify_settings(SequenceControlSet *scs) {
         return_error = EB_ErrorBadParameter;
     }
 
-    if (config->variance_boost_curve > 2) {
-        SVT_ERROR("Instance %u: Variance boost curve must be between 0 and 2\n", channel_number + 1);
+    if (config->variance_boost_curve > 3) {
+        SVT_ERROR("Instance %u: Variance boost curve must be between 0 and 3\n", channel_number + 1);
         return_error = EB_ErrorBadParameter;
     }
 

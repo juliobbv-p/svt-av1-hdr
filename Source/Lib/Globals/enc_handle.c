@@ -4647,6 +4647,12 @@ static void copy_api_from_app(
         }
     }
 
+    // Override variance boost curve for PQ transfer
+    if (scs->static_config.transfer_characteristics == EB_CICP_TC_SMPTE_2084) {
+        SVT_INFO("HDR content with PQ transfer detected, switching to PQ-optimized curve\n");
+        scs->static_config.variance_boost_curve = 3;
+    }
+
     return;
 }
 

@@ -923,7 +923,8 @@ typedef struct EbSvtAv1EncConfiguration {
      *  0: default curve
      *  1: low-medium contrast boost curve
      *  2: still picture curve, tuned for SSIMULACRA2 performance on the CID22 Validation Set
-     *  Default is 0. */
+     *  3: PQ-optimized perceptual curve
+     *  Default is 0, or 3 if encoding PQ transfer content */
     uint8_t variance_boost_curve;
 
     /* @brief Frame-level luminance-based QP bias to improve quality in low luma scenarios

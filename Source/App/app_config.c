@@ -1257,7 +1257,7 @@ ConfigEntry config_entry_variance_boost[] = {
     {SINGLE_INPUT, ENABLE_VARIANCE_BOOST_TOKEN, "Enable variance boost, default is 0 [0-1]", set_cfg_generic_token},
     {SINGLE_INPUT, VARIANCE_BOOST_STRENGTH_TOKEN, "Variance boost strength, default is 2 [1-4]", set_cfg_generic_token},
     {SINGLE_INPUT, VARIANCE_OCTILE_TOKEN, "Octile for variance boost, default is 6 [1-8]", set_cfg_generic_token},
-    {SINGLE_INPUT, VARIANCE_BOOST_CURVE_TOKEN, "Curve for variance boost, default is 0 [0-2]", set_cfg_generic_token},
+    {SINGLE_INPUT, VARIANCE_BOOST_CURVE_TOKEN, "Curve for variance boost, default is 0 [0-3]", set_cfg_generic_token},
     // QP scale compress
     {SINGLE_INPUT, QP_SCALE_COMPRESS_STRENGTH_TOKEN, "[PSY] QP scale compress strength, default is 1 [0-3]", set_cfg_generic_token},
     // Max 32 tx size
