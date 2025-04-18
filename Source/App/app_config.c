@@ -995,7 +995,7 @@ ConfigDescription config_entry_color_description[] = {
 
 ConfigDescription config_entry_variance_boost[] = {
     // Variance boost
-    {ENABLE_VARIANCE_BOOST_TOKEN, "Enable variance boost, default is 0 [0-1]"},
+    {ENABLE_VARIANCE_BOOST_TOKEN, "Enable variance boost, default is 1 [0-1]"},
     {VARIANCE_BOOST_STRENGTH_TOKEN, "Variance boost strength, default is 2 [1-4]"},
     {VARIANCE_OCTILE_TOKEN, "Octile for variance boost, default is 6 [1-8]"},
     {VARIANCE_BOOST_CURVE_TOKEN, "Curve for variance boost, default is 0 [0-2]"},
@@ -1004,7 +1004,7 @@ ConfigDescription config_entry_variance_boost[] = {
     // Max 32 tx size
     {MAX_32_TX_SIZE_TOKEN, "[PSY] Limits the allowed transform sizes to a maximum of 32x32, default is 0 [0-1]"},
     // Noise normalization strength
-    {NOISE_NORM_STRENGTH_TOKEN, "[PSY] Noise normalization strength, default is 0, default for tune=3 is 1 [0-4]"},
+    {NOISE_NORM_STRENGTH_TOKEN, "[PSY] Noise normalization strength, default is 1; recommended value for tune 3 is 3 [0-4]"},
     //Alt-ref temporal filtering strength on keyframes
     {KF_TF_STRENGTH_FILTER_TOKEN, "[PSY] Adjust alt-ref TF strength on keyframes, default is 1 (4x weaker than mainline) [0-4]"},
     //Psy-rd
