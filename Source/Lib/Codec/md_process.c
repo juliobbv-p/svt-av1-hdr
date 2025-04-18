@@ -526,7 +526,7 @@ void svt_aom_reset_mode_decision_neighbor_arrays(PictureControlSet *pcs, uint16_
     return;
 }
 // If the ref intra percentage is below the TH, applying modulation to the MD lambda
-#define LAMBDA_MOD_INTRA_TH 50
+#define LAMBDA_MOD_INTRA_TH 65
 #define LAMBDA_MOD_INTRA_SCALING_FACTOR 138
 // Set the lambda for each sb.
 // When lambda tuning is on (blk_lambda_tuning), lambda of each block is set separately (full_lambda_md/fast_lambda_md)
