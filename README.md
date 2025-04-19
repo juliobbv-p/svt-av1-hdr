@@ -121,9 +121,15 @@ SVT-AV1-PSY has different defaults than mainline SVT-AV1 in order to provide bet
 - Disable film grain denoising by default, as it often harms visual fidelity. (**[Merged to Mainline](https://gitlab.com/AOMediaCodec/SVT-AV1/-/commit/8b39b41df9e07bbcdbd19ea618762c5db3353c03)**)
 - Default to Tune 2 (SSIM) instead of Tune 1 (PSNR), as it reliably outperforms Tune 1 perceptually & throughout trusted metrics.
 - Enable quantization matrices by default.
-- Set minimum QM level to 0 by default.
+- Set minimum QM level to 2 by default for more consistent performance than min QM level 0 doesn't offer.
+- Set minimum chroma QM level to 8 by default to prevent the encoder from picking suboptimal chroma QMs.
 - `--enable-variance-boost` enabled by default.
 - `--keyint -2` (the default) uses a ~10s GOP size instead of ~5s.
+- `--sharpness 1` by default to prioritize encoder sharpness.
+- Sharp transform optimizations (`--sharp-tx 1`) are enabled by default to supercharge svt-av1-psy psy-rd optimizations. It is recommended to disable it if you don't use `--psy-rd`, which is set to 0.5 by default.
+- `--tf-strength 1` by default for much lower alt-ref temporal filtering to decrease blur for cleaner encoding.
+- `--kf-tf-strength 1` controls are available to the user and are set to 1 by default to remove KF artifacts.
+
 
 *We are not in any way affiliated with the Alliance for Open Media or any upstream SVT-AV1 project contributors who have not also contributed here.*
 
