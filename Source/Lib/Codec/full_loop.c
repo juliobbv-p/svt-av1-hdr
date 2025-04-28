@@ -1464,6 +1464,32 @@ uint8_t svt_av1_compute_cul_level_c(const int16_t *const scan, const int32_t *co
     return (uint8_t)cul_level;
 }
 
+void print_coeffs(MacroblockPlane *p,
+    QuantParam *qparam,
+    TranLow *coeff_ptr,
+    TranLow *qcoeff_ptr,
+    TranLow *dqcoeff_ptr,
+    TxSize tx_size,
+    TxType tx_type,
+    uint16_t *eob,
+    PictureControlSet *pcs)
+{
+    const int shift = av1_get_tx_scale_tab[tx_size];
+    const ScanOrder *const scan_order = &av1_scan_orders[tx_size][tx_type];
+    const int16_t *scan = scan_order->scan;
+
+    for (int si = 0; si < *eob; si++) {
+        const int     ci     = scan[si];
+        const TranLow tqc    = coeff_ptr[ci];
+        const TranLow qc     = qcoeff_ptr[ci];
+        const TranLow dqc    = dqcoeff_ptr[ci];
+
+        printf("%i ", qcoeff_ptr[ci]);
+    }
+
+    if (*eob != 0) printf("\n");
+}
+
 void svt_av1_perform_noise_normalization(MacroblockPlane *p,
     QuantParam *qparam,
     TranLow *coeff_ptr,
@@ -1707,6 +1733,7 @@ uint8_t svt_aom_quantize_inv_quantize(PictureControlSet *pcs, ModeDecisionContex
             (ctx->rdoq_ctrls.skip_uv && component_type != COMPONENT_LUMA))
             perform_rdoq = 0;
     }
+
     if (perform_rdoq && ctx->rdoq_ctrls.satd_factor != ((uint8_t)~0)) {
         int       satd  = svt_aom_satd(coeff, n_coeffs);
         const int shift = (MAX_TX_SCALE - av1_get_tx_scale_tab[txsize]);
@@ -1793,6 +1820,33 @@ uint8_t svt_aom_quantize_inv_quantize(PictureControlSet *pcs, ModeDecisionContex
             }
         }
     }
+
+    /*if (is_encode_pass && tx_type != IDTX && component_type != COMPONENT_LUMA && *eob > 0) {
+        printf("Before rdoq\n");
+        print_coeffs(
+            &candidate_plane,
+            &qparam,
+            (TranLow *)coeff,
+            quant_coeff,
+            (TranLow *)recon_coeff,
+            txsize,
+            tx_type,
+            eob,
+            pcs
+        );
+    }*/
+
+    // protect blocks with very low dc saturation from having rdoq performed under certain conditions
+    if (is_encode_pass && tx_type != IDTX && component_type != COMPONENT_LUMA && *eob > 0) {
+        const TranLow dc     = quant_coeff[0];
+        //printf("coeff: %i, n_coeffs: %i, eob: %i\n", dc, n_coeffs, *eob);
+        if (dc >= -1 && dc <= 1 && *eob <= (n_coeffs / 16)) {
+            perform_rdoq = 0;
+        } else if (dc >= -4 && dc <= 4 && *eob <= 1) {
+            perform_rdoq = 0;
+        }
+    }
+
     if (perform_rdoq && *eob != 0) {
         // Perform rdoq
         svt_av1_optimize_b(pcs,
@@ -1814,6 +1868,21 @@ uint8_t svt_aom_quantize_inv_quantize(PictureControlSet *pcs, ModeDecisionContex
                            lambda,
                            (component_type == COMPONENT_LUMA) ? 0 : 1);
     }
+
+    /*if (is_encode_pass && tx_type != IDTX && component_type != COMPONENT_LUMA && *eob > 0) {
+        printf("After rdoq\n");
+        print_coeffs(
+            &candidate_plane,
+            &qparam,
+            (TranLow *)coeff,
+            quant_coeff,
+            (TranLow *)recon_coeff,
+            txsize,
+            tx_type,
+            eob,
+            pcs
+        );
+    }*/
 
     if (is_encode_pass && *eob != 0 && tx_type != IDTX && (component_type == COMPONENT_LUMA)) {
         svt_av1_perform_noise_normalization(
