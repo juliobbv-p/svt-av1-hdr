@@ -3501,7 +3501,7 @@ void *svt_aom_rate_control_kernel(void *input_ptr) {
 
                     // Boost chroma on wide color (BT.2020) primary with ramp down
                     if (scs->static_config.color_primaries == EB_CICP_CP_BT_2020) {
-                        chroma_qindex -= CLIP3(0, 16, (chroma_qindex_adjustment / 2) - 8);
+                        chroma_qindex -= CLIP3(0, 20, (chroma_qindex_adjustment / 3) - 8);
                     }
 
                     chroma_qindex += scs->static_config.extended_crf_qindex_offset;
