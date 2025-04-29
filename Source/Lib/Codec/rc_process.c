@@ -3494,9 +3494,20 @@ void *svt_aom_rate_control_kernel(void *input_ptr) {
                             break;
                     }
 
+                    // Boost chroma on PQ transfer with ramp down
+                    if (scs->static_config.transfer_characteristics == EB_CICP_TC_SMPTE_2084) {
+                        chroma_qindex -= CLIP3(0, 8, (chroma_qindex_adjustment / 3) - 8);
+                    }
+
+                    // Boost chroma on wide color (P3) primary with ramp down
+                    if (scs->static_config.color_primaries == EB_CICP_CP_SMPTE_431 ||
+                        scs->static_config.color_primaries == EB_CICP_CP_SMPTE_432) {
+                        chroma_qindex -= CLIP3(0, 6, (chroma_qindex_adjustment / 3) - 8);
+                    }
+
                     // Boost chroma on wide color (BT.2020) primary with ramp down
                     if (scs->static_config.color_primaries == EB_CICP_CP_BT_2020) {
-                        chroma_qindex -= CLIP3(0, 20, (chroma_qindex_adjustment / 3) - 8);
+                        chroma_qindex -= CLIP3(0, 12, (chroma_qindex_adjustment / 3) - 8);
                     }
 
                     chroma_qindex += scs->static_config.extended_crf_qindex_offset;
