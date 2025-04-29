@@ -1128,7 +1128,7 @@ static void svt_av1_optimize_b(PictureControlSet *pcs, ModeDecisionContext *ctx,
                                int16_t dc_sign_context, const TranLow *coeff_ptr, const MacroblockPlane *p,
                                TranLow *qcoeff_ptr, TranLow *dqcoeff_ptr, uint16_t *eob, const QuantParam *qparam,
                                TxSize tx_size, TxType tx_type, bool is_inter, uint8_t use_sharpness,
-                               uint8_t delta_q_present, uint8_t picture_qp, uint32_t lambda, int plane) {
+                               uint8_t delta_q_present, uint8_t picture_qp, uint32_t lambda, int plane, bool light_rdoq) {
     int                    sharpness  = 0; // No Sharpness
     int                    fast_mode  = (ctx->rdoq_ctrls.eob_fast_y_inter && is_inter && !plane) ||
             (ctx->rdoq_ctrls.eob_fast_y_intra && !is_inter && !plane) ||
@@ -1179,7 +1179,13 @@ static void svt_av1_optimize_b(PictureControlSet *pcs, ModeDecisionContext *ctx,
             rweight   = 0;
         }
     }
+
+    if (light_rdoq) {
+        rweight = 10;
+    }
+
     const int64_t  rdmult = (((((int64_t)lambda * plane_rd_mult[is_inter][plane_type]) * rweight) / 100) + 2) >> rshift;
+
     uint8_t        levels_buf[TX_PAD_2D];
     uint8_t *const levels = set_levels(levels_buf, width);
 
@@ -1834,14 +1840,17 @@ uint8_t svt_aom_quantize_inv_quantize(PictureControlSet *pcs, ModeDecisionContex
         );
     }*/
 
-    // protect blocks with very low dc saturation from having rdoq performed under certain conditions
+    bool light_rdoq = false;
+
+    // have rdoq be lightly performed for blocks with very low dc saturation under certain conditions
+    // to prevent cases of color blotching due to aggressive coefficient decimation/reduction
     if (is_encode_pass && tx_type != IDTX && component_type != COMPONENT_LUMA && *eob > 0) {
         const TranLow dc     = quant_coeff[0];
         //printf("coeff: %i, n_coeffs: %i, eob: %i\n", dc, n_coeffs, *eob);
         if (dc >= -1 && dc <= 1 && *eob <= (n_coeffs / 16)) {
-            perform_rdoq = 0;
+            light_rdoq = true;
         } else if (dc >= -4 && dc <= 4 && *eob <= 1) {
-            perform_rdoq = 0;
+            light_rdoq = true;
         }
     }
 
@@ -1864,7 +1873,8 @@ uint8_t svt_aom_quantize_inv_quantize(PictureControlSet *pcs, ModeDecisionContex
                            pcs->ppcs->frm_hdr.delta_q_params.delta_q_present,
                            pcs->picture_qp,
                            lambda,
-                           (component_type == COMPONENT_LUMA) ? 0 : 1);
+                           (component_type == COMPONENT_LUMA) ? 0 : 1,
+                           light_rdoq);
     }
 
     /*if (is_encode_pass && tx_type != IDTX && component_type != COMPONENT_LUMA && *eob > 0) {
