@@ -2471,7 +2471,7 @@ static int32_t compute_default_intra_period(
     intra_period                       = ((int)((fps + mini_gop_size) / mini_gop_size)*(mini_gop_size));
     // intra_period                       = intra_period * 5; // use a 5-sec gop by default.
 
-    /* Use a 10-sec GOP by default (SVT-AV1-PSY) */
+    /* Use a 10-sec GOP by default (SVT-AV1-HDR) */
     intra_period                       = intra_period * 10;
 
     if (config->intra_refresh_type == 1)
@@ -5721,12 +5721,12 @@ EB_API const char *svt_av1_get_version(void) {
 }
 
 EB_API const char *svt_psy_get_version(void) {
-    return SVT_AV1_PSY_RELEASE;
+    return SVT_AV1_HDR_RELEASE;
 }
 
 EB_API void svt_av1_print_version(void) {
     SVT_INFO("-------------------------------------------\n");
-    SVT_INFO("SVT [version]:\tSVT-AV1-PSY Encoder Lib %s\n", SVT_AV1_CVS_VERSION);
+    SVT_INFO("SVT [version]:\tSVT-AV1-HDR Encoder Lib %s\n", SVT_AV1_CVS_VERSION);
     const char *compiler =
 #if defined(__clang__)
     __VERSION__ "\t"

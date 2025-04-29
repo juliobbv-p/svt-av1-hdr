@@ -3415,7 +3415,6 @@ void *svt_aom_rate_control_kernel(void *input_ptr) {
                                 }
                                 new_qindex = crf_qindex_calc(pcs, rc, rc->active_worst_quality);
                             } else // if CQP
-                                //Check this in 3.0.0-psy
                                 new_qindex = cqp_qindex_calc(pcs, qindex);
                             frm_hdr->quantization_params.base_q_idx = (uint8_t)CLIP3(
                                 (int32_t)quantizer_to_qindex[scs->static_config.min_qp_allowed],
