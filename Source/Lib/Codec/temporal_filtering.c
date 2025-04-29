@@ -2996,7 +2996,7 @@ static EbErrorType produce_temporally_filtered_pic(
 
             // kf_tf_shift_factor is manually adjusted by the user via --kf-tf-strength
             // 10 + (4 - (0)) = 14 (Disables alt-ref TF on keyframes)
-            // 10 + (4 - (1)) = 13 (4x weaker, PSY default)
+            // 10 + (4 - (1)) = 13 (4x weaker, HDR default)
             // 10 + (4 - (2)) = 12 (2x weaker)
             // 10 + (4 - (3)) = 11 (mainline default)
             // 10 + (4 - (4)) = 10 (2x stronger)
@@ -3570,7 +3570,7 @@ static EbErrorType produce_temporally_filtered_pic_ld(
 
         // kf_tf_shift_factor is manually adjusted by the user via --kf-tf-strength
         // 10 + (4 - (0)) = 14 (Disables alt-ref TF on keyframes)
-        // 10 + (4 - (1)) = 13 (4x weaker, PSY default)
+        // 10 + (4 - (1)) = 13 (4x weaker, HDR default)
         // 10 + (4 - (2)) = 12 (2x weaker)
         // 10 + (4 - (3)) = 11 (mainline default)
         // 10 + (4 - (4)) = 10 (2x stronger)

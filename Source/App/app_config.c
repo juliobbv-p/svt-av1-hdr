@@ -2028,14 +2028,14 @@ int get_version(int argc, char *argv[]) {
 #endif
     if (find_token(argc, argv, VERSION_TOKEN, NULL))
         return 0;
-    printf("SVT-AV1-PSY %s (%s)\n", svt_av1_get_version(), debug_build ? "release" : "debug");
+    printf("SVT-AV1-HDR %s (%s)\n", svt_av1_get_version(), debug_build ? "release" : "debug");
 #if defined(_WIN64) || defined(_MSC_VER) || defined(_WIN32)
-    printf("PSY Release: %s\n", svt_psy_get_version());
+    printf("HDR Release: %s\n", svt_hdr_get_version());
 #else
-    if (strcmp(svt_psy_get_version(), "N/A")) {
-        printf("PSY Release: \x1b[32m%s\x1b[0m\n", svt_psy_get_version());
+    if (strcmp(svt_hdr_get_version(), "N/A")) {
+        printf("HDR Release: \x1b[32m%s\x1b[0m\n", svt_hdr_get_version());
     } else {
-        printf("PSY Release: \x1b[38;5;248m%s\x1b[0m\n", svt_psy_get_version());
+        printf("HDR Release: \x1b[38;5;248m%s\x1b[0m\n", svt_hdr_get_version());
     }
 #endif
     return 1;
