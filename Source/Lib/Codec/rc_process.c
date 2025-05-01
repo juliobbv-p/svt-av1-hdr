@@ -3493,6 +3493,10 @@ void *svt_aom_rate_control_kernel(void *input_ptr) {
                             break;
                     }
 
+                    // Tune-independent chroma boosts
+                    // Boost chroma in general (4:2:0)
+                    chroma_qindex -= 4;
+
                     // Boost chroma on PQ transfer with ramp down
                     if (scs->static_config.transfer_characteristics == EB_CICP_TC_SMPTE_2084) {
                         chroma_qindex -= CLIP3(0, 8, (chroma_qindex_adjustment / 3) - 8);
@@ -3501,12 +3505,12 @@ void *svt_aom_rate_control_kernel(void *input_ptr) {
                     // Boost chroma on wide color (P3) primary with ramp down
                     if (scs->static_config.color_primaries == EB_CICP_CP_SMPTE_431 ||
                         scs->static_config.color_primaries == EB_CICP_CP_SMPTE_432) {
-                        chroma_qindex -= CLIP3(0, 6, (chroma_qindex_adjustment / 3) - 8);
+                        chroma_qindex -= CLIP3(0, 4, (chroma_qindex_adjustment / 3) - 8);
                     }
 
                     // Boost chroma on wide color (BT.2020) primary with ramp down
                     if (scs->static_config.color_primaries == EB_CICP_CP_BT_2020) {
-                        chroma_qindex -= CLIP3(0, 12, (chroma_qindex_adjustment / 3) - 8);
+                        chroma_qindex -= CLIP3(0, 8, (chroma_qindex_adjustment / 3) - 8);
                     }
 
                     chroma_qindex += scs->static_config.extended_crf_qindex_offset;
@@ -3514,9 +3518,12 @@ void *svt_aom_rate_control_kernel(void *input_ptr) {
                                           quantizer_to_qindex[scs->static_config.max_qp_allowed],
                                           chroma_qindex);
 
-                    // Calculate chroma delta q, and clip it to a valid range
-                    frm_hdr->quantization_params.delta_q_dc[1] = frm_hdr->quantization_params.delta_q_dc[2] =
-                    frm_hdr->quantization_params.delta_q_ac[1] = frm_hdr->quantization_params.delta_q_ac[2] =
+                    // Calculate chroma delta q for Cb, and clip it to a valid range
+                    frm_hdr->quantization_params.delta_q_dc[1] = frm_hdr->quantization_params.delta_q_ac[1] =
+                    CLIP3(-64, 63, chroma_qindex - frm_hdr->quantization_params.base_q_idx + 12);
+
+                    // Calculate chroma delta q for Cr, and clip it to a valid range
+                    frm_hdr->quantization_params.delta_q_dc[2] = frm_hdr->quantization_params.delta_q_ac[2] =
                     CLIP3(-64, 63, chroma_qindex - frm_hdr->quantization_params.base_q_idx);
 
                     if (scs->enable_qp_scaling_flag && pcs->ppcs->qp_on_the_fly == false) {
