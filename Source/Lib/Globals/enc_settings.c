@@ -528,7 +528,7 @@ EbErrorType svt_av1_verify_settings(SequenceControlSet *scs) {
 
     if (config->tune > 4) {
         SVT_ERROR(
-            "Instance %u: Invalid tune flag [0 - 4, 0: VQ, 1: PSNR, 2: SSIM, 3: Subjective SSIM, 4: Still Picture], your "
+            "Instance %u: Invalid tune flag [0 - 4, 0: VQ, 1: PSNR, 2: SSIM, 3: Film Grain, 4: Still Picture], your "
             "input: %d\n",
             channel_number + 1,
             config->tune);
@@ -543,17 +543,10 @@ EbErrorType svt_av1_verify_settings(SequenceControlSet *scs) {
         }
     }
     if (config->tune == 3) {
-        if (config->rate_control_mode != 0 || config->pred_structure != SVT_AV1_PRED_RANDOM_ACCESS) {
-            SVT_ERROR("Instance %u: Tune Subjective SSIM only supports the CRF rate control mode currently\n",
-                      channel_number + 1,
-                      config->tune);
-            return_error = EB_ErrorBadParameter;
-        } else {
-            SVT_WARN(
-                "Instance %u: The Subjective SSIM configuration is considered experimental at this stage. "
-                "Keep in mind for benchmarking analysis that this configuration will likely harm metric performance.\n",
-                channel_number + 1);
-        }
+        SVT_WARN(
+            "Instance %u: This tune is optimized for content that has moderate to heavy film grain. "
+            "Keep in mind for benchmarking analysis that this configuration will likely harm metric performance.\n",
+            channel_number + 1);
     }
     if (config->superres_mode > SUPERRES_AUTO) {
         SVT_ERROR("Instance %u: invalid superres-mode %d, should be in the range [%d - %d]\n",
@@ -798,9 +791,9 @@ EbErrorType svt_av1_verify_settings(SequenceControlSet *scs) {
     }
 
     if (config->pred_structure == 1) {
-        if (config->tune == 0) {
-            SVT_WARN("Instance %u: Tune 0 is not applicable for low-delay, tune will be forced to 1.\n",
-                     channel_number + 1);
+        if (config->tune == 0 || config->tune == 3) {
+            SVT_WARN("Instance %u: Tune %i is not applicable for low-delay, tune will be forced to 1.\n",
+                     channel_number + 1, config->tune);
             config->tune = 1;
         }
 
@@ -1145,7 +1138,7 @@ void svt_av1_print_lib_params(SequenceControlSet *scs) {
                  config->tune == 0       ? "VQ"
                      : config->tune == 1 ? "PSNR"
                          : config->tune == 2 ? "SSIM"
-                             : config->tune == 3 ? "Subjective SSIM"
+                             : config->tune == 3 ? "Film Grain"
                                              : "Still Picture",
                  config->pred_structure == 1       ? "low delay"
                      : config->pred_structure == 2 ? "random access"

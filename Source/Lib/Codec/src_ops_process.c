@@ -2147,53 +2147,16 @@ static void aom_av1_set_mb_ssim_rdmult_scaling(PictureParentControlSet *pcs) {
             double    var = 0.0, num_of_var = 0.0;
             const int index = row * num_cols + col;
 
-            if (pcs->scs->static_config.tune == 3) {
-                const int mi_row = row << 2;
-                const int mi_col = col << 2;
-                const int row_offset_y = row << 2;
-                const int col_offset_y = col << 2;
+            // Loop through each 8x8 block.
+            for (int mi_row = row * num_mi_h; mi_row < cm->mi_rows && mi_row < (row + 1) * num_mi_h; mi_row += 2) {
+                for (int mi_col = col * num_mi_w; mi_col < cm->mi_cols && mi_col < (col + 1) * num_mi_w; mi_col += 2) {
+                    const int row_offset_y = mi_row << 2;
+                    const int col_offset_y = mi_col << 2;
 
-                // Loop through each 4x4 block within the 16x16 block.
-                for (int mi_row_3 = mi_row; mi_row_3 < cm->mi_rows && mi_row_3 < (row + 1) * num_mi_h; mi_row_3 += 1) {
-                    for (int mi_col_3 = mi_col; mi_col_3 < cm->mi_cols && mi_col_3 < (col + 1) * num_mi_w; mi_col_3 += 1) {
-                        const int row_offset_y_3 = mi_row_3 << 2;
-                        const int col_offset_y_3 = mi_col_3 << 2;
+                    const uint8_t *buf = y_buffer + row_offset_y * y_stride + col_offset_y;
 
-                        const uint8_t *buf3 = y_buffer + row_offset_y_3 * y_stride + col_offset_y_3;
-
-                        var += svt_aom_get_perpixel_variance(buf3, y_stride, BLOCK_4X4);
-                        num_of_var += 0.015625; // Weigh at 1x weight (0.25 of total num_of_var)
-                    }
-                }
-                // Loop through each 8x8 block within the 16x16 block.
-                for (int mi_row_2 = mi_row; mi_row_2 < cm->mi_rows && mi_row_2 < (row + 1) * num_mi_h; mi_row_2 += 2) {
-                    for (int mi_col_2 = mi_col; mi_col_2 < cm->mi_cols && mi_col_2 < (col + 1) * num_mi_w; mi_col_2 += 2) {
-                        const int row_offset_y_2 = mi_row_2 << 2;
-                        const int col_offset_y_2 = mi_col_2 << 2;
-
-                        const uint8_t *buf2 = y_buffer + row_offset_y_2 * y_stride + col_offset_y_2;
-
-                        var += svt_aom_get_perpixel_variance(buf2, y_stride, BLOCK_8X8);
-                        num_of_var += 0.125; // This weight (8x8 block) is 2x more important compared to other num_of_var additions
-                                             // (0.5 of total num_of_var)
-                    }
-                }
-                const uint8_t *buf = y_buffer + row_offset_y * y_stride + col_offset_y;
-
-                var += svt_aom_get_perpixel_variance(buf, y_stride, BLOCK_16X16);
-                num_of_var += 0.25; // Weigh at 1x weight (0.25 of total num_of_var)
-            } else {
-                // Loop through each 8x8 block.
-                for (int mi_row = row * num_mi_h; mi_row < cm->mi_rows && mi_row < (row + 1) * num_mi_h; mi_row += 2) {
-                    for (int mi_col = col * num_mi_w; mi_col < cm->mi_cols && mi_col < (col + 1) * num_mi_w; mi_col += 2) {
-                        const int row_offset_y = mi_row << 2;
-                        const int col_offset_y = mi_col << 2;
-
-                        const uint8_t *buf = y_buffer + row_offset_y * y_stride + col_offset_y;
-
-                        var += svt_aom_get_perpixel_variance(buf, y_stride, BLOCK_8X8);
-                        num_of_var += 1.0;
-                    }
+                    var += svt_aom_get_perpixel_variance(buf, y_stride, BLOCK_8X8);
+                    num_of_var += 1.0;
                 }
             }
 
@@ -2321,7 +2284,7 @@ void *svt_aom_source_based_operations_kernel(void *input_ptr) {
             }
         }
         /*********************************************Picture-based operations**********************************************************/
-        if (scs->static_config.tune == 2 || scs->static_config.tune == 3 || scs->static_config.tune == 4) {
+        if (scs->static_config.tune == 2 || scs->static_config.tune == 4) {
             aom_av1_set_mb_ssim_rdmult_scaling(pcs);
         }
         sbo_send_picture_out(context_ptr, pcs, false);

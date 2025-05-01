@@ -1174,7 +1174,7 @@ static uint8_t get_superres_denom_for_qindex(SequenceControlSet *scs, PicturePar
     double energy[16];
     analyze_hor_freq(pcs, energy);
 
-    const double energy_by_q2_thresh = scs->static_config.tune == 3 ? 0.01 : get_energy_by_q2_thresh(&scs->enc_ctx->rc, update_type);
+    const double energy_by_q2_thresh = get_energy_by_q2_thresh(&scs->enc_ctx->rc, update_type);
     int          denom               = get_superres_denom_from_qindex_energy(
         qindex, energy, energy_by_q2_thresh, SUPERRES_ENERGY_BY_AC_THRESH);
 

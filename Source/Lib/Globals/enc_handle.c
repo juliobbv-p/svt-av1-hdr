@@ -4513,15 +4513,6 @@ static void copy_api_from_app(
     scs->static_config.superres_kf_denom = config_struct->superres_kf_denom;
     scs->static_config.superres_qthres = config_struct->superres_qthres;
     scs->static_config.superres_kf_qthres = config_struct->superres_kf_qthres;
-
-    if (scs->static_config.superres_mode == SUPERRES_AUTO)
-    {
-        // TODO: set search mode based on preset
-        //scs->static_config.superres_auto_search_type = SUPERRES_AUTO_SOLO;
-        scs->static_config.superres_auto_search_type = scs->static_config.tune == 3 ? SUPERRES_AUTO_ALL : SUPERRES_AUTO_DUAL;
-        //scs->static_config.superres_auto_search_type = SUPERRES_AUTO_ALL;
-    }
-
     scs->static_config.resize_mode = config_struct->resize_mode;
     scs->static_config.resize_denom = config_struct->resize_denom;
     scs->static_config.resize_kf_denom = config_struct->resize_kf_denom;
@@ -4644,6 +4635,22 @@ static void copy_api_from_app(
 
         if (scs->static_config.qp <= 26) {
             scs->static_config.enable_dlf_flag = 0;
+        }
+    }
+
+    // Override settings for Film Grain tune
+    if (scs->static_config.tune == 3) {
+        SVT_WARN("Tune 3: Film Grain is opinionated! Works best with 1080p, 4k and 8k content.\n");
+        SVT_WARN("Tune 3: Film Grain turns off: TF, CDEF, restoration filtering and enables spy-rd and strong psy-rd.\n");
+        scs->static_config.enable_tf = 0;
+        scs->static_config.cdef_level = 0;
+        scs->static_config.enable_restoration_filtering = 0;
+        scs->static_config.spy_rd = 1;
+
+        if (scs->static_config.transfer_characteristics == EB_CICP_TC_SMPTE_2084) {
+            scs->static_config.psy_rd = 6.0;
+        } else {
+            scs->static_config.psy_rd = 4.0;
         }
     }
 
