@@ -3482,9 +3482,6 @@ void *svt_aom_rate_control_kernel(void *input_ptr) {
                             chroma_qindex_adjustment = MAX(0, chroma_qindex_adjustment - 48);
                             chroma_qindex -= CLIP3(0, 16, (int32_t)rint(pow(chroma_qindex_adjustment, 1.4) / 9.0));
                             break;
-                        case 3:
-                            chroma_qindex += (int32_t)-rint(chroma_qindex_adjustment / 8.0); // Chroma boost to fix saturation issues
-                            break;
                         case 4:
                             // Constant chroma boost with gradual ramp-down for very high qindex levels
                             chroma_qindex -= CLIP3(0, 16, (chroma_qindex_adjustment / 2) - 14);
