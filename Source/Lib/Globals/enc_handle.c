@@ -5720,7 +5720,7 @@ EB_API const char *svt_av1_get_version(void) {
     return SVT_AV1_CVS_VERSION;
 }
 
-EB_API const char *svt_psy_get_version(void) {
+EB_API const char *svt_hdr_get_version(void) {
     return SVT_AV1_HDR_RELEASE;
 }
 
