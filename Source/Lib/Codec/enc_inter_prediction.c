@@ -1961,6 +1961,7 @@ static void model_rd_for_sb(PictureControlSet *pcs, EbPictureBufferDesc *predict
     uint64_t dist_sum = 0;
     SequenceControlSet *scs = pcs->ppcs->scs;
 
+    const double effective_psy_rd = get_effective_psy_rd(pcs->scs->static_config.psy_rd, pcs->slice_type == I_SLICE, pcs->temporal_layer_index);
     EbPictureBufferDesc *input_pic    = bit_depth > 8 ? pcs->input_frame16bit : pcs->ppcs->enhanced_pic;
     const uint32_t       input_offset = (ctx->blk_org_y + input_pic->org_y) * input_pic->stride_y +
         (ctx->blk_org_x + input_pic->org_x);
@@ -2003,7 +2004,7 @@ static void model_rd_for_sb(PictureControlSet *pcs, EbPictureBufferDesc *predict
                                          ctx->blk_geom->bwidth,
                                          ctx->blk_geom->bheight >> shift,
                                          hbd,
-                                         scs->static_config.psy_rd)
+                                         effective_psy_rd)
                 << shift;
             break;
         case 1:

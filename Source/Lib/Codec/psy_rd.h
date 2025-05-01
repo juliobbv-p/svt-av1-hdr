@@ -30,6 +30,7 @@ uint64_t get_svt_psy_full_dist(const void* s, uint32_t so, uint32_t sp,
                                const void* r, uint32_t ro, uint32_t rp,
                                uint32_t w, uint32_t h, uint8_t is_hbd,
                                double psy_rd);
+double get_effective_psy_rd(double psy_rd, bool is_islice, uint8_t temporal_layer_index);
 
 #ifdef __cplusplus
 }
