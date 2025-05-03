@@ -1,8 +1,21 @@
-# SVT-AV1-PSY
+# SVT-AV1-HDR
+<sup>(code name: Vendata)</sup>
 
-SVT-AV1-PSY is the Scalable Video Technology for AV1 (SVT-AV1 Encoder and Decoder) with perceptual enhancements for psychovisually optimal AV1 encoding. The goal is to create the best encoding implementation for perceptual quality with AV1.
+SVT-AV1-HDR is the Scalable Video Technology for AV1 (SVT-AV1 Encoder and Decoder) with perceptual enhancements for psychovisually optimal AV1 encoding. The goal is to create the best encoding implementation for perceptual quality with AV1, with optimizations for HDR encoding and content with film grain.
 
-### Feature Additions
+### SVT-AV1-HDR Feature Additions
+
+- `PQ-optimized Variance Boost curve`
+
+A custom curve specifically designed for HDR video and images with a Perceptual Quantizer (PQ) transfer. It can manually be turned on by setting `--variance-boost-curve 3`, or automatically by setting the corresponding CICP value `--transfer-characteristics 16`.
+
+- `Tune 3`
+
+An opinionated tune optimized for film grain retention and temporal consistency. The recommended CRF range to use tune 3 is 20 to 40.
+
+Tune 3 is equivalent to setting these parameters: `--tune 0 --enable-tf 0 --enable-restoration 0 --enable-cdef 0 --spy-rd 1 --psy-rd 4.00 (SDR), 6.00 (HDR)`.
+
+### SVT-AV1-PSY Feature Additions
 
 - `--variance-boost-strength` *1 to 4* (**[Merged to Mainline](https://gitlab.com/AOMediaCodec/SVT-AV1/-/merge_requests/2195)**)
 
@@ -12,17 +25,13 @@ Provides control over our augmented AQ Modes 0 and 2 which can utilize variance 
 
 Controls how "selective" the algorithm is when boosting superblocks, based on their low/high 8x8 variance ratio. A value of 1 is the least selective, and will readily boost a superblock if only 1/8th of the superblock is low variance. Conversely, a value of 8 will only boost if the *entire* superblock is low variance. Lower values increase bitrate. The default value is 6.
 
-- `--enable-alt-curve` *0 and 1* (**[Merged to Mainline](https://gitlab.com/AOMediaCodec/SVT-AV1/-/merge_requests/2357)**)
+- `--variance-boost-curve` *0 to 3* (**[Merged to Mainline](https://gitlab.com/AOMediaCodec/SVT-AV1/-/merge_requests/2357)**)
 
-Enable an alternative variance boost curve, with different bit allocation and visual characteristics. The default is 0.
+Enables different kinds of variance boost curves, with different bit allocation and visual characteristics. The default is 0.
 
 - `Presets -2 & -3`
 
 Terrifically slow encoding modes for research purposes.
-
-- `Tune 3`
-
-A new tune based on Tune 2 (SSIM) called SSIM with Subjective Quality Tuning. Generally harms metric performance in exchange for better visual fidelity.
 
 - `Tune 4` (**[Ported to libaom](https://aomedia.googlesource.com/aom/+/refs/tags/v3.12.0)**)
 
