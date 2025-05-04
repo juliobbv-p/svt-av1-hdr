@@ -920,6 +920,11 @@ EbErrorType svt_av1_verify_settings(SequenceControlSet *scs) {
         return_error = EB_ErrorBadParameter;
     }
 
+    if (config->complex_hvs > 1) {
+        SVT_ERROR("Instance %u: complex-hvs must be between 0 and 1\n", channel_number + 1);
+        return_error = EB_ErrorBadParameter;
+    }
+    
     return return_error;
 }
 
@@ -1080,6 +1085,7 @@ EbErrorType svt_av1_set_default_params(EbSvtAv1EncConfiguration *config_ptr) {
     config_ptr->spy_rd                            = 0;
     config_ptr->sharp_tx                          = 1;
     config_ptr->hbd_mds                           = 0;
+    config_ptr->complex_hvs                       = 0;
     return return_error;
 }
 static const char *tier_to_str(unsigned in) {
@@ -2121,6 +2127,7 @@ EB_API EbErrorType svt_av1_enc_parse_parameter(EbSvtAv1EncConfiguration *config_
         {"spy-rd", &config_struct->spy_rd},
         {"hbd-mds", &config_struct->hbd_mds},
         {"sharp-tx", &config_struct->sharp_tx},
+        {"complex-hvs", &config_struct->complex_hvs},
     };
     const size_t uint8_opts_size = sizeof(uint8_opts) / sizeof(uint8_opts[0]);
 

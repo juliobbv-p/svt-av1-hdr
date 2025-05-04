@@ -8511,7 +8511,7 @@ void svt_aom_sig_deriv_mode_decision_config(SequenceControlSet *scs, PictureCont
         //as the quality benefits of SSD mode decision L0 are dubious
         //for the computational cost when not using the feature
         if (pcs->scs->static_config.psy_rd >= 0.6){
-            if (enc_mode <= ENC_MR)
+            if (enc_mode <= ENC_MR || pcs->scs->static_config.complex_hvs == 1)
                 pcs->mds0_level = 1;
             //With P6 and slower when psy-rd is enabled, there are
             //great benefits to enabling SAD since unlike VAR,
