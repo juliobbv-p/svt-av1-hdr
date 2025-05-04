@@ -1017,7 +1017,7 @@ ConfigDescription config_entry_variance_boost[] = {
     //HBD Mode Decisions
     {HBD_MDS_TOKEN, "[PSY] High Bit-Depth Mode Decision, default is 0 [0: default preset behavior, 1 = 10-bit, 2 = hybrid 8/10-bit, 3 = 8-bit]"},
     //Complex HVS
-    {COMPLEX_HVS_TOKEN, "[PSY] Enable highest complexity HVS model, default is 0 [0-1]"},
+    {COMPLEX_HVS_TOKEN, "[PSY] Enable highest complexity HVS model, default is 0 [0: default preset behavior, 1: complex HVS model based on PSNR-HVS]"},
     // Termination
     {NULL, NULL}};
 
