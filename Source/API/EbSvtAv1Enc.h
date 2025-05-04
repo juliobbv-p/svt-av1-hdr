@@ -1027,6 +1027,15 @@ typedef struct EbSvtAv1EncConfiguration {
      */
     uint8_t tx_bias;
 
+     /**
+     * @brief Enable complex-hvs, a feature that enables the highest complexity and highest fidelity
+     HVS model at the cost of higher CPU time
+     * 0: default preset behavior
+     * 1: highest complexity HVS model (SSD-Psy)
+     * Default is 0
+     */
+     uint8_t complex_hvs;
+
     /*Add 128 Byte Padding to Struct to avoid changing the size of the public configuration struct*/
     uint8_t padding[128
     ];
