@@ -1271,7 +1271,7 @@ ConfigEntry config_entry_variance_boost[] = {
     //Alt-ref temporal filtering strength on keyframes
     {SINGLE_INPUT, KF_TF_STRENGTH_FILTER_TOKEN, "[PSY] Adjust alt-ref TF strength on keyframes, default is 1 (4x weaker than mainline) [0-4]", set_cfg_generic_token},
     //Psy-rd
-    {SINGLE_INPUT, PSY_RD_TOKEN, "[PSY] Psychovisual rate distortion strength, default is 1.0; high quality mode activated at >=0.6 and <=P6 [0.0-6.0]", set_cfg_generic_token},
+    {SINGLE_INPUT, PSY_RD_TOKEN, "[PSY] Psychovisual rate distortion strength, default is 1.0; high quality mode activated at >=0.6 and <=P6 (P-1 enables complex HVS model) [0.0-6.0]", set_cfg_generic_token},
     //Spy-rd
     {SINGLE_INPUT, SPY_RD_TOKEN, "[PSY] Alternative psychovisual rate distortion pathways, default is 0 [0-2]; 1 = full, 2 = partial", set_cfg_generic_token},
     //Sharp-tx
@@ -1279,7 +1279,7 @@ ConfigEntry config_entry_variance_boost[] = {
     //HBD Mode Decisions
     {SINGLE_INPUT, HBD_MDS_TOKEN, "[PSY] High Bit-Depth Mode Decision, default is 0 [0: default preset behavior, 1 = 10-bit, 2 = hybrid 8/10-bit, 3 = 8-bit]", set_cfg_generic_token},
     //Complex HVS
-    {SINGLE_INPUT, COMPLEX_HVS_TOKEN, "[PSY] Enable highest complexity HVS model, default is 0 [0-1]", set_cfg_generic_token},
+    {SINGLE_INPUT, COMPLEX_HVS_TOKEN, "[PSY] Enable highest complexity HVS model, default is 0 [0: default preset behavior, 1: complex HVS model based on PSNR-HVS]", set_cfg_generic_token},
     // Termination
     {SINGLE_INPUT, NULL, NULL, NULL}};
 
