@@ -8165,7 +8165,9 @@ void svt_aom_sig_deriv_mode_decision_config(SequenceControlSet *scs, PictureCont
         pcs->md_pme_level = 0;
     // Set the level for mds0
     pcs->mds0_level = 0;
-    if (enc_mode <= ENC_M2)
+    if (pcs->scs->static_config.complex_hvs == 1) {
+        pcs->mds0_level = 3;
+    } else if (enc_mode <= ENC_M2)
         pcs->mds0_level = 0;
     else if (!sc_class1 && enc_mode <= ENC_M5)
         pcs->mds0_level = is_base ? 0 : 1;
