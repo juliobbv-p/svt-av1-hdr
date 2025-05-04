@@ -7667,7 +7667,10 @@ void svt_aom_sig_deriv_mode_decision_config(SequenceControlSet *scs, PictureCont
     }
     // Set the level for mds0
     pcs->mds0_level = 0;
-    if (rtc_tune) {
+
+    if (pcs->scs->static_config.complex_hvs == 1) {
+        pcs->mds0_level = 3;
+    } else if (rtc_tune) {
         if (enc_mode <= ENC_M9)
             pcs->mds0_level = 0;
         else if (enc_mode <= ENC_M10)
