@@ -13,6 +13,9 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include "psy_rd.h"
+#include "definitions.h"
+#include "pcs.h"
+#include "md_process.h"
 
 // 8-bit
 #define BITS_PER_SUM (8 * sizeof(sum_t))
@@ -292,16 +295,40 @@ uint64_t get_svt_psy_full_dist(const void* s, uint32_t so, uint32_t sp,
     return (uint64_t)(dist * psy_rd);
 }
 
-double get_effective_psy_rd(double psy_rd, bool is_islice, uint8_t temporal_layer_index) {
-    if (is_islice) {
-        return psy_rd * 0.4;
-    } else if (temporal_layer_index == 0) {
-        return psy_rd * 0.75;
-    } else if (temporal_layer_index == 1) {
-        return psy_rd * 0.9;
-    } else if (temporal_layer_index == 2) {
-        return psy_rd * 0.95;
+double get_effective_psy_rd_strength(PictureControlSet *pcs, ModeDecisionContext *ctx) {
+    double effective_psy_rd = pcs->scs->static_config.psy_rd;
+    double tpl_inter_ratio = 0.0;
+
+    if (ctx->has_tpl_intra_ratio) {
+        // We have superblock TPL information available, use the superblock inter block ratio
+        // to modulate psy-rd strength based on temporal layer index
+        tpl_inter_ratio = 1 - ctx->tpl_intra_ratio;
+
+        if (pcs->slice_type == I_SLICE) {
+            effective_psy_rd = pcs->scs->static_config.psy_rd * 0.4;
+        } else if (pcs->temporal_layer_index == 0) {
+            effective_psy_rd = pcs->scs->static_config.psy_rd * (0.45 + 0.55 * tpl_inter_ratio);
+        } else if (pcs->temporal_layer_index == 1) {
+            effective_psy_rd = pcs->scs->static_config.psy_rd * (0.55 + 0.45 * tpl_inter_ratio);
+        } else if (pcs->temporal_layer_index == 2) {
+            effective_psy_rd = pcs->scs->static_config.psy_rd * (0.65 + 0.35 * tpl_inter_ratio);
+        } else {
+            effective_psy_rd = pcs->scs->static_config.psy_rd;
+        }
     } else {
-        return psy_rd;
+        // No TPL information available, use statically allocated weights per temporal layer index
+        if (pcs->slice_type == I_SLICE) {
+            effective_psy_rd = pcs->scs->static_config.psy_rd * 0.4;
+        } else if (pcs->temporal_layer_index == 0) {
+            effective_psy_rd = pcs->scs->static_config.psy_rd * 0.7;
+        } else if (pcs->temporal_layer_index == 1) {
+            effective_psy_rd = pcs->scs->static_config.psy_rd * 0.9;
+        } else if (pcs->temporal_layer_index == 2) {
+            effective_psy_rd = pcs->scs->static_config.psy_rd * 0.95;
+        } else {
+            effective_psy_rd = pcs->scs->static_config.psy_rd;
+        }
     }
+
+    return effective_psy_rd;
 }

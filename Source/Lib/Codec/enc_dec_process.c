@@ -26,6 +26,7 @@
 #include "pic_analysis_process.h"
 #include "resize.h"
 #include "enc_mode_config.h"
+#include "psy_rd.h"
 
 void svt_aom_get_recon_pic(PictureControlSet *pcs, EbPictureBufferDesc **recon_ptr, bool is_highbd);
 void copy_mv_rate(PictureControlSet *pcs, MdRateEstimationContext *dst_rate);
@@ -3280,6 +3281,7 @@ void *svt_aom_mode_decision_kernel(void *input_ptr) {
                 if (!pcs->cdf_ctrl.update_coef)
                     svt_aom_estimate_coefficients_rate(ed_ctx->md_ctx->rate_est_table, &pcs->md_frame_context);
             }
+
             // Segment-loop
             while (assign_enc_dec_segments(
                        segments_ptr, &segment_index, enc_dec_tasks, ed_ctx->enc_dec_feedback_fifo_ptr) == true) {
@@ -3332,6 +3334,13 @@ void *svt_aom_mode_decision_kernel(void *input_ptr) {
                         ed_ctx->md_ctx->sb_origin_y = sb_origin_y;
                         mdc_ptr                     = &(ed_ctx->md_ctx->mdc_sb_array);
                         ed_ctx->sb_index            = sb_index;
+
+                        /*double effective_psy_rd = get_effective_psy_rd_strength(pcs, ed_ctx->md_ctx);
+                        printf("frame %llu, temp. layer %i, tpl_inter_ratio %i:%f, sb_x: %i, sb_y: %i, effective psy-rd %f\n",
+                            pcs->picture_number, pcs->temporal_layer_index, ed_ctx->md_ctx->has_tpl_intra_ratio,
+                            1 - ed_ctx->md_ctx->tpl_intra_ratio, ed_ctx->md_ctx->sb_origin_x,
+                            ed_ctx->md_ctx->sb_origin_y, effective_psy_rd);*/
+
                         if (pcs->cdf_ctrl.enabled) {
                             if (scs->pic_based_rate_est &&
                                 scs->enc_dec_segment_row_count_array[pcs->temporal_layer_index] == 1 &&

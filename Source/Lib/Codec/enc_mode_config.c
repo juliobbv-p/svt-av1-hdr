@@ -6549,6 +6549,9 @@ static void set_intra_ctrls(PictureControlSet *pcs, ModeDecisionContext *ctx, ui
 
     assert(IMPLIES(pcs->slice_type == I_SLICE, intra_level > 0));
 
+    ctx->has_tpl_intra_ratio = false;
+    ctx->tpl_intra_ratio = 0.0;
+
     switch (intra_level) {
     case 0:
         ctrls->enable_intra       = 0;
@@ -6559,6 +6562,26 @@ static void set_intra_ctrls(PictureControlSet *pcs, ModeDecisionContext *ctx, ui
         ctrls->enable_intra       = 1;
         ctrls->intra_mode_end     = PAETH_PRED;
         ctrls->angular_pred_level = 1;
+
+        // Only use TPL info if all INTRA modes are tested
+        if (ppcs->tpl_ctrls.enable && ppcs->tpl_ctrls.intra_mode_end == PAETH_PRED) {
+            int            sb_ang_intra_count;
+            PredictionMode sb_max_intra;
+            int            sb_intra_count;
+            if (get_sb_tpl_intra_stats(pcs, ctx, &sb_ang_intra_count, &sb_max_intra, &sb_intra_count)) {
+                int tpl_blk_size = ppcs->tpl_ctrls.dispenser_search_level == 0 ? 16
+                    : ppcs->tpl_ctrls.dispenser_search_level == 1              ? 32
+                                                                               : 64;
+
+                // Get actual SB width (for cases of incomplete SBs)
+                SbGeom *sb_geom = &ppcs->sb_geom[ctx->sb_index];
+                int     sb_cols = sb_geom->width / tpl_blk_size;
+                int     sb_rows = sb_geom->height / tpl_blk_size;
+
+                ctx->has_tpl_intra_ratio = true;
+                ctx->tpl_intra_ratio = (double)sb_intra_count / (sb_cols * sb_rows);
+            }
+        }
         break;
     case 2:
         ctrls->enable_intra       = 1;
@@ -6577,6 +6600,18 @@ static void set_intra_ctrls(PictureControlSet *pcs, ModeDecisionContext *ctx, ui
                 } else {
                     ctrls->angular_pred_level = 3;
                 }
+
+                int tpl_blk_size = ppcs->tpl_ctrls.dispenser_search_level == 0 ? 16
+                    : ppcs->tpl_ctrls.dispenser_search_level == 1              ? 32
+                                                                               : 64;
+
+                // Get actual SB width (for cases of incomplete SBs)
+                SbGeom *sb_geom = &ppcs->sb_geom[ctx->sb_index];
+                int     sb_cols = sb_geom->width / tpl_blk_size;
+                int     sb_rows = sb_geom->height / tpl_blk_size;
+
+                ctx->has_tpl_intra_ratio = true;
+                ctx->tpl_intra_ratio = (double)sb_intra_count / (sb_cols * sb_rows);
             }
         }
         break;
@@ -6598,6 +6633,18 @@ static void set_intra_ctrls(PictureControlSet *pcs, ModeDecisionContext *ctx, ui
                     ctrls->angular_pred_level = 3;
                 }
                 ctrls->intra_mode_end = sb_max_intra;
+
+                int tpl_blk_size = ppcs->tpl_ctrls.dispenser_search_level == 0 ? 16
+                    : ppcs->tpl_ctrls.dispenser_search_level == 1              ? 32
+                                                                               : 64;
+
+                // Get actual SB width (for cases of incomplete SBs)
+                SbGeom *sb_geom = &ppcs->sb_geom[ctx->sb_index];
+                int     sb_cols = sb_geom->width / tpl_blk_size;
+                int     sb_rows = sb_geom->height / tpl_blk_size;
+
+                ctx->has_tpl_intra_ratio = true;
+                ctx->tpl_intra_ratio = (double)sb_intra_count / (sb_cols * sb_rows);
             }
         }
         break;
@@ -6630,6 +6677,8 @@ static void set_intra_ctrls(PictureControlSet *pcs, ModeDecisionContext *ctx, ui
                 }
 
                 ctrls->intra_mode_end = sb_max_intra;
+                ctx->has_tpl_intra_ratio = true;
+                ctx->tpl_intra_ratio = (double)sb_intra_count / (sb_cols * sb_rows);
             }
         }
         break;
