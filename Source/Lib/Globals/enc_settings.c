@@ -1076,7 +1076,7 @@ EbErrorType svt_av1_set_default_params(EbSvtAv1EncConfiguration *config_ptr) {
     config_ptr->max_32_tx_size                    = false;
     config_ptr->noise_norm_strength               = 1;
     config_ptr->kf_tf_strength                    = 1;
-    config_ptr->psy_rd                            = 0.5;
+    config_ptr->psy_rd                            = 1.0;
     config_ptr->spy_rd                            = 0;
     config_ptr->sharp_tx                          = 1;
     config_ptr->hbd_mds                           = 0;
@@ -1228,7 +1228,7 @@ void svt_av1_print_lib_params(SequenceControlSet *scs) {
                 config->kf_tf_strength);
         }
         
-        if (config->psy_rd > 0.0 && config->tune != 1) {
+        if (config->psy_rd > 0.0) {
             SVT_INFO("SVT [config]: PSY-RD Strength \t\t\t\t\t\t: %.2f\n",
                     config->psy_rd);
         }
