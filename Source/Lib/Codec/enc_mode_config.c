@@ -8501,17 +8501,19 @@ void svt_aom_sig_deriv_mode_decision_config(SequenceControlSet *scs, PictureCont
         pcs->md_pme_level = 4;
     // Set the level for mds0
     pcs->mds0_level = 0;
-    if (rtc_tune) {
+    if (pcs->scs->static_config.complex_hvs == 1) {
+        pcs->mds0_level = 1;
+    } else if (rtc_tune) {
         if (enc_mode <= ENC_M9)
             pcs->mds0_level = 2;
         else
             pcs->mds0_level = is_islice ? 2 : 4;
     } else {
-        //Enable SSD mode decision L0 only when psy-rd>=0.5
+        //Enable SSD mode decision L0 only when psy-rd>=0.6
         //as the quality benefits of SSD mode decision L0 are dubious
         //for the computational cost when not using the feature
         if (pcs->scs->static_config.psy_rd >= 0.6){
-            if (enc_mode <= ENC_MR || pcs->scs->static_config.complex_hvs == 1)
+            if (enc_mode <= ENC_MR)
                 pcs->mds0_level = 1;
             //With P6 and slower when psy-rd is enabled, there are
             //great benefits to enabling SAD since unlike VAR,
