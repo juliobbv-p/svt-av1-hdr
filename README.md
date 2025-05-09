@@ -13,7 +13,7 @@ A custom curve specifically designed for HDR video and images with a Perceptual 
 
 An opinionated tune optimized for film grain retention and temporal consistency. The recommended CRF range to use tune 3 is 20 to 40.
 
-Tune 3 is equivalent to setting these parameters: `--tune 0 --enable-tf 0 --enable-restoration 0 --enable-cdef 0 --spy-rd 1 --psy-rd 4.00 (SDR), 6.00 (HDR)`.
+Tune 3 is equivalent to setting these parameters: `--tune 0 --enable-tf 0 --enable-restoration 0 --enable-cdef 0 --complex-hvs 1 --spy-rd 1 --psy-rd 4.00 (SDR), 6.00 (HDR)`.
 
 ### SVT-AV1-PSY Feature Additions
 
