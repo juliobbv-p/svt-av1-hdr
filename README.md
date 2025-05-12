@@ -71,7 +71,7 @@ Lowers the minimum available preset from 8 to 2 for higher-quality 8K and 16K en
 
 - `--luminance-qp-bias` *0 to 100* (**[Merged to Mainline](https://gitlab.com/AOMediaCodec/SVT-AV1/-/merge_requests/2348)**)
 
-Enables frame-level luma bias to improve quality in dark scenes by adjusting frame-level QP based on average luminance across each frame
+Enables frame-level luminance bias to improve quality in dark scenes by adjusting frame-level QP based on average luminance across each frame
 
 - `--max-32-tx-size` *0 and 1*
 
