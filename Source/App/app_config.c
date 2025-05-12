@@ -1009,7 +1009,7 @@ ConfigDescription config_entry_variance_boost[] = {
     //Alt-ref temporal filtering strength on keyframes
     {KF_TF_STRENGTH_FILTER_TOKEN, "[PSY] Adjust alt-ref TF strength on keyframes, default is 1 (4x weaker than mainline) [0-4]"},
     //Psy-rd
-    {PSY_RD_TOKEN, "[PSY] Psychovisual rate distortion strength, default is 1.0 [0.0-6.0]"},
+    {PSY_RD_TOKEN, "[PSY] Psychovisual rate distortion strength, default is 1.0 [0.0-8.0]"},
     //Spy-rd
     {SPY_RD_TOKEN, "[PSY] Alternative psychovisual rate distortion pathways, default is 0 [0-2]; 1 = full, 2 = partial"},
     //Sharp-tx
