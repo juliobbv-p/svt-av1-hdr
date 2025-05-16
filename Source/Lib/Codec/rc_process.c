@@ -3481,27 +3481,27 @@ void *svt_aom_rate_control_kernel(void *input_ptr) {
                     }
 
                     uint8_t chroma_qindex_adjustment = chroma_qindex;
+                    uint8_t tune2_chroma_qindex;
+                    
                     switch (scs->static_config.tune) {
                         case 2:
                             // Chroma boost function - ramp down for higher qindices
-                            chroma_qindex_adjustment = MAX(0, chroma_qindex_adjustment - 48);
-                            chroma_qindex -= CLIP3(0, 16, (int32_t)rint(pow(chroma_qindex_adjustment, 1.4) / 9.0));
+                            tune2_chroma_qindex = MAX(0, chroma_qindex_adjustment - 48);
+                            chroma_qindex -= CLIP3(0, 12, (int32_t)rint(pow(tune2_chroma_qindex, 1.4) / 9.0));
                             break;
                         case 4:
                             // Constant chroma boost with gradual ramp-down for very high qindex levels
-                            chroma_qindex -= CLIP3(0, 16, (chroma_qindex_adjustment / 2) - 14);
-                            break;
-                        default:
+                            chroma_qindex -= CLIP3(0, 12, (chroma_qindex_adjustment / 2) - 14);
                             break;
                     }
 
                     // Tune-independent chroma boosts
-                    // Boost chroma in general (4:2:0)
-                    chroma_qindex -= 4;
+                    // Boost chroma in general (4:2:0) with ramp down
+                    chroma_qindex -= CLIP3(0, 8, chroma_qindex_adjustment / 2);
 
                     // Boost chroma on PQ transfer with ramp down
                     if (scs->static_config.transfer_characteristics == EB_CICP_TC_SMPTE_2084) {
-                        chroma_qindex -= CLIP3(0, 8, (chroma_qindex_adjustment / 6) - 8);
+                        chroma_qindex -= CLIP3(0, 4, (chroma_qindex_adjustment / 6) - 8);
                     }
 
                     // Boost chroma on wide color (P3) primary with ramp down
