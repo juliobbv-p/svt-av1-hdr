@@ -32,7 +32,7 @@
 #include "svt_log.h"
 #include "resize.h"
 #include "mcomp.h"
-#include "psy_rd.h"
+#include "ac_bias.h"
 #include "src_ops_process.h"
 #define INC_MD_CAND_CNT(cnt, max_can_count)                  \
     MULTI_LINE_MACRO_BEGIN                                   \
@@ -4865,7 +4865,7 @@ uint64_t svt_spatial_full_distortion_ssim_kernel(uint8_t* input, uint32_t input_
                                                    uint32_t input_stride, uint8_t* recon,
                                                    int32_t recon_offset, uint32_t recon_stride,
                                                    uint32_t area_width, uint32_t area_height,
-                                                   bool hbd, double psy_rd) {
+                                                   bool hbd, double ac_bias) {
     uint8_t m = 1;
     const uint32_t count = area_width * area_height;
 
@@ -4880,22 +4880,22 @@ uint64_t svt_spatial_full_distortion_ssim_kernel(uint8_t* input, uint32_t input_
         ssim_score = ssim(input + input_offset, input_stride,
             recon + recon_offset, recon_stride,
             area_width, area_height);
-        if (psy_rd > 0.0) {
+        if (ac_bias > 0.0) {
             uint64_t ac_distortion = svt_psy_distortion(input + input_offset, input_stride,
                 recon + recon_offset, recon_stride,
                 area_width, area_height);
-            psy_distortion = (uint64_t)(ac_distortion * psy_rd);
+            psy_distortion = (uint64_t)(ac_distortion * ac_bias);
         }
     } else {
         m = 8;
         ssim_score = ssim_hbd((uint16_t *)input + input_offset, input_stride,
             (uint16_t *)recon + recon_offset, recon_stride,
             area_width, area_height);
-        if (psy_rd > 0.0) {
+        if (ac_bias > 0.0) {
             uint64_t ac_distortion = svt_psy_distortion_hbd((uint16_t *)input + input_offset,
                 input_stride, (uint16_t *)recon + recon_offset, recon_stride,
                 area_width, area_height);
-            psy_distortion = (uint64_t)(ac_distortion * psy_rd);
+            psy_distortion = (uint64_t)(ac_distortion * ac_bias);
         }
     }
 

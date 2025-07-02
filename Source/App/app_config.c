@@ -213,7 +213,7 @@
 #define NOISE_NORM_STRENGTH_TOKEN "--noise-norm-strength"
 #define KF_TF_STRENGTH_FILTER_TOKEN "--kf-tf-strength"
 
-#define PSY_RD_TOKEN "--psy-rd"
+#define AC_BIAS_TOKEN "--ac-bias"
 #define SPY_RD_TOKEN "--spy-rd"
 #define SHARP_TX_TOKEN "--sharp-tx"
 #define HBD_MDS_TOKEN "--hbd-mds"
@@ -1270,12 +1270,12 @@ ConfigEntry config_entry_variance_boost[] = {
     {SINGLE_INPUT, NOISE_NORM_STRENGTH_TOKEN, "[PSY] Noise normalization strength, default is 1; recommended value for tune 3 is 3 [0-4]", set_cfg_generic_token},
     //Alt-ref temporal filtering strength on keyframes
     {SINGLE_INPUT, KF_TF_STRENGTH_FILTER_TOKEN, "[PSY] Adjust alt-ref TF strength on keyframes, default is 1 (4x weaker than mainline) [0-4]", set_cfg_generic_token},
-    //Psy-rd
-    {SINGLE_INPUT, PSY_RD_TOKEN, "[PSY] Psychovisual rate distortion strength, default is 1.0; high quality mode activated at >=0.6 and <=P6 (P-1 enables complex HVS model) [0.0-8.0]", set_cfg_generic_token},
+    //AC-Bias
+    {SINGLE_INPUT, AC_BIAS_TOKEN, "[PSY] Strength of AC bias in rate distortion, default is 1.0; high quality mode activated at >=0.6 and <=P6 (P-1 enables complex HVS model) [0.0-8.0]", set_cfg_generic_token},
     //Spy-rd
     {SINGLE_INPUT, SPY_RD_TOKEN, "[PSY] Alternative psychovisual rate distortion pathways, default is 0 [0-2]; 1 = full, 2 = partial", set_cfg_generic_token},
     //Sharp-tx
-    {SINGLE_INPUT, SHARP_TX_TOKEN, "[PSY] Sharp transform optimization, default is 1; best used in combination with psy-rd [0-1]", set_cfg_generic_token},
+    {SINGLE_INPUT, SHARP_TX_TOKEN, "[PSY] Sharp transform optimization, default is 1; best used in combination with ac-bias [0-1]", set_cfg_generic_token},
     //HBD Mode Decisions
     {SINGLE_INPUT, HBD_MDS_TOKEN, "[PSY] High Bit-Depth Mode Decision, default is 0 [0: default preset behavior, 1 = 10-bit, 2 = hybrid 8/10-bit, 3 = 8-bit]", set_cfg_generic_token},
     //Complex HVS
@@ -1491,7 +1491,7 @@ ConfigEntry config_entry[] = {
     {SINGLE_INPUT, KF_TF_STRENGTH_FILTER_TOKEN, "KeyframeTemporalFilteringStrength", set_cfg_generic_token},
 
     // Psy rd strength
-    {SINGLE_INPUT, PSY_RD_TOKEN, "PsyRd", set_cfg_generic_token},
+    {SINGLE_INPUT, AC_BIAS_TOKEN, "AcBias", set_cfg_generic_token},
 
     // Spy rd
     {SINGLE_INPUT, SPY_RD_TOKEN, "SpyRd", set_cfg_generic_token},

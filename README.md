@@ -13,7 +13,7 @@ A custom curve specifically designed for HDR video and images with a Perceptual 
 
 An opinionated tune optimized for film grain retention and temporal consistency. The recommended CRF range to use tune 3 is 20 to 40.
 
-Tune 3 is equivalent to setting these parameters: `--tune 0 --enable-tf 0 --enable-restoration 0 --enable-cdef 0 --complex-hvs 1 --spy-rd 1 --psy-rd 4.00 (SDR), 6.00 (HDR)`.
+Tune 3 is equivalent to setting these parameters: `--tune 0 --enable-tf 0 --enable-restoration 0 --enable-cdef 0 --complex-hvs 1 --spy-rd 1 --ac-bias 4.00 (SDR), 6.00 (HDR)`.
 
 ### SVT-AV1-PSY Feature Additions
 
@@ -113,7 +113,7 @@ Manually adjust temporal filtering strength specifically on keyframes. Each incr
 
 Adaptively varies temporal filtering strength based on 64x64 block error. This can slightly improve visual fidelity in scenes with fast motion or fine detail. Setting this to 2 will override `--tf-strength` and `--kf-tf-strength`, as their values will be automatically determined by the encoder.
 
-- `--psy-rd` *0.0 to 8.0*
+- `--ac-bias` *0.0 to 8.0*
 
 Configures psychovisual rate distortion strength to improve perceived quality by measuring and attempting to preserve the visual energy distribution of high-frequency details and textures. The default is 0.
 
@@ -134,7 +134,7 @@ SVT-AV1-PSY has different defaults than mainline SVT-AV1 in order to provide bet
 - `--enable-variance-boost` enabled by default.
 - `--keyint -2` (the default) uses a ~10s GOP size instead of ~5s.
 - `--sharpness 1` by default to prioritize encoder sharpness.
-- Sharp transform optimizations (`--sharp-tx 1`) are enabled by default to supercharge svt-av1-psy psy-rd optimizations. It is recommended to disable it if you don't use `--psy-rd`, which is set to 0.5 by default.
+- Sharp transform optimizations (`--sharp-tx 1`) are enabled by default to supercharge svt-av1-psy ac-bias optimizations. It is recommended to disable it if you don't use `--ac-bias`, which is set to 0.5 by default.
 - `--tf-strength 1` by default for much lower alt-ref temporal filtering to decrease blur for cleaner encoding.
 - `--kf-tf-strength 1` controls are available to the user and are set to 1 by default to remove KF artifacts.
 

@@ -1004,11 +1004,11 @@ typedef struct EbSvtAv1EncConfiguration {
 
     /**
      * @brief Enable psychovisual rate distortion
-     * 0.00: disable PSY-RD
-     * 4.00: enable PSY-RD with a strength of 4.00
+     * 0.00: disable AC bias
+     * 4.00: enable AC bias with a strength of 4.00
      * Default is 0.00.
      */
-     double psy_rd;
+     double ac_bias;
 
     /**
      * @brief Enable spy-rd, an alternate RD metric that biases towards sharpness/detail retention,
