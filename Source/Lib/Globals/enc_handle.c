@@ -1529,7 +1529,7 @@ EB_API EbErrorType svt_av1_enc_init(EbComponentType *svt_enc_component)
         input_data.max_32_tx_size = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.max_32_tx_size;
         input_data.noise_norm_strength = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.noise_norm_strength;
         input_data.kf_tf_strength = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.kf_tf_strength;
-        input_data.psy_rd = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.psy_rd;
+        input_data.ac_bias = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.ac_bias;
         input_data.spy_rd = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.spy_rd;
         input_data.hbd_mds = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.hbd_mds;
         input_data.sharp_tx = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.sharp_tx;
@@ -4660,7 +4660,7 @@ static void copy_api_from_app(
     scs->static_config.kf_tf_strength = config_struct->kf_tf_strength;
 
     // Psy rd
-    scs->static_config.psy_rd = config_struct->psy_rd;
+    scs->static_config.ac_bias = config_struct->ac_bias;
 
     // Spy rd
     scs->static_config.spy_rd = config_struct->spy_rd;
@@ -4691,7 +4691,7 @@ static void copy_api_from_app(
     // Override settings for Film Grain tune
     if (scs->static_config.tune == 3) {
         SVT_WARN("Tune 3: Film Grain is opinionated! Works best with 1080p, 4k and 8k content.\n");
-        SVT_WARN("Tune 3: Film Grain turns off: TF, CDEF, rest. filtering and enables complex HVS, spy-rd and strong psy-rd.\n");
+        SVT_WARN("Tune 3: Film Grain turns off: TF, CDEF, rest. filtering and enables complex HVS, spy-rd and strong ac-bias.\n");
         scs->static_config.enable_tf = 0;
         scs->static_config.cdef_level = 0;
         scs->static_config.enable_restoration_filtering = 0;
@@ -4699,9 +4699,9 @@ static void copy_api_from_app(
         scs->static_config.complex_hvs = 1;
 
         if (scs->static_config.transfer_characteristics == EB_CICP_TC_SMPTE_2084) {
-            scs->static_config.psy_rd = 6.0;
+            scs->static_config.ac_bias = 6.0;
         } else {
-            scs->static_config.psy_rd = 4.0;
+            scs->static_config.ac_bias = 4.0;
         }
     }
 

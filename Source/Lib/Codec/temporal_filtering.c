@@ -34,7 +34,7 @@
 #include <limits.h>
 #include "pack_unpack_c.h"
 #include "pic_operators.h"
-#include "psy_rd.h"
+#include "ac_bias.h"
 
 #undef _MM_HINT_T2
 #define _MM_HINT_T2 1
@@ -4058,7 +4058,7 @@ static uint32_t filt_unfilt_dist(
                 ppcs->scs->b64_size,
                 ppcs->scs->b64_size,
                 (uint8_t)is_highbd,
-                ppcs->scs->static_config.psy_rd);
+                ppcs->scs->static_config.ac_bias);
 
         }
     }

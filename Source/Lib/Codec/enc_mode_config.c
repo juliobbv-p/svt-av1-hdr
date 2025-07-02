@@ -1865,8 +1865,8 @@ void svt_aom_sig_deriv_multi_processes(SequenceControlSet *scs, PictureParentCon
         if (enc_mode <= ENC_M2)
             pcs->hbd_md = 1;
         //Empiral testing shows enabling full 10-bit MD greatly increases
-        //psy-rd performance once it becomes strong enough (>=0.6)
-        if (enc_mode <= ENC_M4 && pcs->scs->static_config.psy_rd >= 0.6)
+        //ac-bias performance once it becomes strong enough (>=0.6)
+        if (enc_mode <= ENC_M4 && pcs->scs->static_config.ac_bias >= 0.6)
             pcs->hbd_md = 1;
         else if (enc_mode <= ENC_M6)
             pcs->hbd_md = 2;
