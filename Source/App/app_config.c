@@ -1112,7 +1112,7 @@ ConfigEntry config_entry_specific[] = {
     // --- end: ALTREF_FILTERING_SUPPORT
     {SINGLE_INPUT,
      TUNE_TOKEN,
-     "Optimize the encoding process for different desired outcomes [0 = VQ, 1 = PSNR, 2 = SSIM, 3 = Subjective SSIM, 4 = Still Picture], "
+     "Optimize the encoding process for different desired outcomes [0 = VQ, 1 = PSNR, 2 = SSIM, 3 = Film Grain, 4 = Still Picture], "
      "default is 1 "
      "[0-4]",
      set_cfg_generic_token},
