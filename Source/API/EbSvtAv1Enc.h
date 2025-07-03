@@ -669,9 +669,9 @@ typedef struct EbSvtAv1EncConfiguration {
 
     bool enable_overlays;
     /**
-     * @brief Tune for a particular metric; 0: VQ, 1: PSNR, 2: SSIM.
+     * @brief Tune for a particular metric; 0: VQ, 1: PSNR, 2: SSIM, 3: Film Grain.
      *
-     * Default is 2 (Tune SSIM) for SVT-AV1-HDR. Mainline SVT-AV1 uses 1 (Tune PSNR) as default.
+     * Default is 1.
      */
     uint8_t tune;
 
