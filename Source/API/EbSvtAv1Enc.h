@@ -909,7 +909,7 @@ typedef struct EbSvtAv1EncConfiguration {
      *  1: 1st octile
      *  4: 4th octile
      *  8: 8th octile
-     *  Default is 6 */
+     *  Default is 5 */
     uint8_t variance_octile;
 
     /* @brief Bias towards decreased/increased sharpness in the deblocking loop filter & during rate distortion

@@ -61,7 +61,7 @@ This option controls how many superblocks are boosted. It determines this based 
 
 Lower octile values are less efficient (more high contrast areas are boosted alongside low contrast areas, which inflates bitrate), while higher values are less visually consistent (fewer low contrast areas are boosted, which can create low quality area "holes" within superblocks).
 
-The default value is 6. Recommended values are between 4 and 7.
+The default value is 5. Recommended values are between 4 and 7.
 
 ### `--variance-boost-curve [0-3]`
 
