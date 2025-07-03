@@ -913,7 +913,7 @@ ConfigDescription config_entry_specific[] = {
      "frame for the base layer picture, default is 0 [0-1]"},
     // --- end: ALTREF_FILTERING_SUPPORT
     {TUNE_TOKEN,
-     "Optimize the encoding process for different desired outcomes [0 = VQ, 1 = PSNR, 2 = SSIM, 3 = Subjective SSIM, 4 = Still Picture], "
+     "Optimize the encoding process for different desired outcomes [0 = VQ, 1 = PSNR, 2 = SSIM, 3 = Film Grain, 4 = Still Picture], "
      "default is 1 [0-4]"},
     // MD Parameters
     {SCREEN_CONTENT_TOKEN, "Set screen content detection level, default is 2 [0: off, 1: on, 2: content adaptive]"},
