@@ -19,7 +19,7 @@
 #include "resize.h"
 #include "av1me.h"
 #include "sequence_control_set.h"
-#include "psy_rd.h"
+#include "ac_bias.h"
 
 void                 svt_aom_get_recon_pic(PictureControlSet *pcs, EbPictureBufferDesc **recon_ptr, bool is_highbd);
 EbPictureBufferDesc *svt_aom_get_ref_pic_buffer(PictureControlSet *pcs, uint8_t is_highbd, uint8_t list_idx,
@@ -2273,7 +2273,7 @@ static void model_rd_for_sb(PictureControlSet *pcs, EbPictureBufferDesc *predict
     uint64_t dist_sum = 0;
     SequenceControlSet *scs = pcs->ppcs->scs;
 
-    const double effective_psy_rd = get_effective_psy_rd(pcs->scs->static_config.psy_rd, pcs->slice_type == I_SLICE, pcs->temporal_layer_index);
+    const double effective_ac_bias = get_effective_ac_bias(pcs->scs->static_config.ac_bias, pcs->slice_type == I_SLICE, pcs->temporal_layer_index);
     EbPictureBufferDesc *input_pic    = bit_depth > 8 ? pcs->input_frame16bit : pcs->ppcs->enhanced_pic;
     const uint32_t       input_offset = (ctx->blk_org_y + input_pic->org_y) * input_pic->stride_y +
         (ctx->blk_org_x + input_pic->org_x);
@@ -2316,7 +2316,7 @@ static void model_rd_for_sb(PictureControlSet *pcs, EbPictureBufferDesc *predict
                                          ctx->blk_geom->bwidth,
                                          ctx->blk_geom->bheight >> shift,
                                          hbd,
-                                         effective_psy_rd)
+                                         effective_ac_bias)
                 << shift;
             break;
         case 1:
@@ -2337,7 +2337,7 @@ static void model_rd_for_sb(PictureControlSet *pcs, EbPictureBufferDesc *predict
                                          ctx->blk_geom->bwidth_uv,
                                          ctx->blk_geom->bheight_uv,
                                          hbd,
-                                         scs->static_config.psy_rd);
+                                         scs->static_config.ac_bias);
             break;
         default:
             sse = spatial_full_dist_type_fun(input_pic->buffer_cr,
@@ -2357,7 +2357,7 @@ static void model_rd_for_sb(PictureControlSet *pcs, EbPictureBufferDesc *predict
                                          ctx->blk_geom->bwidth_uv,
                                          ctx->blk_geom->bheight_uv,
                                          hbd,
-                                         scs->static_config.psy_rd);
+                                         scs->static_config.ac_bias);
             break;
         }
         if (ctx->ifs_ctrls.skip_sse_rd_model) {

@@ -1814,10 +1814,10 @@ void svt_aom_sig_deriv_multi_processes(SequenceControlSet *scs, PictureParentCon
         if (enc_mode <= ENC_M2)
             pcs->hbd_md = 1;
         //Empiral testing shows enabling full 10-bit MD greatly increases
-        //psy-rd performance once it becomes strong enough (>=0.6)
-        else if (enc_mode <= ENC_M4 && pcs->scs->static_config.psy_rd >= 0.6)
+        //ac-bias performance once it becomes strong enough (>=0.6)
+        else if (enc_mode <= ENC_M4 && pcs->scs->static_config.ac_bias >= 0.6)
             pcs->hbd_md = 1;
-        else if (enc_mode <= ENC_M6 && pcs->scs->static_config.psy_rd >= 0.6)
+        else if (enc_mode <= ENC_M6 && pcs->scs->static_config.ac_bias >= 0.6)
             pcs->hbd_md = 2;
         else if (enc_mode <= ENC_M6)
             pcs->hbd_md = is_base ? 2 : 0;
@@ -8509,15 +8509,15 @@ void svt_aom_sig_deriv_mode_decision_config(SequenceControlSet *scs, PictureCont
         else
             pcs->mds0_level = is_islice ? 2 : 4;
     } else {
-        //Enable SSD mode decision L0 only when psy-rd>=0.6
+        //Enable SSD mode decision L0 only when ac-bias>=0.6
         //as the quality benefits of SSD mode decision L0 are dubious
         //for the computational cost when not using the feature
-        if (pcs->scs->static_config.psy_rd >= 0.6){
+        if (pcs->scs->static_config.ac_bias >= 0.6){
             if (enc_mode <= ENC_MR)
                 pcs->mds0_level = 1;
-            //With P6 and slower when psy-rd is enabled, there are
+            //With P6 and slower when ac-bias is enabled, there are
             //great benefits to enabling SAD since unlike VAR,
-            //psy-rd can actually modulate SAD for better perceptual quality using mds0_level
+            //ac-bias can actually modulate SAD for better perceptual quality using mds0_level
             else if (enc_mode <= ENC_M6)
                  pcs->mds0_level = 0;
             else

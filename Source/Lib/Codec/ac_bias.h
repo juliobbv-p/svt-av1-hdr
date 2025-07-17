@@ -15,22 +15,17 @@
 extern "C" {
 #endif
 
-typedef uint16_t sum_t;
-typedef uint32_t sum2_t;
-typedef uint32_t sum_hbd_t;
-typedef uint64_t sum2_hbd_t;
-
-uint64_t svt_psy_distortion(const uint8_t* input, uint32_t input_stride,
-                            const uint8_t* recon, uint32_t recon_stride,
-                            uint32_t width, uint32_t height);
-uint64_t svt_psy_distortion_hbd(const uint16_t* input, uint32_t input_stride,
-                                const uint16_t* recon, uint32_t recon_stride,
-                                uint32_t width, uint32_t height);
+uint64_t svt_psy_distortion(const uint8_t* input, const uint32_t input_stride,
+                            const uint8_t* recon, const uint32_t recon_stride,
+                            const uint32_t width, const uint32_t height);
+uint64_t svt_psy_distortion_hbd(uint16_t* input, const uint32_t input_stride,
+                                uint16_t* recon, const uint32_t recon_stride,
+                                const uint32_t width, const uint32_t height);
 uint64_t get_svt_psy_full_dist(const void* s, uint32_t so, uint32_t sp,
                                const void* r, uint32_t ro, uint32_t rp,
-                               uint32_t w, uint32_t h, uint8_t is_hbd,
-                               double psy_rd);
-double get_effective_psy_rd(double psy_rd, bool is_islice, uint8_t temporal_layer_index);
+                               const uint32_t w, const uint32_t h, const uint8_t is_hbd,
+                               const double ac_bias);
+double get_effective_ac_bias(const double ac_bias, const bool is_islice, const uint8_t temporal_layer_index);
 
 #ifdef __cplusplus
 }
