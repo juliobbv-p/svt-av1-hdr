@@ -1,7 +1,7 @@
 # SVT-AV1-HDR
 <sup>(code name: Vendata)</sup>
 
-SVT-AV1-HDR is the Scalable Video Technology for AV1 (SVT-AV1 Encoder and Decoder) with perceptual enhancements for psychovisually optimal AV1 encoding. The goal is to create the best encoding implementation for perceptual quality with AV1, with optimizations for HDR encoding and content with film grain.
+SVT-AV1-HDR is the Scalable Video Technology for AV1 (SVT-AV1 Encoder) with perceptual enhancements for psychovisually optimal AV1 encoding. The goal is to create the best encoding implementation for perceptual quality with AV1, with optimizations for HDR encoding and content with film grain.
 
 ### SVT-AV1-HDR Feature Additions
 
