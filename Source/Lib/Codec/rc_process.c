@@ -3395,11 +3395,14 @@ void *svt_aom_rate_control_kernel(void *input_ptr) {
                                          (int8_t)scs->static_config.max_qp_allowed,
                                          (int8_t)scs->static_config.qp + scs->static_config.startup_qp_offset)
                         : (uint8_t)scs->static_config.qp;
+                    const int scs_qindex = CLIP3(MIN_Q_INDEX,
+                                                 MAX_Q_INDEX,
+                                                 quantizer_to_qindex[scs_qp] + scs->static_config.extended_crf_qindex_offset);
                     // if RC mode is 0,  fixed QP is used
                     // QP scaling based on POC number for Flat IPPP structure
                     // make sure no run to run is cause
                     if (pcs->ppcs->seq_param_changed)
-                        rc->active_worst_quality = quantizer_to_qindex[scs_qp];
+                        rc->active_worst_quality = scs_qindex;
                     frm_hdr->quantization_params.base_q_idx = quantizer_to_qindex[pcs->picture_qp];
                     if (pcs->ppcs->qp_on_the_fly == true) {
                         pcs->picture_qp = (uint8_t)CLIP3((int32_t)scs->static_config.min_qp_allowed,
@@ -3409,18 +3412,18 @@ void *svt_aom_rate_control_kernel(void *input_ptr) {
 
                     } else {
                         if (scs->enable_qp_scaling_flag) {
-                            const int32_t qindex = quantizer_to_qindex[scs_qp];
                             // if there are need enough pictures in the LAD/SlidingWindow, the adaptive QP scaling is not used
                             int32_t new_qindex;
                             // if CRF
                             if (pcs->ppcs->tpl_ctrls.enable) {
                                 if (pcs->picture_number == 0) {
-                                    rc->active_worst_quality = quantizer_to_qindex[scs_qp];
+                                    rc->active_worst_quality = scs_qindex;
                                     av1_rc_init(scs);
                                 }
                                 new_qindex = crf_qindex_calc(pcs, rc, rc->active_worst_quality);
                             } else // if CQP
-                                new_qindex = cqp_qindex_calc(pcs, qindex);
+                                //Check this in 3.0.0-psy
+                                new_qindex = cqp_qindex_calc(pcs, scs_qindex);
                             frm_hdr->quantization_params.base_q_idx = (uint8_t)CLIP3(
                                 (int32_t)quantizer_to_qindex[scs->static_config.min_qp_allowed],
                                 (int32_t)quantizer_to_qindex[scs->static_config.max_qp_allowed],
@@ -3429,7 +3432,7 @@ void *svt_aom_rate_control_kernel(void *input_ptr) {
 
                         if (scs->static_config.use_fixed_qindex_offsets || scs->static_config.extended_crf_qindex_offset) {
                             int32_t qindex = scs->static_config.use_fixed_qindex_offsets == 1
-                                ? quantizer_to_qindex[scs_qp]
+                                ? scs_qindex
                                 : frm_hdr->quantization_params
                                       .base_q_idx; // do not shut the auto QPS if use_fixed_qindex_offsets 2
 
