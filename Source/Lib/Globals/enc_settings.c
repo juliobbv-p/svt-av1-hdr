@@ -841,9 +841,12 @@ EbErrorType svt_av1_verify_settings(SequenceControlSet* scs) {
         return_error = EB_ErrorBadParameter;
     }
 
-    if (config->qp_scale_compress_strength > 3) {
-        SVT_ERROR("QP scale compress strength must be between 0 and 3\n");
+    if (config->qp_scale_compress_strength < 0.0 || config->qp_scale_compress_strength > 8.0) {
+        SVT_ERROR("QP scale compress strength must be between 0.0 and 8.0\n");
         return_error = EB_ErrorBadParameter;
+    } else if (config->qp_scale_compress_strength > 3.0) {
+        SVT_WARN(
+            "Using a high QP Scale Compress Strength is only useful under specific situations. Use with caution!\n");
     }
 
     if (config->max_tx_size != 32 && config->max_tx_size != 64) {
@@ -1020,7 +1023,7 @@ EbErrorType svt_av1_set_default_params(EbSvtAv1EncConfiguration* config_ptr) {
     config_ptr->sharpness                         = 1;
     config_ptr->lossless                          = false;
     config_ptr->avif                              = false;
-    config_ptr->qp_scale_compress_strength        = 1;
+    config_ptr->qp_scale_compress_strength        = 1.0;
     config_ptr->sframe_posi.sframe_num            = 0;
     config_ptr->sframe_posi.sframe_posis          = NULL;
     config_ptr->sframe_posi.sframe_qp_num         = 0;
@@ -1190,7 +1193,7 @@ void svt_av1_print_lib_params(SequenceControlSet* scs) {
             break;
         }
 
-        SVT_INFO("SVT [config]: QP scale compress strength \t\t\t\t\t: %d\n", config->qp_scale_compress_strength);
+        SVT_INFO("SVT [config]: QP scale compress strength \t\t\t\t\t: %.2f\n", config->qp_scale_compress_strength);
 
         if (config->ac_bias) {
             SVT_INFO("SVT [config]: AC Bias Strength \t\t\t\t\t\t: %.2f\n", config->ac_bias);
@@ -2234,7 +2237,6 @@ EB_API EbErrorType svt_av1_enc_parse_parameter(EbSvtAv1EncConfiguration* config_
         {"variance-boost-strength", &config_struct->variance_boost_strength},
         {"variance-octile", &config_struct->variance_octile},
         {"variance-boost-curve", &config_struct->variance_boost_curve},
-        {"qp-scale-compress-strength", &config_struct->qp_scale_compress_strength},
         {"fast-decode", &config_struct->fast_decode},
         {"luminance-qp-bias", &config_struct->luminance_qp_bias},
         {"enable-tf", &config_struct->enable_tf},
@@ -2285,6 +2287,7 @@ EB_API EbErrorType svt_av1_enc_parse_parameter(EbSvtAv1EncConfiguration* config_
         const char* name;
         double*     out;
     } double_opts[] = {
+        {"qp-scale-compress-strength", &config_struct->qp_scale_compress_strength},
         {"ac-bias", &config_struct->ac_bias},
     };
 

@@ -72,7 +72,6 @@ extern const double svt_av1_tpl_hl_islice_div_factor[EB_MAX_TEMPORAL_LAYERS];
 extern const double svt_av1_tpl_hl_base_frame_div_factor[EB_MAX_TEMPORAL_LAYERS];
 
 extern const double svt_av1_r0_weight[3];
-extern const double svt_av1_qp_scale_compress_weight[4];
 
 extern const double            svt_av1_rate_factor_deltas[RATE_FACTOR_LEVELS];
 extern const rate_factor_level svt_av1_rate_factor_levels[SVT_AV1_FRAME_UPDATE_TYPES];
