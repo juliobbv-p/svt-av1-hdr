@@ -57,7 +57,7 @@ Argument for providing a film grain table for synthetic film grain (similar to a
 
 Provides a more versatile and granular way to set CRF. Range has been expanded to 70 (from 63) to help with ultra-low bitrate encodes, and can now be set in quarter-step (0.25) increments.
 
-- `--qp-scale-compress-strength` *0 to 3*
+- `--qp-scale-compress-strength` *0.0 to 8.0*
 
 Increases video quality temporal consistency, especially with clips that contain film grain and/or contain fast-moving objects.
 
