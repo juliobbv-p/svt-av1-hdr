@@ -880,9 +880,21 @@ EbErrorType svt_av1_verify_settings(SequenceControlSet *scs) {
         return_error = EB_ErrorBadParameter;
     }
 
-    if (config->qp_scale_compress_strength > 3) {
-        SVT_ERROR("Instance %u: QP scale compress strength must be between 0 and 3\n", channel_number + 1);
+    if (config->qp_scale_compress_strength > 8) {
+        SVT_ERROR("Instance %u: QP scale compress strength must be between 0 and 8\n", channel_number + 1);
         return_error = EB_ErrorBadParameter;
+    }
+    else if (config->qp_scale_compress_strength > 5) {
+        SVT_WARN(
+            "Instance %u: Using very high QP Scale Compress Strength might harm quality "
+            "in more referenced frames beyond what's suitable.\n",
+            channel_number + 1);
+    }
+    else if (config->qp_scale_compress_strength > 3) {
+        SVT_WARN(
+            "Instance %u: Using high QP Scale Compress Strength might harm average metric performance "
+            "acorss all frames.\n",
+            channel_number + 1);
     }
 
     if (config->noise_norm_strength > 4) {
