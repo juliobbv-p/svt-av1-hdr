@@ -1184,7 +1184,7 @@ typedef struct PictureControlSetInitData {
     uint8_t variance_octile;
     uint8_t tf_strength;
     bool    allintra;
-    uint8_t qp_scale_compress_strength;
+    double  qp_scale_compress_strength;
     bool    adaptive_film_grain;
     uint8_t max_tx_size;
     double  ac_bias;
