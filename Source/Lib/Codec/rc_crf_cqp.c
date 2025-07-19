@@ -287,9 +287,8 @@ static int crf_qindex_calc(PictureControlSet* pcs, RATE_CONTROL* rc, int qindex)
             weight = MIN(weight + 0.1, 1);
         }
 
-        double qstep_ratio = sqrt(ppcs->r0) * weight *
-            svt_av1_qp_scale_compress_weight[scs->static_config.qp_scale_compress_strength];
-        if (scs->static_config.qp_scale_compress_strength) {
+        double qstep_ratio = sqrt(ppcs->r0) * weight * (1.000 + scs->static_config.qp_scale_compress_strength * 0.125);
+        if (scs->static_config.qp_scale_compress_strength > 0.0) {
             // clamp qstep_ratio so it doesn't get past the weight value
             qstep_ratio = MIN(weight, qstep_ratio);
         }
@@ -408,7 +407,7 @@ static int cqp_qindex_calc(PictureControlSet* pcs, int qindex) {
     if (pcs->temporal_layer_index == 0) {
         double qratio_grad = ppcs->hierarchical_levels <= 4 ? 0.3 : 0.2;
         double qstep_ratio = (0.2 + (1.0 - (double)active_worst_quality / MAXQ) * qratio_grad) *
-            svt_av1_qp_scale_compress_weight[scs->static_config.qp_scale_compress_strength];
+            (1.000 + scs->static_config.qp_scale_compress_strength * 0.125);
         q = scs->cqp_base_q = svt_av1_get_q_index_from_qstep_ratio(active_worst_quality, qstep_ratio, bit_depth);
     } else if (ppcs->is_ref && pcs->temporal_layer_index < ppcs->hierarchical_levels) {
         int this_height = ppcs->temporal_layer_index + 1;

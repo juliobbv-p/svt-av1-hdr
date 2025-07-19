@@ -917,13 +917,8 @@ typedef struct EbSvtAv1EncConfiguration {
      */
     bool rtc;
 
-    /* @brief compresses the QP hierarchical layer scale to improve temporal video consistency
-    * 0: no compression, original SVT-AV1 scaling
-    * 1-3: enable compression, the higher the number the stronger the compression
-    *      (different frame quality fluctuation/mean quality tradeoffs)
-    * Default is 1 in SVT-AV1-HDR, mainline default is 0.
-    */
-    uint8_t qp_scale_compress_strength;
+    /* @brief unused field for QP scale compress strength, which is now a double */
+    uint8_t qp_scale_compress_strength_unused;
 
     /* @brief Indicates where to insert an S-Frame, only available when sframe_mode is SFRAME_FLEXIBLE_ARF */
     SvtAv1SFramePositions sframe_posi;
@@ -1091,6 +1086,14 @@ typedef struct EbSvtAv1EncConfiguration {
      */
     uint8_t sharp_tx;
 
+    /* @brief compresses the QP hierarchical layer scale to improve temporal video consistency
+     * 0.0: no compression, original SVT-AV1 scaling
+     * 0.0-8.0: enable compression, the higher the number the stronger the compression
+     *         (different frame quality fluctuation/mean quality tradeoffs)
+     * Default is 1.0 in SVT-AV1-HDR, mainline default is 0.0
+     */
+    double qp_scale_compress_strength;
+
     // clang-format off
     /* Add 128 Byte Padding to Struct to avoid changing the size of the public configuration struct */
     uint8_t padding[128
@@ -1105,6 +1108,7 @@ typedef struct EbSvtAv1EncConfiguration {
         - sizeof(uint8_t) // kf_tf_strength
         - sizeof(bool) // alt_lambda_factors
         - sizeof(uint8_t) // sharp_tx
+        - sizeof(double) // qp_scale_compress_strength
     ];
     // clang-format on
 } EbSvtAv1EncConfiguration;
