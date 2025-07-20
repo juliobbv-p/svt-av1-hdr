@@ -887,13 +887,12 @@ EbErrorType svt_av1_verify_settings(SequenceControlSet *scs) {
     else if (config->qp_scale_compress_strength > 5.5) {
         SVT_WARN(
             "Instance %u: Using very high QP Scale Compress Strength might harm quality "
-            "in more referenced frames beyond what's suitable.\n",
+            "in more referenced frames beyond what's suitable. Use with caution!\n",
             channel_number + 1);
     }
     else if (config->qp_scale_compress_strength > 3.0) {
         SVT_WARN(
-            "Instance %u: Using high QP Scale Compress Strength might harm average metric performance "
-            "across all frames.\n",
+            "Instance %u: Using high QP Scale Compress Strength might harm average metric performance.\n",
             channel_number + 1);
     }
 
