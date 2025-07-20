@@ -1049,7 +1049,7 @@ typedef struct EbSvtAv1EncConfiguration {
      uint8_t complex_hvs;
 
     /*Add 128 Byte Padding to Struct to avoid changing the size of the public configuration struct*/
-    uint8_t padding[128 - 1 * sizeof(bool) - 10 * sizeof(uint8_t) - sizeof(double)];
+    uint8_t padding[128 - 1 * sizeof(bool) - 9 * sizeof(uint8_t) - 2 * sizeof(double)];
 } EbSvtAv1EncConfiguration;
 
 /**
