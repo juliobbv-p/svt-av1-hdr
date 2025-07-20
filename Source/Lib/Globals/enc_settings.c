@@ -880,17 +880,17 @@ EbErrorType svt_av1_verify_settings(SequenceControlSet *scs) {
         return_error = EB_ErrorBadParameter;
     }
 
-    if (config->qp_scale_compress_strength > 8) {
-        SVT_ERROR("Instance %u: QP scale compress strength must be between 0 and 8\n", channel_number + 1);
+    if (config->qp_scale_compress_strength < 0.0 || config->qp_scale_compress_strength > 8.0) {
+        SVT_ERROR("Instance %u: QP scale compress strength must be between 0.0 and 8.0\n", channel_number + 1);
         return_error = EB_ErrorBadParameter;
     }
-    else if (config->qp_scale_compress_strength > 5) {
+    else if (config->qp_scale_compress_strength > 5.5) {
         SVT_WARN(
             "Instance %u: Using very high QP Scale Compress Strength might harm quality "
             "in more referenced frames beyond what's suitable.\n",
             channel_number + 1);
     }
-    else if (config->qp_scale_compress_strength > 3) {
+    else if (config->qp_scale_compress_strength > 3.0) {
         SVT_WARN(
             "Instance %u: Using high QP Scale Compress Strength might harm average metric performance "
             "across all frames.\n",
@@ -1233,7 +1233,7 @@ void svt_av1_print_lib_params(SequenceControlSet *scs) {
         default: break;
         }
 
-        SVT_INFO("SVT [config]: QP scale compress strength \t\t\t\t\t: %d\n",
+        SVT_INFO("SVT [config]: QP scale compress strength \t\t\t\t\t: %.2f\n",
                  config->qp_scale_compress_strength);
 
         if (config->noise_norm_strength >= 0) {
@@ -2129,7 +2129,6 @@ EB_API EbErrorType svt_av1_enc_parse_parameter(EbSvtAv1EncConfiguration *config_
         {"variance-boost-strength", &config_struct->variance_boost_strength},
         {"variance-octile", &config_struct->variance_octile},
         {"variance-boost-curve", &config_struct->variance_boost_curve},
-        {"qp-scale-compress-strength", &config_struct->qp_scale_compress_strength},
         {"fast-decode", &config_struct->fast_decode},
         {"luminance-qp-bias", &config_struct->luminance_qp_bias},
         {"noise-norm-strength", &config_struct->noise_norm_strength},
@@ -2179,6 +2178,7 @@ EB_API EbErrorType svt_av1_enc_parse_parameter(EbSvtAv1EncConfiguration *config_
         const char *name;
         double     *out;
     } double_opts[] = {
+        {"qp-scale-compress-strength", &config_struct->qp_scale_compress_strength},
         {"psy-rd", &config_struct->psy_rd},
     };
     const size_t double_opts_size = sizeof(double_opts) / sizeof(double_opts[0]);
