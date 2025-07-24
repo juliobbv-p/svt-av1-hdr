@@ -956,12 +956,12 @@ typedef struct EbSvtAv1EncConfiguration {
     uint8_t extended_crf_qindex_offset;
 
     /* @brief compresses the QP hierarchical layer scale to improve temporal video consistency
-     * 0: no compression, original SVT-AV1 scaling
-     * 1-3: enable compression, the higher the number the stronger the compression
-     *      (different frame quality fluctuation/mean quality tradeoffs)
-     * Default is 1
+     * 0.0: no compression, original SVT-AV1 scaling
+     * 0.0-8.0: enable compression, the higher the number the stronger the compression
+     *         (different frame quality fluctuation/mean quality tradeoffs)
+     * Default is 1.0
      */
-    uint8_t qp_scale_compress_strength;
+    double qp_scale_compress_strength;
 
     /* @brief Limit transform sizes to a maximum of 32x32 pixels
      * 0: disabled, use transform sizes up to 64x64 pixels
@@ -1049,7 +1049,7 @@ typedef struct EbSvtAv1EncConfiguration {
      uint8_t complex_hvs;
 
     /*Add 128 Byte Padding to Struct to avoid changing the size of the public configuration struct*/
-    uint8_t padding[128 - 1 * sizeof(bool) - 10 * sizeof(uint8_t) - sizeof(double)];
+    uint8_t padding[128 - 1 * sizeof(bool) - 9 * sizeof(uint8_t) - 2 * sizeof(double)];
 } EbSvtAv1EncConfiguration;
 
 /**

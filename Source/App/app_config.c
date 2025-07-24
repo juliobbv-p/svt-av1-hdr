@@ -1260,7 +1260,7 @@ ConfigEntry config_entry_variance_boost[] = {
     {SINGLE_INPUT, VARIANCE_OCTILE_TOKEN, "Octile for variance boost, default is 5 [1-8]", set_cfg_generic_token},
     {SINGLE_INPUT, VARIANCE_BOOST_CURVE_TOKEN, "Curve for variance boost, default is 0 [0-3]", set_cfg_generic_token},
     // QP scale compress
-    {SINGLE_INPUT, QP_SCALE_COMPRESS_STRENGTH_TOKEN, "[PSY] QP scale compress strength, default is 1 [0-3]", set_cfg_generic_token},
+    {SINGLE_INPUT, QP_SCALE_COMPRESS_STRENGTH_TOKEN, "[PSY] QP scale compress strength, default is 1.0 [0.0-8.0]", set_cfg_generic_token},
     // Max 32 tx size
     {SINGLE_INPUT, MAX_32_TX_SIZE_TOKEN, "[PSY] Limits the allowed transform sizes to a maximum of 32x32, default is 0 [0-1]", set_cfg_generic_token},
     // Min/max chroma qm
