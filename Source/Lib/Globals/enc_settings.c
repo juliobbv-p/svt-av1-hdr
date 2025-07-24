@@ -884,15 +884,10 @@ EbErrorType svt_av1_verify_settings(SequenceControlSet *scs) {
         SVT_ERROR("Instance %u: QP scale compress strength must be between 0.0 and 8.0\n", channel_number + 1);
         return_error = EB_ErrorBadParameter;
     }
-    else if (config->qp_scale_compress_strength > 5.5) {
+    else if (config->qp_scale_compress_strength > 4.0) {
         SVT_WARN(
-            "Instance %u: Using very high QP Scale Compress Strength might harm quality "
-            "in more referenced frames beyond what's suitable. Use with caution!\n",
-            channel_number + 1);
-    }
-    else if (config->qp_scale_compress_strength > 3.0) {
-        SVT_WARN(
-            "Instance %u: Using high QP Scale Compress Strength might harm average metric performance.\n",
+            "Instance %u: Using a high QP Scale Compress Strength is only useful under specific situations. "
+            "Use with caution!\n",
             channel_number + 1);
     }
 
