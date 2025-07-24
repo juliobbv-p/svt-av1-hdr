@@ -869,8 +869,10 @@ static int crf_qindex_calc(PictureControlSet *pcs, RATE_CONTROL *rc, int qindex)
             weight = MIN(weight + 0.1, 1);
 
         double qstep_ratio = sqrt(ppcs->r0) * weight * (1.000 + scs->static_config.qp_scale_compress_strength * 0.125);
-        // clamp qstep_ratio so it doesn't get past the weight value
-        qstep_ratio = MIN(weight, qstep_ratio);
+        if (scs->static_config.qp_scale_compress_strength) {
+            // clamp qstep_ratio so it doesn't get past the weight value
+            qstep_ratio = MIN(weight, qstep_ratio);
+        }
 
         const int    qindex_from_qstep_ratio = svt_av1_get_q_index_from_qstep_ratio(qindex, qstep_ratio, bit_depth);
 #if DEBUG_QP_SCALING
@@ -2348,9 +2350,10 @@ static int rc_pick_q_and_bounds(PictureControlSet *pcs) {
         assert(r0_weight_idx <= 2);
         double       weight                  = r0_weight[r0_weight_idx];
         double qstep_ratio             = sqrt(pcs->ppcs->r0) * weight * (1.000 + scs->static_config.qp_scale_compress_strength * 0.125);
-        // clamp qstep_ratio so it doesn't get past the weight value
-        qstep_ratio = MIN(weight, qstep_ratio);
-
+        if (scs->static_config.qp_scale_compress_strength) {
+            // clamp qstep_ratio so it doesn't get past the weight value
+            qstep_ratio = MIN(weight, qstep_ratio);
+        }
         int          qindex_from_qstep_ratio = svt_av1_get_q_index_from_qstep_ratio(
             rc->active_worst_quality, qstep_ratio, scs->static_config.encoder_bit_depth);
         if (pcs->ppcs->sc_class1 && scs->passes == 1 && enc_ctx->rc_cfg.mode == AOM_VBR &&
