@@ -961,19 +961,64 @@ static void fast_loop_core_light_pd0(ModeDecisionCandidateBuffer *cand_bf, Pictu
         svt_aom_use_scaled_rec_refs_if_needed(pcs, input_pic, ref_obj, &ref_pic, 0);
         const int32_t ref_origin_index = ref_pic->org_x + (ctx->blk_org_x + mv_x) +
             (ctx->blk_org_y + mv_y + ref_pic->org_y) * ref_pic->stride_y;
-        const AomVarianceFnPtr *fn_ptr = &svt_aom_mefn_ptr[ctx->blk_geom->bsize];
-        unsigned int            sse;
-        uint8_t                *pred_y = ref_pic->buffer_y + ref_origin_index;
-        uint8_t                *src_y  = input_pic->buffer_y + input_origin_index;
-        *(cand_bf->fast_cost)          = fn_ptr->vf(pred_y, ref_pic->stride_y, src_y, input_pic->stride_y, &sse);
+        if (ctx->mds0_ctrls.mds0_dist_type == VAR) {
+            const AomVarianceFnPtr *fn_ptr = &svt_aom_mefn_ptr[ctx->blk_geom->bsize];
+            unsigned int            sse;
+            uint8_t                *pred_y = ref_pic->buffer_y + ref_origin_index;
+            uint8_t                *src_y  = input_pic->buffer_y + input_origin_index;
+            *(cand_bf->fast_cost)          = fn_ptr->vf(pred_y, ref_pic->stride_y, src_y, input_pic->stride_y, &sse);
+        } else {
+            const double effective_ac_bias = get_effective_ac_bias(
+                pcs->scs->static_config.ac_bias, pcs->slice_type == I_SLICE, pcs->temporal_layer_index);
+            *(cand_bf->fast_cost) = svt_spatial_full_distortion_kernel_facade(input_pic->buffer_y,
+                                                                              input_origin_index,
+                                                                              input_pic->stride_y << 1,
+                                                                              ref_pic->buffer_y,
+                                                                              ref_origin_index,
+                                                                              ref_pic->stride_y << 1,
+                                                                              ctx->blk_geom->bwidth,
+                                                                              ctx->blk_geom->bheight >> 1,
+                                                                              ctx->hbd_md,
+                                                                              &(cand_bf->cand->block_mi),
+                                                                              false, // is_chroma
+                                                                              pcs->temporal_layer_index,
+                                                                              pcs->scs->static_config.ac_bias,
+                                                                              pcs->scs->static_config.tx_bias)
+                << 1;
+            if (effective_ac_bias) {
+                *(cand_bf->fast_cost) += get_svt_psy_full_dist(input_pic->buffer_y,
+                                                               input_origin_index,
+                                                               input_pic->stride_y << 1,
+                                                               ref_pic->buffer_y,
+                                                               ref_origin_index,
+                                                               ref_pic->stride_y << 1,
+                                                               ctx->blk_geom->bwidth,
+                                                               ctx->blk_geom->bheight >> 1,
+                                                               ctx->hbd_md,
+                                                               effective_ac_bias)
+                    << 1;
+            }
+        }
     } else {
         // intrabc not allowed in light_pd0
         product_prediction_fun_table_light_pd0[is_inter_mode(cand->block_mi.mode)](0, ctx, pcs, cand_bf);
-        const AomVarianceFnPtr *fn_ptr = &svt_aom_mefn_ptr[ctx->blk_geom->bsize];
-        unsigned int            sse;
-        uint8_t                *pred_y = pred->buffer_y + cu_origin_index;
-        uint8_t                *src_y  = input_pic->buffer_y + input_origin_index;
-        *(cand_bf->fast_cost)          = fn_ptr->vf(pred_y, pred->stride_y, src_y, input_pic->stride_y, &sse);
+        if (ctx->mds0_ctrls.mds0_dist_type == VAR) {
+            const AomVarianceFnPtr *fn_ptr = &svt_aom_mefn_ptr[ctx->blk_geom->bsize];
+            unsigned int            sse;
+            uint8_t                *pred_y = pred->buffer_y + cu_origin_index;
+            uint8_t                *src_y  = input_pic->buffer_y + input_origin_index;
+            *(cand_bf->fast_cost)          = fn_ptr->vf(pred_y, pred->stride_y, src_y, input_pic->stride_y, &sse);
+        } else {
+            *(cand_bf->fast_cost) = svt_spatial_full_distortion_kernel(input_pic->buffer_y,
+                                                                       input_origin_index,
+                                                                       input_pic->stride_y << 1,
+                                                                       pred->buffer_y,
+                                                                       cu_origin_index,
+                                                                       pred->stride_y << 1,
+                                                                       ctx->blk_geom->bwidth,
+                                                                       ctx->blk_geom->bheight >> 1)
+                << 1;
+        }
     }
 }
 // Light PD1 fast loop core; assumes luma only, 8bit only, and that SSD is not used.
@@ -1095,27 +1140,49 @@ static void obmc_trans_face_off(ModeDecisionCandidateBuffer *cand_bf, PictureCon
             svt_aom_inter_pu_prediction_av1_obmc(ctx->hbd_md, ctx, pcs, cand_bf);
 
             // Distortion
-            if (!ctx->hbd_md) {
-                const AomVarianceFnPtr *fn_ptr = &svt_aom_mefn_ptr[ctx->blk_geom->bsize];
-                unsigned int            sse;
-                uint8_t                *pred_y = pred->buffer_y + cu_origin_index;
-                uint8_t                *src_y  = input_pic->buffer_y + input_origin_index;
-                cand_bf->luma_fast_dist        = fn_ptr->vf(pred_y, pred->stride_y, src_y, input_pic->stride_y, &sse);
+            if (ctx->mds0_ctrls.mds0_dist_type == SSD) {
+                EbSpatialFullDistType spatial_full_dist_type_fun = ctx->hbd_md ? svt_full_distortion_kernel16_bits
+                                                                               : svt_spatial_full_distortion_kernel;
+                cand_bf->luma_fast_dist = luma_fast_dist = spatial_full_dist_type_fun(input_pic->buffer_y,
+                                                                                      input_origin_index,
+                                                                                      input_pic->stride_y,
+                                                                                      pred->buffer_y,
+                                                                                      (int32_t)cu_origin_index,
+                                                                                      pred->stride_y,
+                                                                                      ctx->blk_geom->bwidth,
+                                                                                      ctx->blk_geom->bheight);
+
+                // Fast Cost
+                cand_bf->fast_luma_rate = obmc_fast_luma_rate;
+                *(cand_bf->fast_cost)   = av1_product_fast_cost_func_table[is_inter_mode(cand->block_mi.mode)](
+                    pcs, ctx, cand_bf, full_lambda, luma_fast_dist);
             } else {
-                const AomVarianceFnPtr *fn_ptr = &svt_aom_mefn_ptr[ctx->blk_geom->bsize];
-                unsigned int            sse;
-                uint16_t               *pred_y = ((uint16_t *)pred->buffer_y) + cu_origin_index;
-                uint16_t               *src_y  = ((uint16_t *)input_pic->buffer_y) + input_origin_index;
-                cand_bf->luma_fast_dist        = fn_ptr->vf_hbd_10(
-                    CONVERT_TO_BYTEPTR(pred_y), pred->stride_y, CONVERT_TO_BYTEPTR(src_y), input_pic->stride_y, &sse);
+                assert(ctx->mds0_ctrls.mds0_dist_type == VAR);
+                if (!ctx->hbd_md) {
+                    const AomVarianceFnPtr *fn_ptr = &svt_aom_mefn_ptr[ctx->blk_geom->bsize];
+                    unsigned int            sse;
+                    uint8_t                *pred_y = pred->buffer_y + cu_origin_index;
+                    uint8_t                *src_y  = input_pic->buffer_y + input_origin_index;
+                    cand_bf->luma_fast_dist = fn_ptr->vf(pred_y, pred->stride_y, src_y, input_pic->stride_y, &sse);
+                } else {
+                    const AomVarianceFnPtr *fn_ptr = &svt_aom_mefn_ptr[ctx->blk_geom->bsize];
+                    unsigned int            sse;
+                    uint16_t               *pred_y = ((uint16_t *)pred->buffer_y) + cu_origin_index;
+                    uint16_t               *src_y  = ((uint16_t *)input_pic->buffer_y) + input_origin_index;
+                    cand_bf->luma_fast_dist        = fn_ptr->vf_hbd_10(CONVERT_TO_BYTEPTR(pred_y),
+                                                                pred->stride_y,
+                                                                CONVERT_TO_BYTEPTR(src_y),
+                                                                input_pic->stride_y,
+                                                                &sse);
+                }
+                // Shift variance by 4 because we use full lambda in the cost (since variance is proportional to sse)
+                // and full lambda is set with the expectation the variance is a squared metric shifted by 4 (the same
+                // shift is applied to sse in the full loop)
+                luma_fast_dist          = cand_bf->luma_fast_dist << 4;
+                cand_bf->fast_luma_rate = obmc_fast_luma_rate;
+                *(cand_bf->fast_cost)   = RDCOST(
+                    full_lambda, cand_bf->fast_luma_rate + cand_bf->fast_chroma_rate, luma_fast_dist);
             }
-            // Shift variance by 4 because we use full lambda in the cost (since variance is proportional to sse)
-            // and full lambda is set with the expectation the variance is a squared metric shifted by 4 (the same
-            // shift is applied to sse in the full loop)
-            luma_fast_dist          = cand_bf->luma_fast_dist << 4;
-            cand_bf->fast_luma_rate = obmc_fast_luma_rate;
-            *(cand_bf->fast_cost)   = RDCOST(
-                full_lambda, cand_bf->fast_luma_rate + cand_bf->fast_chroma_rate, luma_fast_dist);
             if (simple_translation_cost < *(cand_bf->fast_cost)) {
                 // Restore the simple-translation results
                 cand->block_mi.motion_mode = SIMPLE_TRANSLATION;
@@ -1209,7 +1276,18 @@ void fast_loop_core(ModeDecisionCandidateBuffer *cand_bf, PictureControlSet *pcs
     product_prediction_fun_table[is_inter_mode(cand->block_mi.mode) || cand->block_mi.use_intrabc](
         ctx->hbd_md, ctx, pcs, cand_bf);
 
-    if (ctx->mds0_use_hadamard) {
+    if (ctx->mds0_ctrls.mds0_dist_type == SSD) {
+        EbSpatialFullDistType spatial_full_dist_type_fun = ctx->hbd_md ? svt_full_distortion_kernel16_bits
+                                                                       : svt_spatial_full_distortion_kernel;
+        cand_bf->luma_fast_dist = luma_fast_dist = spatial_full_dist_type_fun(input_pic->buffer_y,
+                                                                              input_origin_index,
+                                                                              input_pic->stride_y,
+                                                                              pred->buffer_y,
+                                                                              (int32_t)cu_origin_index,
+                                                                              pred->stride_y,
+                                                                              ctx->blk_geom->bwidth,
+                                                                              ctx->blk_geom->bheight);
+    } else if (ctx->mds0_use_hadamard) {
         uint32_t satd           = hadamard_path(cand_bf, ctx, input_pic, loc);
         cand_bf->luma_fast_dist = satd;
 
@@ -7129,34 +7207,68 @@ static void search_best_independent_uv_mode(PictureControlSet *pcs, EbPictureBuf
         cand_bf->cand                        = &ctx->fast_cand_array[uv_mode_count + start_fast_buffer_index];
         product_prediction_fun_table[is_inter_mode(cand_bf->cand->block_mi.mode)](ctx->hbd_md, ctx, pcs, cand_bf);
         uint32_t chroma_fast_distortion;
-        if (!ctx->hbd_md) {
-            const AomVarianceFnPtr *fn_ptr = &svt_aom_mefn_ptr[ctx->blk_geom->bsize_uv];
-            unsigned int            sse;
-            uint8_t                *pred_cb = cand_bf->pred->buffer_cb + cu_chroma_origin_index;
-            uint8_t                *src_cb  = input_pic->buffer_cb + input_cb_origin_in_index;
-            chroma_fast_distortion = fn_ptr->vf(pred_cb, cand_bf->pred->stride_cb, src_cb, input_pic->stride_cb, &sse);
+        if (ctx->mds0_ctrls.mds0_dist_type == VAR) {
+            if (!ctx->hbd_md) {
+                const AomVarianceFnPtr *fn_ptr = &svt_aom_mefn_ptr[ctx->blk_geom->bsize_uv];
+                unsigned int            sse;
+                uint8_t                *pred_cb = cand_bf->pred->buffer_cb + cu_chroma_origin_index;
+                uint8_t                *src_cb  = input_pic->buffer_cb + input_cb_origin_in_index;
+                chroma_fast_distortion          = fn_ptr->vf(
+                    pred_cb, cand_bf->pred->stride_cb, src_cb, input_pic->stride_cb, &sse);
 
-            uint8_t *pred_cr = cand_bf->pred->buffer_cr + cu_chroma_origin_index;
-            uint8_t *src_cr  = input_pic->buffer_cr + input_cr_origin_in_index;
-            chroma_fast_distortion += fn_ptr->vf(pred_cr, cand_bf->pred->stride_cr, src_cr, input_pic->stride_cr, &sse);
+                uint8_t *pred_cr = cand_bf->pred->buffer_cr + cu_chroma_origin_index;
+                uint8_t *src_cr  = input_pic->buffer_cr + input_cr_origin_in_index;
+                chroma_fast_distortion += fn_ptr->vf(
+                    pred_cr, cand_bf->pred->stride_cr, src_cr, input_pic->stride_cr, &sse);
+            } else {
+                const AomVarianceFnPtr *fn_ptr = &svt_aom_mefn_ptr[ctx->blk_geom->bsize_uv];
+                unsigned int            sse;
+                uint16_t               *pred_cb = ((uint16_t *)cand_bf->pred->buffer_cb) + cu_chroma_origin_index;
+                uint16_t               *src_cb  = ((uint16_t *)input_pic->buffer_cb) + input_cb_origin_in_index;
+                chroma_fast_distortion          = fn_ptr->vf_hbd_10(CONVERT_TO_BYTEPTR(pred_cb),
+                                                           cand_bf->pred->stride_cb,
+                                                           CONVERT_TO_BYTEPTR(src_cb),
+                                                           input_pic->stride_cb,
+                                                           &sse);
+
+                uint16_t *pred_cr = ((uint16_t *)cand_bf->pred->buffer_cr) + cu_chroma_origin_index;
+                uint16_t *src_cr  = ((uint16_t *)input_pic->buffer_cr) + input_cr_origin_in_index;
+                chroma_fast_distortion += fn_ptr->vf_hbd_10(CONVERT_TO_BYTEPTR(pred_cr),
+                                                            cand_bf->pred->stride_cr,
+                                                            CONVERT_TO_BYTEPTR(src_cr),
+                                                            input_pic->stride_cr,
+                                                            &sse);
+            }
+            // Note: it's fine to use SAD here, as the metric is purely used for distortion sorting purposes
+            // *(cand_bf->fast_cost) will be later reset
+        } else if (!ctx->hbd_md) {
+            chroma_fast_distortion = svt_nxm_sad_kernel(input_pic->buffer_cb + input_cb_origin_in_index,
+                                                        input_pic->stride_cb,
+                                                        cand_bf->pred->buffer_cb + cu_chroma_origin_index,
+                                                        cand_bf->pred->stride_cb,
+                                                        ctx->blk_geom->bheight_uv,
+                                                        ctx->blk_geom->bwidth_uv);
+
+            chroma_fast_distortion += svt_nxm_sad_kernel(input_pic->buffer_cr + input_cr_origin_in_index,
+                                                         input_pic->stride_cr,
+                                                         cand_bf->pred->buffer_cr + cu_chroma_origin_index,
+                                                         cand_bf->pred->stride_cr,
+                                                         ctx->blk_geom->bheight_uv,
+                                                         ctx->blk_geom->bwidth_uv);
         } else {
-            const AomVarianceFnPtr *fn_ptr = &svt_aom_mefn_ptr[ctx->blk_geom->bsize_uv];
-            unsigned int            sse;
-            uint16_t               *pred_cb = ((uint16_t *)cand_bf->pred->buffer_cb) + cu_chroma_origin_index;
-            uint16_t               *src_cb  = ((uint16_t *)input_pic->buffer_cb) + input_cb_origin_in_index;
-            chroma_fast_distortion          = fn_ptr->vf_hbd_10(CONVERT_TO_BYTEPTR(pred_cb),
-                                                       cand_bf->pred->stride_cb,
-                                                       CONVERT_TO_BYTEPTR(src_cb),
-                                                       input_pic->stride_cb,
-                                                       &sse);
+            chroma_fast_distortion = sad_16b_kernel(((uint16_t *)input_pic->buffer_cb) + input_cb_origin_in_index,
+                                                    input_pic->stride_cb,
+                                                    ((uint16_t *)cand_bf->pred->buffer_cb) + cu_chroma_origin_index,
+                                                    cand_bf->pred->stride_cb,
+                                                    ctx->blk_geom->bheight_uv,
+                                                    ctx->blk_geom->bwidth_uv);
 
-            uint16_t *pred_cr = ((uint16_t *)cand_bf->pred->buffer_cr) + cu_chroma_origin_index;
-            uint16_t *src_cr  = ((uint16_t *)input_pic->buffer_cr) + input_cr_origin_in_index;
-            chroma_fast_distortion += fn_ptr->vf_hbd_10(CONVERT_TO_BYTEPTR(pred_cr),
-                                                        cand_bf->pred->stride_cr,
-                                                        CONVERT_TO_BYTEPTR(src_cr),
-                                                        input_pic->stride_cr,
-                                                        &sse);
+            chroma_fast_distortion += sad_16b_kernel(((uint16_t *)input_pic->buffer_cr) + input_cr_origin_in_index,
+                                                     input_pic->stride_cr,
+                                                     ((uint16_t *)cand_bf->pred->buffer_cr) + cu_chroma_origin_index,
+                                                     cand_bf->pred->stride_cr,
+                                                     ctx->blk_geom->bheight_uv,
+                                                     ctx->blk_geom->bwidth_uv);
         }
         // Do not consider rate @ this stage
         *(cand_bf->fast_cost) = chroma_fast_distortion;
