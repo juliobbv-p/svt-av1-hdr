@@ -6681,11 +6681,14 @@ static void set_tx_shortcut_ctrls(PictureControlSet* pcs, ModeDecisionContext* c
 
 static void set_mds0_controls(ModeDecisionContext* ctx, uint8_t mds0_level) {
     Mds0Ctrls* ctrls = &ctx->mds0_ctrls;
+
     switch (mds0_level) {
     case 0:
+        ctrls->mds0_dist_type    = VAR;
         ctrls->pruning_method_th = 0;
         break;
     case 1:
+        ctrls->mds0_dist_type                          = VAR;
         ctrls->pruning_method_th                       = 100;
         ctrls->per_class_dist_to_cost_th[CAND_CLASS_0] = 50;
         ctrls->per_class_dist_to_cost_th[CAND_CLASS_1] = 10;
@@ -6693,8 +6696,13 @@ static void set_mds0_controls(ModeDecisionContext* ctx, uint8_t mds0_level) {
         ctrls->per_class_dist_to_cost_th[CAND_CLASS_3] = 50;
         break;
     case 2:
+        ctrls->mds0_dist_type    = VAR;
         ctrls->pruning_method_th = (uint8_t)~0;
         ctrls->dist_to_cost_th   = 0;
+        break;
+    case 3:
+        ctrls->mds0_dist_type    = SSD;
+        ctrls->pruning_method_th = 0;
         break;
     default:
         assert(0);
