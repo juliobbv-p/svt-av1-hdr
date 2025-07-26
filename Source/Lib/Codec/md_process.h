@@ -787,6 +787,8 @@ typedef struct TxShortcutCtrls {
     uint32_t use_mds3_shortcuts_th;
 } TxShortcutCtrls;
 typedef struct Mds0Ctrls {
+    // Distortion metric to use MDS0: SSD, VAR
+    uint8_t mds0_dist_type;
     // 0: disabled, > 0: switch between: (1) reset reference cost for each subsequent class, (2) continuously update reference cost, (uint8_t) ~0: continuously update reference cost
     uint8_t pruning_method_th;
     // % TH(s) used to compare candidate distortion to best cost; higher is safer (applies to reg. PD1 only)
