@@ -20,7 +20,7 @@
 #include "sequence_control_set.h"
 #include "reference_object.h"
 #include "common_utils.h"
-#include "psy_rd.h"
+#include "ac_bias.h"
 //#include "svt_log.h"
 #define DLF_MAX_LVL 4
 const int32_t  inter_frame_multiplier[INPUT_SIZE_COUNT]      = {6017, 6017, 6017, 12034, 12034, 12034, 12034};

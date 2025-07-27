@@ -1267,7 +1267,7 @@ typedef struct PictureControlSetInitData {
     bool    max_32_tx_size;
     uint8_t noise_norm_strength;
     uint8_t kf_tf_strength;
-    double  psy_rd;
+    double  ac_bias;
     uint8_t spy_rd;
     uint8_t sharp_tx;
     uint8_t hbd_mds;
