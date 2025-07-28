@@ -1001,7 +1001,7 @@ typedef struct EbSvtAv1EncConfiguration {
      * @brief Enable psychovisual rate distortion
      * 0.00: disable AC bias
      * 4.00: enable AC bias with a strength of 4.00
-     * Default is 0.00.
+     * Default is 1.00.
      */
      double ac_bias;
 
