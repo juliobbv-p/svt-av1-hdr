@@ -1223,6 +1223,10 @@ ConfigEntry config_entry[] = {
     {RTC_TOKEN, "RealTime", set_cfg_generic_token},
     // QP scale compression
     {QP_SCALE_COMPRESS_STRENGTH_TOKEN, "QpScaleCompressStrength", set_cfg_generic_token},
+
+    // Max 32 tx size
+    {MAX_32_TX_SIZE_TOKEN, "Max32TxSize", set_cfg_generic_token},
+
     // Noise normalization strength
     {NOISE_NORM_STRENGTH_TOKEN, "NoiseNormStrength", set_cfg_generic_token},
 
@@ -1237,6 +1241,9 @@ ConfigEntry config_entry[] = {
 
     // Sharp TX
     {SHARP_TX_TOKEN, "SharpTX", set_cfg_generic_token},
+
+    // HBD MDS
+    {HBD_MDS_TOKEN, "HBDMDS", set_cfg_generic_token},
 
     // Complex HVS
     {COMPLEX_HVS_TOKEN, "ComplexHVS", set_cfg_generic_token},
