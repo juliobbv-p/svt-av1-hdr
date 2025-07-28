@@ -932,8 +932,8 @@ EbErrorType svt_av1_verify_settings(SequenceControlSet *scs) {
         return_error = EB_ErrorBadParameter;
     }
 
-    if (config->hbd_mds > 3) {
-        SVT_ERROR("Instance %u: hbd-mds must be between 0 and 3\n", channel_number + 1);
+    if (config->hbd_mds > 2) {
+        SVT_ERROR("Instance %u: hbd-mds must be between 0 and 2\n", channel_number + 1);
         return_error = EB_ErrorBadParameter;
     }
 
