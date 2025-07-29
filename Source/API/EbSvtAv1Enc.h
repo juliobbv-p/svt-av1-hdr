@@ -1050,8 +1050,18 @@ typedef struct EbSvtAv1EncConfiguration {
      * Default is true in SVT-AV1-HDR. */
      bool alt_lambda_factors;
 
+     /**
+     * @brief Toggle default film grain blocksize behavior
+     * 0: use default blocksize behavior (32x32)
+     * 1: use adaptive blocksize based on resolution
+     *  - 8x8 for <4k
+     *  - 16x16 for 4k
+     * Default is 1
+     */
+     bool adaptive_film_grain;
+
     /*Add 128 Byte Padding to Struct to avoid changing the size of the public configuration struct*/
-    uint8_t padding[128 - (sizeof(uint8_t) * 9) - (sizeof(double) * 2) - (sizeof(bool) * 2)
+    uint8_t padding[128 - (sizeof(uint8_t) * 9) - (sizeof(double) * 2) - (sizeof(bool) * 3)
         - sizeof(bool)
     ];
 } EbSvtAv1EncConfiguration;

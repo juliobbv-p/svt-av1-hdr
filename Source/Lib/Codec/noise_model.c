@@ -2126,10 +2126,12 @@ EbErrorType svt_aom_denoise_and_model_ctor(AomDenoiseAndModel *object_ptr, EbPtr
     svt_aom_derive_input_resolution(&input_resolution, input_size);
 
     int32_t denoise_block_size = 32;
-    if (input_resolution <= INPUT_SIZE_1080p_RANGE)
-        denoise_block_size = 8;
-    else if (input_resolution <= INPUT_SIZE_4K_RANGE)
-        denoise_block_size = 16;
+    if (init_data_ptr->adaptive_film_grain) {
+        if (input_resolution <= INPUT_SIZE_1080p_RANGE)
+            denoise_block_size = 8;
+        else if (input_resolution <= INPUT_SIZE_4K_RANGE)
+            denoise_block_size = 16;
+    }
 
     object_ptr->block_size  = denoise_block_size;
     object_ptr->noise_level = (float)(init_data_ptr->noise_level / 10.0);
