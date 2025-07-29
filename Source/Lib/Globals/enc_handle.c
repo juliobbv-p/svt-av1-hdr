@@ -1535,6 +1535,7 @@ EB_API EbErrorType svt_av1_enc_init(EbComponentType *svt_enc_component)
         input_data.hbd_mds = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.hbd_mds;
         input_data.sharp_tx = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.sharp_tx;
         input_data.complex_hvs = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.complex_hvs;
+        input_data.alt_lambda_factors = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.alt_lambda_factors;
         //check if all added parameters have been added
         input_data.static_config = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config;
         input_data.allintra = enc_handle_ptr->scs_instance_array[instance_index]->scs->allintra;
@@ -4679,6 +4680,9 @@ static void copy_api_from_app(
 
     // Complex HVS
     scs->static_config.complex_hvs = config_struct->complex_hvs;
+
+    // Alt lambda factors
+    scs->static_config.alt_lambda_factors = config_struct->alt_lambda_factors;
 
     // Override settings for Still Picture tune
     if (scs->static_config.tune == 4) {
