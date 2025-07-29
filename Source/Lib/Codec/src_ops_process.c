@@ -2123,7 +2123,6 @@ void svt_aom_get_mean_and_perpixel_variance(const uint8_t *buf, uint32_t stride,
                                           uint32_t *perpixel_var, uint32_t *mean) {
     const int block_w = block_size_wide[block_size];
     const int block_h = block_size_high[block_size];
-    //const int num_pels = block_w * block_h;
     
     uint64_t sum = 0;
     uint64_t sse = 0;
@@ -2171,9 +2170,9 @@ unsigned int svt_aom_get_perceptual_perpixel_variance(const uint8_t *buf, uint32
     // value for mid-tones, making the encoder think they are more complex and
     // deserving of bits. A simple way is to scale by a factor > 1.0.
     // A better perceptual weight boosts the importance of mid-tones.
-    // Let's define a boost factor, e.g., boosting it by up to 50%
+    // Let's define a boost factor, e.g., boosting it by up to 50%, or use another equation (var + var*weight / sqrt(var + 1))
     //unsigned int perceptual_var = var * (1.0 + weight);
-    unsigned int perceptual_var = var + ((var * weight) / sqrtf(var + 1.)); // >> 9 is like dividing by 512 (256*2)
+    unsigned int perceptual_var = var + ((var * weight) / sqrtf(var + 1.));
 
     //fprintf(stdout, "%.4u\t", perceptual_var);
 
