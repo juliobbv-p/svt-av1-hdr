@@ -1107,7 +1107,7 @@ EbErrorType svt_av1_set_default_params(EbSvtAv1EncConfiguration *config_ptr) {
     config_ptr->extended_crf_qindex_offset        = 0;
     config_ptr->qp_scale_compress_strength        = 1;
     config_ptr->max_32_tx_size                    = false;
-    config_ptr->alt_ssim_tuning                   = false;
+    config_ptr->adaptive_film_grain               = true;
     config_ptr->noise_norm_strength               = 1;
     config_ptr->kf_tf_strength                    = 1;
     config_ptr->ac_bias                           = 1.0;
@@ -1116,6 +1116,7 @@ EbErrorType svt_av1_set_default_params(EbSvtAv1EncConfiguration *config_ptr) {
     config_ptr->hbd_mds                           = 0;
     config_ptr->complex_hvs                       = 0;
     config_ptr->alt_lambda_factors                = 1;
+    config_ptr->alt_ssim_tuning                   = false;
     return return_error;
 }
 
@@ -1235,10 +1236,17 @@ void svt_av1_print_lib_params(SequenceControlSet *scs) {
         }
 
         if (config->film_grain_denoise_strength != 0) {
-            SVT_INFO("SVT [config]: film grain synth / denoising / level \t\t\t\t: %d / %d / %d\n",
-                     1,
-                     config->film_grain_denoise_apply,
-                     config->film_grain_denoise_strength);
+            if (config->adaptive_film_grain) {
+                SVT_INFO("SVT [config]: film grain synth / denoising / level / adaptive blocksize \t: %d / %d / %d / True\n",
+                         1,
+                         config->film_grain_denoise_apply,
+                         config->film_grain_denoise_strength);
+            } else {
+                SVT_INFO("SVT [config]: film grain synth / denoising / level / adaptive blocksize \t: %d / %d / %d / False\n",
+                         1,
+                         config->film_grain_denoise_apply,
+                         config->film_grain_denoise_strength);
+            }
         }
         SVT_INFO("SVT [config]: sharpness / luminance-based QP bias \t\t\t\t: %d / %d\n",
                  config->sharpness,
@@ -2267,6 +2275,7 @@ EB_API EbErrorType svt_av1_enc_parse_parameter(EbSvtAv1EncConfiguration *config_
         {"avif", &config_struct->avif},
         {"rtc", &config_struct->rtc},
         {"max-32-tx-size", &config_struct->max_32_tx_size},
+        {"adaptive-film-grain", &config_struct->adaptive_film_grain},
         {"alt-lambda-factors", &config_struct->alt_lambda_factors},
         {"alt-ssim-tuning", &config_struct->alt_ssim_tuning},
     };

@@ -211,7 +211,8 @@
 
 #define MAX_32_TX_SIZE_TOKEN "--max-32-tx-size"
 
-#define ALT_SSIM_TUNING "--alt-ssim-tuning"
+#define ADAPTIVE_FILM_GRAIN_TOKEN "--adaptive-film-grain"
+
 
 #define NOISE_NORM_STRENGTH_TOKEN "--noise-norm-strength"
 #define KF_TF_STRENGTH_FILTER_TOKEN "--kf-tf-strength"
@@ -222,6 +223,7 @@
 #define HBD_MDS_TOKEN "--hbd-mds"
 #define COMPLEX_HVS_TOKEN "--complex-hvs"
 #define ALT_LAMBDA_FACTORS_TOKEN "--alt-lambda-factors"
+#define ALT_SSIM_TUNING "--alt-ssim-tuning"
 
 static EbErrorType validate_error(EbErrorType err, const char *token, const char *value) {
     switch (err) {
@@ -1011,6 +1013,8 @@ ConfigDescription config_entry_variance_boost[] = {
     {ALT_SSIM_TUNING, "[PSY] Alternative SSIM tuning methods for tune 2 & 4, default is 0 [0-1]"},
     // Noise normalization strength
     {NOISE_NORM_STRENGTH_TOKEN, "[PSY] Noise normalization strength, default is 1; recommended value for tune 3 is 3 [0-4]"},
+    // Adaptive film grain
+    {SINGLE_INPUT, ADAPTIVE_FILM_GRAIN_TOKEN, "[PSY] Adapts film grain blocksize based on video resolution, default is 1 [0-1]", set_cfg_generic_token},
     //Alt-ref temporal filtering strength on keyframes
     {KF_TF_STRENGTH_FILTER_TOKEN, "[PSY] Adjust alt-ref TF strength on keyframes, default is 1 (4x weaker than mainline) [0-4]"},
     //AC-Bias
@@ -1234,8 +1238,8 @@ ConfigEntry config_entry[] = {
     // Max 32 tx size
     {MAX_32_TX_SIZE_TOKEN, "Max32TxSize", set_cfg_generic_token},
 
-    // Alternative SSIM tuning
-    {ALT_SSIM_TUNING, "AltSSIMTuning", set_cfg_generic_token},
+    // Adaptive film grain
+    {SINGLE_INPUT, ADAPTIVE_FILM_GRAIN_TOKEN, "AdaptiveFilmGrain", set_cfg_generic_token},
 
     // Noise normalization strength
     {NOISE_NORM_STRENGTH_TOKEN, "NoiseNormStrength", set_cfg_generic_token},
@@ -1260,6 +1264,9 @@ ConfigEntry config_entry[] = {
 
     // Alt lambda factors
     {ALT_LAMBDA_FACTORS_TOKEN, "AltLambdaFactors", set_cfg_generic_token},
+
+    // Alternative SSIM tuning
+    {ALT_SSIM_TUNING, "AltSSIMTuning", set_cfg_generic_token},
 
     // Termination
     {NULL, NULL, NULL}};

@@ -82,6 +82,7 @@ For more information on valid values for specific keys, refer to the [EbEncSetti
 | **Max32TxSize**                  | --max-32-tx-size            | [0-1]                          | 0           | Restricts use of block transform sizes to a maximum of 32x32 pixels (disabled: use max of 64x64 pixels)      |
 | **AltSSIMTuning**                | --alt-ssim-tuning           | [0-1]                          | 0           | Enables the usage of VQ optimizations and an alternative SSIM calculation pathway (Only operates with tunes 2 & 4)      |
 | **NoiseNormStrength**            |  --noise-norm-strength      | [0-4]                          | 0           | Selectively boost AC coefficients to improve fine detail retention in certain circumstances                  |
+| **AdaptiveFilmGrain**            | --adaptive-film-grain       | [0,1]                          | 1           | Allows film grain synthesis to be sourced from different block sizes depending on resolution                  |
 
 ## Rate Control Options
 

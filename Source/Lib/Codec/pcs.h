@@ -1193,7 +1193,7 @@ typedef struct PictureControlSetInitData {
     bool    allintra;
     double  qp_scale_compress_strength;
     bool    max_32_tx_size;
-    bool    alt_ssim_tuning;
+    bool    adaptive_film_grain;
     uint8_t noise_norm_strength;
     uint8_t kf_tf_strength;
     double  ac_bias;
@@ -1202,6 +1202,7 @@ typedef struct PictureControlSetInitData {
     uint8_t hbd_mds;
     uint8_t complex_hvs;
     uint8_t alt_lambda_factors;
+    bool    alt_ssim_tuning;
 } PictureControlSetInitData;
 
 /**************************************

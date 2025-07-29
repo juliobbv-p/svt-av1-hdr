@@ -1527,7 +1527,7 @@ EB_API EbErrorType svt_av1_enc_init(EbComponentType *svt_enc_component)
         input_data.tf_strength = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.tf_strength;
         input_data.qp_scale_compress_strength = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.qp_scale_compress_strength;
         input_data.max_32_tx_size = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.max_32_tx_size;
-        input_data.alt_ssim_tuning = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.alt_ssim_tuning;
+        input_data.adaptive_film_grain = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.adaptive_film_grain;
         input_data.noise_norm_strength = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.noise_norm_strength;
         input_data.kf_tf_strength = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.kf_tf_strength;
         input_data.ac_bias = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.ac_bias;
@@ -1536,6 +1536,7 @@ EB_API EbErrorType svt_av1_enc_init(EbComponentType *svt_enc_component)
         input_data.sharp_tx = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.sharp_tx;
         input_data.complex_hvs = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.complex_hvs;
         input_data.alt_lambda_factors = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.alt_lambda_factors;
+        input_data.alt_ssim_tuning = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.alt_ssim_tuning;
         //check if all added parameters have been added
         input_data.static_config = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config;
         input_data.allintra = enc_handle_ptr->scs_instance_array[instance_index]->scs->allintra;
@@ -4659,8 +4660,10 @@ static void copy_api_from_app(
 
     // Max 32 TX size
     scs->static_config.max_32_tx_size = config_struct->max_32_tx_size;
-    // Alternative SSIM tuning
-    scs->static_config.alt_ssim_tuning = config_struct->alt_ssim_tuning;
+
+    // Adaptive film grain
+    scs->static_config.adaptive_film_grain = config_struct->adaptive_film_grain;
+
     // Noise normalization strength
     scs->static_config.noise_norm_strength = config_struct->noise_norm_strength;
     //Alt-ref keyframe temporal filtering strength
@@ -4683,6 +4686,9 @@ static void copy_api_from_app(
 
     // Alt lambda factors
     scs->static_config.alt_lambda_factors = config_struct->alt_lambda_factors;
+
+    // Alternative SSIM tuning
+    scs->static_config.alt_ssim_tuning = config_struct->alt_ssim_tuning;
 
     // Override settings for Still Picture tune
     if (scs->static_config.tune == 4) {
