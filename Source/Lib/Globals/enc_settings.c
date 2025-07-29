@@ -1104,6 +1104,7 @@ EbErrorType svt_av1_set_default_params(EbSvtAv1EncConfiguration *config_ptr) {
     config_ptr->sharp_tx                          = 1;
     config_ptr->hbd_mds                           = 0;
     config_ptr->complex_hvs                       = 0;
+    config_ptr->alt_lambda_factors                = 1;
     return return_error;
 }
 
@@ -2255,6 +2256,7 @@ EB_API EbErrorType svt_av1_enc_parse_parameter(EbSvtAv1EncConfiguration *config_
         {"avif", &config_struct->avif},
         {"rtc", &config_struct->rtc},
         {"max-32-tx-size", &config_struct->max_32_tx_size},
+        {"alt-lambda-factors", &config_struct->alt_lambda_factors},
     };
     const size_t bool_opts_size = sizeof(bool_opts) / sizeof(bool_opts[0]);
 
