@@ -979,6 +979,13 @@ typedef struct EbSvtAv1EncConfiguration {
      */
     bool max_32_tx_size;
 
+    /* @brief Alternative SSIM tuning, enables VQ enhancements and different rdmult calculations
+     * 0: disabled, use stock SSIM tuning
+     * 1: enabled, use alternative SSIM tuning with VQ enhacnements and different rdmult calculations
+     * Default is 0
+     */
+    bool alt_ssim_tuning;
+
     /**
      * @brief Noise normalization strength; modifies the encoder's willingness
      * to boost AC coefficients in low-noise blocks.
@@ -1044,7 +1051,7 @@ typedef struct EbSvtAv1EncConfiguration {
      uint8_t complex_hvs;
 
     /*Add 128 Byte Padding to Struct to avoid changing the size of the public configuration struct*/
-    uint8_t padding[128 - (sizeof(uint8_t) * 9) - (sizeof(double) * 2) - (sizeof(bool) * 1)
+    uint8_t padding[128 - (sizeof(uint8_t) * 9) - (sizeof(double) * 2) - (sizeof(bool) * 2)
         - sizeof(bool)
     ];
 } EbSvtAv1EncConfiguration;

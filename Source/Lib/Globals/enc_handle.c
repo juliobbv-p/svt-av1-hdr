@@ -1527,6 +1527,7 @@ EB_API EbErrorType svt_av1_enc_init(EbComponentType *svt_enc_component)
         input_data.tf_strength = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.tf_strength;
         input_data.qp_scale_compress_strength = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.qp_scale_compress_strength;
         input_data.max_32_tx_size = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.max_32_tx_size;
+        input_data.alt_ssim_tuning = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.alt_ssim_tuning;
         input_data.noise_norm_strength = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.noise_norm_strength;
         input_data.kf_tf_strength = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.kf_tf_strength;
         input_data.ac_bias = enc_handle_ptr->scs_instance_array[instance_index]->scs->static_config.ac_bias;
@@ -3239,7 +3240,7 @@ void tf_controls(SequenceControlSet* scs, uint8_t tf_level) {
 static void derive_vq_params(SequenceControlSet* scs) {
     VqCtrls* vq_ctrl = &scs->vq_ctrls;
 
-    if (scs->static_config.tune == 0) {
+    if (scs->static_config.tune == 0 || (scs->static_config.alt_ssim_tuning && (scs->static_config.tune == 2 || scs->static_config.tune == 4))) {
 
         // Sharpness
         vq_ctrl->sharpness_ctrls.scene_transition = 1;
@@ -4027,6 +4028,9 @@ static void set_param_based_on_input(SequenceControlSet *scs)
     if (scs->static_config.max_32_tx_size && scs->static_config.qp >= 20) {
         SVT_WARN("Restricting transform sizes to a max of 32x32 might reduce coding efficiency at low to medium fidelity settings. Use with caution!\n");
     }
+    if (scs->static_config.alt_ssim_tuning && (scs->static_config.tune != 2 && scs->static_config.tune != 4)) {
+        SVT_WARN("Alternative SSIM tuning only applies to tunes 2 (SSIM) & 4 (Still Picture). Neither of those tunes are enabled!\n");
+    }
     if (scs->static_config.intra_refresh_type == SVT_AV1_FWDKF_REFRESH && scs->static_config.hierarchical_levels != 4){
         scs->static_config.hierarchical_levels = 4;
         SVT_WARN("Fwd key frame is only supported for hierarchical levels 4 at this point. Hierarchical levels are set to 4\n");
@@ -4654,6 +4658,8 @@ static void copy_api_from_app(
 
     // Max 32 TX size
     scs->static_config.max_32_tx_size = config_struct->max_32_tx_size;
+    // Alternative SSIM tuning
+    scs->static_config.alt_ssim_tuning = config_struct->alt_ssim_tuning;
     // Noise normalization strength
     scs->static_config.noise_norm_strength = config_struct->noise_norm_strength;
     //Alt-ref keyframe temporal filtering strength
