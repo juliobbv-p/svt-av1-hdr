@@ -1114,8 +1114,9 @@ int svt_aom_compute_rd_mult_based_on_qindex(EbBitDepth bit_depth, SvtAv1FrameUpd
 
     return rdmult > 0 ? (int)AOMMIN(rdmult, INT_MAX) : 1;
 }
-static const int rd_frame_type_factor[2][SVT_AV1_FRAME_UPDATE_TYPES] = {{150, 180, 150, 150, 180, 180, 150},
-                                                                        {128, 144, 128, 128, 144, 144, 128}};
+static const int rd_frame_type_factor[2][SVT_AV1_FRAME_UPDATE_TYPES]  = {{150, 180, 150, 150, 180, 180, 150},
+                                                                         {128, 144, 128, 128, 144, 144, 128}};
+static const int rd_frame_type_factor_alt[SVT_AV1_FRAME_UPDATE_TYPES] = {140, 180, 128, 140, 164, 164, 140};
 #define RTC_KF_LAMBDA_BOOST 100
 /*
  * Set the sse lambda based on the bit_depth, then update based on frame position.
@@ -1132,7 +1133,13 @@ int svt_aom_compute_rd_mult(PictureControlSet *pcs, uint8_t q_index, uint8_t me_
         : temporal_layer_index == 0                  ? SVT_AV1_ARF_UPDATE
         : temporal_layer_index < max_temporal_layer  ? SVT_AV1_INTNL_ARF_UPDATE
                                                      : SVT_AV1_LF_UPDATE;
-    rdmult                 = (rdmult * rd_frame_type_factor[bit_depth != 8][gf_update_type]) >> 7;
+
+    if (pcs->scs->static_config.alt_lambda_factors) {
+        rdmult = (rdmult * rd_frame_type_factor_alt[gf_update_type]) >> 7;
+    } else {
+        rdmult = (rdmult * rd_frame_type_factor[bit_depth != 8][gf_update_type]) >> 7;
+    }
+
     if (pcs->scs->static_config.rtc && frame_type == KEY_FRAME)
         rdmult = (rdmult * RTC_KF_LAMBDA_BOOST) >> 7;
     if (pcs->scs->stats_based_sb_lambda_modulation) {
@@ -1176,7 +1183,13 @@ int svt_aom_compute_fast_lambda(PictureControlSet *pcs, uint8_t q_index, uint8_t
         : temporal_layer_index == 0                  ? SVT_AV1_ARF_UPDATE
         : temporal_layer_index < max_temporal_layer  ? SVT_AV1_INTNL_ARF_UPDATE
                                                      : SVT_AV1_LF_UPDATE;
-    rdmult                 = (rdmult * rd_frame_type_factor[bit_depth != 8][gf_update_type]) >> 7;
+
+    if (pcs->scs->static_config.alt_lambda_factors) {
+        rdmult = (rdmult * rd_frame_type_factor_alt[gf_update_type]) >> 7;
+    } else {
+        rdmult = (rdmult * rd_frame_type_factor[bit_depth != 8][gf_update_type]) >> 7;
+    }
+
     if (pcs->scs->static_config.rtc && frame_type == KEY_FRAME)
         rdmult = (rdmult * RTC_KF_LAMBDA_BOOST) >> 7;
     if (pcs->scs->stats_based_sb_lambda_modulation) {
