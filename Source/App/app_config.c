@@ -223,7 +223,7 @@
 #define HBD_MDS_TOKEN "--hbd-mds"
 #define COMPLEX_HVS_TOKEN "--complex-hvs"
 #define ALT_LAMBDA_FACTORS_TOKEN "--alt-lambda-factors"
-#define ALT_SSIM_TUNING "--alt-ssim-tuning"
+#define ALT_SSIM_TUNING_TOKEN "--alt-ssim-tuning"
 
 static EbErrorType validate_error(EbErrorType err, const char *token, const char *value) {
     switch (err) {
@@ -1009,12 +1009,10 @@ ConfigDescription config_entry_variance_boost[] = {
     {QP_SCALE_COMPRESS_STRENGTH_TOKEN, "[PSY] QP scale compress strength, default is 1.0 [0.0-8.0]"},
     // Max 32 tx size
     {MAX_32_TX_SIZE_TOKEN, "[PSY] Limits the allowed transform sizes to a maximum of 32x32, default is 0 [0-1]"},
-    // Alternative SSIM tuning
-    {ALT_SSIM_TUNING, "[PSY] Alternative SSIM tuning methods for tune 2 & 4, default is 0 [0-1]"},
     // Noise normalization strength
     {NOISE_NORM_STRENGTH_TOKEN, "[PSY] Noise normalization strength, default is 1; recommended value for tune 3 is 3 [0-4]"},
     // Adaptive film grain
-    {SINGLE_INPUT, ADAPTIVE_FILM_GRAIN_TOKEN, "[PSY] Adapts film grain blocksize based on video resolution, default is 1 [0-1]", set_cfg_generic_token},
+    {ADAPTIVE_FILM_GRAIN_TOKEN, "[PSY] Adapts film grain blocksize based on video resolution, default is 1 [0-1]"},
     //Alt-ref temporal filtering strength on keyframes
     {KF_TF_STRENGTH_FILTER_TOKEN, "[PSY] Adjust alt-ref TF strength on keyframes, default is 1 (4x weaker than mainline) [0-4]"},
     //AC-Bias
@@ -1029,6 +1027,8 @@ ConfigDescription config_entry_variance_boost[] = {
     {COMPLEX_HVS_TOKEN, "[PSY] Enable highest complexity HVS model, default is 0 [0: default preset behavior, 1: complex HVS model based on PSNR-HVS]"},
     // Alt lambda factors
     {ALT_LAMBDA_FACTORS_TOKEN, "[PSY] Use alternative RDO lambda factors (from SVT-AV1 3.0.2), default is 1 [0-1]"},
+    // Alternative SSIM tuning
+    {ALT_SSIM_TUNING_TOKEN, "[PSY] Alternative SSIM tuning methods for tunes 2 & 4, default is 0 [0-1]"},
     // Termination
     {NULL, NULL}};
 
@@ -1239,7 +1239,7 @@ ConfigEntry config_entry[] = {
     {MAX_32_TX_SIZE_TOKEN, "Max32TxSize", set_cfg_generic_token},
 
     // Adaptive film grain
-    {SINGLE_INPUT, ADAPTIVE_FILM_GRAIN_TOKEN, "AdaptiveFilmGrain", set_cfg_generic_token},
+    {ADAPTIVE_FILM_GRAIN_TOKEN, "AdaptiveFilmGrain", set_cfg_generic_token},
 
     // Noise normalization strength
     {NOISE_NORM_STRENGTH_TOKEN, "NoiseNormStrength", set_cfg_generic_token},
@@ -1266,7 +1266,7 @@ ConfigEntry config_entry[] = {
     {ALT_LAMBDA_FACTORS_TOKEN, "AltLambdaFactors", set_cfg_generic_token},
 
     // Alternative SSIM tuning
-    {ALT_SSIM_TUNING, "AltSSIMTuning", set_cfg_generic_token},
+    {ALT_SSIM_TUNING_TOKEN, "AltSSIMTuning", set_cfg_generic_token},
 
     // Termination
     {NULL, NULL, NULL}};

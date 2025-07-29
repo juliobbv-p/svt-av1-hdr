@@ -1171,13 +1171,14 @@ void svt_av1_print_lib_params(SequenceControlSet *scs) {
                 : config->encoder_color_format == EB_YUV444 ? "YUV444"
                                                             : "Unknown color format");
 
-        SVT_INFO("SVT [config]: preset / tune / pred struct \t\t\t\t\t: %d / %s / %s\n",
+        SVT_INFO("SVT [config]: preset / tune / pred struct \t\t\t\t\t: %d / %s%s / %s\n",
                  config->enc_mode,
                  config->tune == 0       ? "VQ"
                      : config->tune == 1 ? "PSNR"
                          : config->tune == 2 ? "SSIM"
                              : config->tune == 3 ? "Film Grain"
                                              : "Still Picture",
+                 (config->tune == 2 || config->tune == 4) && config->alt_ssim_tuning ? " (Alt)" : "",
                  config->pred_structure == LOW_DELAY           ? "low delay"
                      : config->pred_structure == RANDOM_ACCESS ? "random access"
                                                                : "Unknown pred structure");
