@@ -121,6 +121,9 @@ Configures psychovisual rate distortion strength to improve perceived quality by
 
 Configure psychovisually-oriented pathways that bias towards sharpness and detail retention, at the possible expense of increased blocking and banding. The default is 0, with 1 being the most aggressive and 2 being less aggressive.
 
+- `--alt-ssim-tuning` *0 and 1*
+
+Enables VQ psychovisual optimizations from tune 0, as well as changing SSIM rate-distortion calculations by utilizing an alternative per-pixel variance function across 4X4, 8X8, and 16X16 blocks in addition to superblock-level SSIM rate-distortion tuning. Currently only operates on tunes 2 & 4. The default is 0.
 
 ### Modified Defaults
 
