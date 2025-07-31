@@ -1202,6 +1202,7 @@ typedef struct PictureControlSetInitData {
     uint8_t hbd_mds;
     uint8_t complex_hvs;
     uint8_t alt_lambda_factors;
+    bool    alt_ssim_tuning;
 } PictureControlSetInitData;
 
 /**************************************

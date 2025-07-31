@@ -979,6 +979,13 @@ typedef struct EbSvtAv1EncConfiguration {
      */
     bool max_32_tx_size;
 
+    /* @brief Alternative SSIM tuning, enables VQ enhancements and different rdmult calculations
+     * 0: disabled, use stock SSIM tuning
+     * 1: enabled, use alternative SSIM tuning with VQ enhacnements and different rdmult calculations
+     * Default is 0
+     */
+    bool alt_ssim_tuning;
+
     /**
      * @brief Noise normalization strength; modifies the encoder's willingness
      * to boost AC coefficients in low-noise blocks.
