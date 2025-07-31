@@ -990,6 +990,13 @@ typedef struct EbSvtAv1EncConfiguration {
      */
      double qp_scale_compress_strength;
 
+    /* @brief Alternative SSIM tuning, enables VQ enhancements and different rdmult calculations
+     * 0: disabled, use stock SSIM tuning
+     * 1: enabled, use alternative SSIM tuning with VQ enhacnements and different rdmult calculations
+     * Default is 0
+     */
+    bool alt_ssim_tuning;
+
     /**
      * @brief Enable sharp-tx, a toggle that enables much sharper transforms decisions for higher fidelity ouput,
      at the possible cost of increasing artifacting

@@ -1033,6 +1033,7 @@ EbErrorType svt_av1_set_default_params(EbSvtAv1EncConfiguration *config_ptr) {
     config_ptr->kf_tf_strength                    = 1;
     config_ptr->alt_lambda_factors                = 1;
     config_ptr->sharp_tx                          = 1;
+    config_ptr->alt_ssim_tuning                   = false;
     return return_error;
 }
 
@@ -1087,7 +1088,7 @@ void svt_av1_print_lib_params(SequenceControlSet *scs) {
                 : config->encoder_color_format == EB_YUV444 ? "YUV444"
                                                             : "Unknown color format");
 
-        SVT_INFO("SVT [config]: preset / tune / pred struct \t\t\t\t\t: %d / %s / %s\n",
+        SVT_INFO("SVT [config]: preset / tune / pred struct \t\t\t\t\t: %d / %s%s / %s\n",
                  config->enc_mode,
                  config->tune == TUNE_VQ            ? "VQ"
                      : config->tune == TUNE_PSNR    ? "PSNR"
@@ -1095,6 +1096,7 @@ void svt_av1_print_lib_params(SequenceControlSet *scs) {
                      : config->tune == TUNE_MS_SSIM ? "MS_SSIM"
                      : config->tune == TUNE_IQ      ? "IQ"
                                                     : "Film Grain",
+                 (config->tune == TUNE_SSIM && config->alt_ssim_tuning) ? " (Alt)" : "",
                  config->pred_structure == LOW_DELAY           ? "low delay"
                      : config->pred_structure == RANDOM_ACCESS ? "random access"
                                                                : "Unknown pred structure");
@@ -2252,6 +2254,7 @@ EB_API EbErrorType svt_av1_enc_parse_parameter(EbSvtAv1EncConfiguration *config_
         {"rtc", &config_struct->rtc},
         {"adaptive-film-grain", &config_struct->adaptive_film_grain},
         {"alt-lambda-factors", &config_struct->alt_lambda_factors},
+        {"alt-ssim-tuning", &config_struct->alt_ssim_tuning},
     };
     const size_t bool_opts_size = sizeof(bool_opts) / sizeof(bool_opts[0]);
 
