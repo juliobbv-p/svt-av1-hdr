@@ -1094,6 +1094,13 @@ typedef struct EbSvtAv1EncConfiguration {
      */
     double qp_scale_compress_strength;
 
+    /* @brief Alternative SSIM tuning, enables VQ enhancements and different rdmult calculations
+     * 0: disabled, use stock SSIM tuning
+     * 1: enabled, use alternative SSIM tuning with VQ enhacnements and different rdmult calculations
+     * Default is 0
+     */
+    bool alt_ssim_tuning;
+
     // clang-format off
     /* Add 128 Byte Padding to Struct to avoid changing the size of the public configuration struct */
     uint8_t padding[128
@@ -1109,6 +1116,7 @@ typedef struct EbSvtAv1EncConfiguration {
         - sizeof(bool) // alt_lambda_factors
         - sizeof(uint8_t) // sharp_tx
         - sizeof(double) // qp_scale_compress_strength
+        - sizeof(bool) // alt_ssim_tuning
     ];
     // clang-format on
 } EbSvtAv1EncConfiguration;
