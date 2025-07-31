@@ -9094,11 +9094,16 @@ static void md_encode_block(PictureControlSet* pcs, ModeDecisionContext* ctx, co
         loc.input_origin_index = (ctx->blk_org_y) * input_pic->y_stride + (ctx->blk_org_x);
     }
     // 3rd Full-Loop
-    ctx->md_stage        = MD_STAGE_3;
-    ctx->tune_ssim_level = ((pcs->scs->static_config.tune == TUNE_SSIM || pcs->scs->static_config.tune == TUNE_IQ) &&
-                            pcs->slice_type != I_SLICE && ctx->pd_pass == PD_PASS_1)
-        ? SSIM_LVL_3
-        : SSIM_LVL_0;
+    ctx->md_stage = MD_STAGE_3;
+    if ((pcs->scs->static_config.tune == TUNE_SSIM || pcs->scs->static_config.tune == TUNE_IQ) &&
+        pcs->slice_type != I_SLICE && ctx->pd_pass == PD_PASS_1 && !pcs->scs->static_config.alt_ssim_tuning) {
+        ctx->tune_ssim_level = SSIM_LVL_3;
+    } else if (pcs->scs->static_config.alt_ssim_tuning && ctx->pd_pass == PD_PASS_1) {
+        ctx->tune_ssim_level = SSIM_LVL_1;
+    } else {
+        ctx->tune_ssim_level = SSIM_LVL_0;
+    }
+
     md_stage_3(pcs, ctx, input_pic, &loc, ctx->md_stage_3_total_count);
 
     // Full Mode Decision (choose the best mode)
