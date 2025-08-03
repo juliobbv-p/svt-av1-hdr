@@ -1474,32 +1474,6 @@ uint8_t svt_av1_compute_cul_level_c(const int16_t *const scan, const int32_t *co
     return (uint8_t)cul_level;
 }
 
-void print_coeffs(MacroblockPlane *p,
-    QuantParam *qparam,
-    TranLow *coeff_ptr,
-    TranLow *qcoeff_ptr,
-    TranLow *dqcoeff_ptr,
-    TxSize tx_size,
-    TxType tx_type,
-    uint16_t *eob,
-    PictureControlSet *pcs)
-{
-    const int shift = av1_get_tx_scale_tab[tx_size];
-    const ScanOrder *const scan_order = &av1_scan_orders[tx_size][tx_type];
-    const int16_t *scan = scan_order->scan;
-
-    for (int si = 0; si < *eob; si++) {
-        const int     ci     = scan[si];
-        const TranLow tqc    = coeff_ptr[ci];
-        const TranLow qc     = qcoeff_ptr[ci];
-        const TranLow dqc    = dqcoeff_ptr[ci];
-
-        printf("%i ", qcoeff_ptr[ci]);
-    }
-
-    if (*eob != 0) printf("\n");
-}
-
 void svt_av1_perform_noise_normalization(MacroblockPlane *p,
     QuantParam *qparam,
     TranLow *coeff_ptr,
