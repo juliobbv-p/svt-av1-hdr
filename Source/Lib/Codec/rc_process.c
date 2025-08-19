@@ -3738,6 +3738,11 @@ void *svt_aom_rate_control_kernel(void *input_ptr) {
                             else
                                 qindex += scs->static_config.key_frame_qindex_offset;
 
+                            // Extended CRF range (63.25 - 70), add offset to all temporal layers to truncate QP scaling
+                            if (scs->static_config.qp == MAX_QP_VALUE && scs->static_config.extended_crf_qindex_offset) {
+                                qindex += scs->static_config.extended_crf_qindex_offset;
+                            }
+
                             qindex = CLIP3(quantizer_to_qindex[scs->static_config.min_qp_allowed],
                                            quantizer_to_qindex[scs->static_config.max_qp_allowed],
                                            qindex);
@@ -3755,12 +3760,6 @@ void *svt_aom_rate_control_kernel(void *input_ptr) {
                                                                (0.01 * scs->static_config.luminance_qp_bias))),
                                                          0.5) *
                                                     (qindex / 8.0));
-
-                            // Extended CRF range (63.25 - 70), add offset to all temporal layers to truncate QP scaling
-                            // Fixed: rebase onto original extended CRF commit
-                            if (scs->static_config.qp == MAX_QP_VALUE && scs->static_config.extended_crf_qindex_offset) {
-                                qindex += scs->static_config.extended_crf_qindex_offset;
-                            }
 
                             qindex = CLIP3(quantizer_to_qindex[scs->static_config.min_qp_allowed],
                                            quantizer_to_qindex[scs->static_config.max_qp_allowed],
