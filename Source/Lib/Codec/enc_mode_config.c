@@ -7674,7 +7674,7 @@ void svt_aom_sig_deriv_mode_decision_config(SequenceControlSet *scs, PictureCont
 
     if (pcs->scs->static_config.complex_hvs == 1) {
         pcs->mds0_level = 3;
-    } if (rtc_tune) {
+    } else if (rtc_tune) {
         if (enc_mode <= ENC_M9)
             pcs->mds0_level = 0;
         else if (enc_mode <= ENC_M10)
