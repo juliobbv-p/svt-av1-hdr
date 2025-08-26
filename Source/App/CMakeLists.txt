@@ -20,23 +20,37 @@ if(NOT PkgConfig_FOUND)
   message(WARNING "PkgConfig not found; disabled building with dovi & hdr10plus.")
 endif()
 
+
+option(EXT_LIB_STATIC "Force linking with static libraries for external dependencies" OFF)
+set(SUFFIX "")
+if(EXT_LIB_STATIC)
+  set(SUFFIX ${CMAKE_STATIC_LIBRARY_SUFFIX})
+else()
+  set(SUFFIX ${CMAKE_SHARED_LIBRARY_SUFFIX})
+endif()
+
 # libdovi detection & preprocessor macro
 option(LIBDOVI_FOUND "Use the dovi library" OFF)
 if(LIBDOVI_FOUND)
   if(PKG_CONFIG_FOUND)
   pkg_check_modules(PC_LIBDOVI dovi QUIET)
   endif()
+  set(BASE_LIBDOVI_NAMES dovi libdovi)
 
-  find_library(LIBDOVI_LIBRARY NAMES dovi libdovi
-                               PATHS ${PC_LIBDOVI_LIBDIR})
+  set(LIBDOVI_NAMES "")
+  foreach(BASE ${BASE_LIBDOVI_NAMES})
+    list(APPEND LIBDOVI_NAMES "${BASE}${SUFFIX}")
+  endforeach()
+
+  find_library(LIBDOVI_LIBRARY NAMES ${LIBDOVI_NAMES} PATHS ${PC_LIBDOVI_LIBDIR})
+
   if(NOT LIBDOVI_LIBRARY)
   message(FATAL_ERROR "dovi library not found!")
   endif()
 
-  find_path(LIBDOVI_INCLUDE_DIR NAMES libdovi/rpu_parser.h
-                                PATHS ${PC_LIBDOVI_INCLUDEDIR})
+  find_path(LIBDOVI_INCLUDE_DIR NAMES libdovi/rpu_parser.h PATHS ${PC_LIBDOVI_INCLUDEDIR})
 
-  set(LIBDOVI_INCLUDE_DIRS ${LIBDOVI_INCLUDE_DIR})
+  include_directories(${LIBDOVI_INCLUDE_DIR})
   set(LIBDOVI_LIBRARIES ${LIBDOVI_LIBRARY})
   add_definitions(-DLIBDOVI_FOUND=1)
   execute_process(COMMAND ${CMAKE_COMMAND} -E echo_append "-- Building with dovi support - Yes\n")
@@ -50,9 +64,15 @@ if(LIBHDR10PLUS_RS_FOUND)
   if(PKG_CONFIG_FOUND)
   pkg_check_modules(PC_LIBHDR10PLUS_RS hdr10plus-rs QUIET)
   endif()
+  set(BASE_LIBHDR10PLUS_NAMES hdr10plus-rs libhdr10plus-rs)
 
-  find_library(LIBHDR10PLUS_RS_LIBRARY NAMES hdr10plus-rs libhdr10plus-rs
-                               PATHS ${PC_LIBHDR10PLUS_RS_LIBDIR})
+  set(LIBHDR10PLUS_NAMES "")
+  foreach(BASE ${BASE_LIBHDR10PLUS_NAMES})
+    list(APPEND LIBHDR10PLUS_NAMES "${BASE}${SUFFIX}")
+  endforeach()
+
+  find_library(LIBHDR10PLUS_RS_LIBRARY NAMES ${LIBHDR10PLUS_NAMES} PATHS ${PC_LIBHDR10PLUS_RS_LIBDIR})
+
   if(NOT LIBHDR10PLUS_RS_LIBRARY)
   message(FATAL_ERROR "hdr10plus library not found!")
   endif()
@@ -60,7 +80,7 @@ if(LIBHDR10PLUS_RS_FOUND)
   find_path(LIBHDR10PLUS_RS_INCLUDE_DIR NAMES libhdr10plus-rs/hdr10plus.h
                                 PATHS ${PC_LIBHDR10PLUS_RS_INCLUDEDIR})
 
-  set(LIBHDR10PLUS_RS_INCLUDE_DIRS ${LIBHDR10PLUS_RS_INCLUDE_DIR})
+  include_directories(${LIBHDR10PLUS_RS_INCLUDE_DIR})
   set(LIBHDR10PLUS_RS_LIBRARIES ${LIBHDR10PLUS_RS_LIBRARY})
   add_definitions(-DLIBHDR10PLUS_RS_FOUND=1)
   execute_process(COMMAND ${CMAKE_COMMAND} -E echo_append "-- Building with hdr10plus support - Yes\n")
