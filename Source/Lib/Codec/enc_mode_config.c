@@ -7988,6 +7988,17 @@ set lpd0_level
             pcs->lambda_weight = 150;
         }
     }
+
+    // Extended CRF range (63.25 - 70), increase lambda weight towards bit saving
+    // Max lambda weight: 28 * 28 + 128 = 912
+    // Lambda weight scaling appears to be effective only when Variance Boost is on
+    if (scs->static_config.qp == MAX_QP_VALUE && scs->static_config.extended_crf_qindex_offset &&
+        scs->static_config.enable_variance_boost) {
+        pcs->lambda_weight = scs->static_config.extended_crf_qindex_offset *
+                scs->static_config.extended_crf_qindex_offset +
+            128;
+    }
+
     uint8_t dlf_level = 0;
     if (pcs->scs->static_config.enable_dlf_flag && frm_hdr->allow_intrabc == 0) {
         EncMode dlf_enc_mode = enc_mode;
