@@ -192,7 +192,7 @@ void svt_av1_build_quantizer(PictureParentControlSet *pcs, EbBitDepth bit_depth,
 // different matrices may be defined
 static INLINE int aom_get_qmlevel(int qindex, int first, int last) {
     // mapping qindex(0, 255) to QM level(first, last)
-    return first + (qindex * (last + 1 - first)) / QINDEX_RANGE;
+    return CLIP3(first, last, first + (qindex * (last + 1 - first)) / QINDEX_RANGE);
 }
 
 // Polynomial to determine QM levels tuned for still images
