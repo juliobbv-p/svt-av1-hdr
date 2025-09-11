@@ -218,13 +218,14 @@ typedef struct SvtAv1FrameScaleEvts {
 typedef struct EbSvtAv1EncConfiguration {
     /**
      * @brief Encoder preset used.
-     * -2 and -1 are for debug purposes and should not be used.
+     * Negative presets (-1, -2 and -3) exist for research purposes only, and often are
+     * too slow for practical purposes.
      * 0 is the highest quality mode but is the slowest,
      * 13 is the fastest mode but is not as high quality.
      *
-     * Min value is -2.
+     * Min value is -3.
      * Max value is 13.
-     * Default is 12.
+     * Default is 8.
      */
     int8_t enc_mode;
 
@@ -991,7 +992,7 @@ typedef struct EbSvtAv1EncConfiguration {
      * to boost AC coefficients in low-noise blocks.
      * Min value is 0.
      * Max value is 4.
-     * Default is 3.
+     * Default is 1.
      */
     uint8_t noise_norm_strength;
 
