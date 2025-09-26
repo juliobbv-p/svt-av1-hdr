@@ -531,11 +531,12 @@ static void av1_lambda_assign_md(PictureControlSet *pcs, ModeDecisionContext *ct
     }
 
     if (pcs->lambda_weight) {
-        ctx->full_lambda_md[0] = (ctx->full_lambda_md[0] * pcs->lambda_weight) >> 7;
-        ctx->fast_lambda_md[0] = (ctx->fast_lambda_md[0] * pcs->lambda_weight) >> 7;
-        ctx->full_lambda_md[1] = (ctx->full_lambda_md[1] * pcs->lambda_weight) >> 7;
-        ctx->fast_lambda_md[1] = (ctx->fast_lambda_md[1] * pcs->lambda_weight) >> 7;
+        ctx->full_lambda_md[0] = (uint32_t)((ctx->full_lambda_md[0] * (uint64_t)pcs->lambda_weight) >> 7);
+        ctx->fast_lambda_md[0] = (uint32_t)((ctx->fast_lambda_md[0] * (uint64_t)pcs->lambda_weight) >> 7);
+        ctx->full_lambda_md[1] = (uint32_t)((ctx->full_lambda_md[1] * (uint64_t)pcs->lambda_weight) >> 7);
+        ctx->fast_lambda_md[1] = (uint32_t)((ctx->fast_lambda_md[1] * (uint64_t)pcs->lambda_weight) >> 7);
     }
+
     ctx->full_lambda_md[1] *= 16;
     ctx->fast_lambda_md[1] *= 4;
 
