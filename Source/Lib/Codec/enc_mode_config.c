@@ -7990,13 +7990,11 @@ set lpd0_level
     }
 
     // Extended CRF range (63.25 - 70), increase lambda weight towards bit saving
-    // Max lambda weight: 28 * 28 + 128 = 912
-    // Lambda weight scaling appears to be effective only when Variance Boost is on
-    if (scs->static_config.qp == MAX_QP_VALUE && scs->static_config.extended_crf_qindex_offset &&
-        scs->static_config.enable_variance_boost) {
+    // Max lambda weight increase: 28 * 28 = 784
+    if (scs->static_config.qp == MAX_QP_VALUE && scs->static_config.extended_crf_qindex_offset) {
         pcs->lambda_weight = scs->static_config.extended_crf_qindex_offset *
                 scs->static_config.extended_crf_qindex_offset +
-            128;
+            pcs->lambda_weight;
     }
 
     uint8_t dlf_level = 0;
