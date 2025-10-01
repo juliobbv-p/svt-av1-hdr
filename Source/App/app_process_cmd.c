@@ -956,13 +956,13 @@ void process_output_stream_buffer(EncChannel *channel, EncApp *enc_app, int32_t 
             int ete_hours           = ete_r / 3600;
             int ete_minutes         = (ete_r - (ete_hours * 3600)) / 60;
             int ete_seconds         = ete_r - (ete_hours * 3600) - (ete_minutes * 60);
-            const double eta        = (app_cfg->performance_context.total_encode_time / app_cfg->frames_encoded) * (app_cfg->frames_to_be_encoded - app_cfg->frames_encoded);
+            const double eta        = (app_cfg->frames_to_be_encoded - *frame_count) / fps;
             int eta_r               = round(eta);
             int eta_hours           = eta_r / 3600;
             int eta_minutes         = (eta_r - (eta_hours * 3600)) / 60;
             int eta_seconds         = eta_r - (eta_hours * 3600) - (eta_minutes * 60);
-            double size             = ((double)app_cfg->performance_context.byte_count / 1000000);
-            double estsz            = ((double)app_cfg->performance_context.byte_count * app_cfg->frames_to_be_encoded / (app_cfg->frames_encoded * 1000) / 1000);
+            const double size       = ((double)app_cfg->performance_context.byte_count / 1000000);
+            const double estsz      = size / *frame_count * app_cfg->frames_to_be_encoded;
 
             switch (app_cfg->progress) {
             case 0: break;
