@@ -227,6 +227,7 @@
 #define HBD_MDS_TOKEN "--hbd-mds"
 #define TX_BIAS_TOKEN "--tx-bias"
 #define COMPLEX_HVS_TOKEN "--complex-hvs"
+#define NOISE_ADAPTIVE_FILTERING_TOKEN "--noise-adaptive-filtering"
 
 static EbErrorType validate_error(EbErrorType err, const char *token, const char *value) {
     switch (err) {
@@ -1038,7 +1039,7 @@ ConfigDescription config_entry_psychovisual[] = {
     {ADAPTIVE_FILM_GRAIN_TOKEN, "Adapts film grain blocksize based on video resolution, default is 1 [0-1]"},
     // Max TX size
     {MAX_TX_SIZE_TOKEN, "Limits the allowed transform sizes to the specified, default is 64 [32,64]"},
-    //AC-Bias
+    // AC-Bias
     {AC_BIAS_TOKEN, "Strength of AC bias in rate distortion, default is 1.0 [0.0-8.0]"},
     // Noise normalization strength
     {NOISE_NORM_STRENGTH_TOKEN, "Noise normalization strength, default is 1 [0-4]"},
@@ -1046,18 +1047,20 @@ ConfigDescription config_entry_psychovisual[] = {
     {KF_TF_STRENGTH_FILTER_TOKEN, "Adjust TF strength on keyframes, default is 1 (4x weaker than mainline) [0-4]"},
     // Alt lambda factors
     {ALT_LAMBDA_FACTORS_TOKEN, "Use alternative RDO lambda factors (from SVT-AV1 3.0.2), default is 1 [0-1]"},
-    //Sharp-tx
+    // Sharp-tx
     {SHARP_TX_TOKEN, "Sharp transform optimization, default is 1 [0-1]"},
     // Alternative SSIM tuning
     {ALT_SSIM_TUNING_TOKEN, "Alternative SSIM tuning methods for tune 2, default is 0 [0-1]"},
-    //HBD Mode Decisions
+    // HBD Mode Decisions
     {HBD_MDS_TOKEN,
      "High Bit-Depth Mode Decision, default is 0 [0: preset-determined, 1 = 10-bit, 2 = hybrid 8/10-bit]"},
     // TX bias
     {TX_BIAS_TOKEN,
      "Transform size/type bias type, default is 0 [0-3]; 1 = full, 2, transform size only, 3 = interpolation only"},
-    //Complex HVS
+    // Complex HVS
     {COMPLEX_HVS_TOKEN, "Enable highest complexity HVS model, default is 0 [0-1]"},
+    // Noise adaptive filtering
+    {NOISE_ADAPTIVE_FILTERING_TOKEN, "Control noise detection for CDEF/restoration filtering, default is 2 [0: off, 1: both CDEF and restoration noise-adaptive filtering are on and is sharper 2: default tune behavior, 3: noise-adaptive CDEF only, 4: noise-adaptive restoration only)]"},
     // Termination
     {NULL, NULL}};
 
@@ -1307,6 +1310,9 @@ ConfigEntry config_entry[] = {
 
     // Complex HVS
     {COMPLEX_HVS_TOKEN, "ComplexHVS", set_cfg_generic_token},
+
+    // Noise adaptive filtering
+    {NOISE_ADAPTIVE_FILTERING_TOKEN, "NoiseAdaptiveFiltering", set_cfg_generic_token},
 
     // Termination
     {NULL, NULL, NULL}};
