@@ -1543,10 +1543,10 @@ static int av1_get_deltaq_sb_variance_boost(uint8_t base_q_idx, uint16_t *varian
     // boost q_index based on empirical visual testing, strength 2
     // variance     qstep_ratio boost (@ base_q_idx 255)
     // 256          1
-    // 64           1.481
-    // 16           2.192
-    // 4            3.246
-    // 1            4.806
+    // 64           1.330
+    // 16           1.769
+    // 4            2.354
+    // 1            3.132
 
     // copy sb 8x8 variance values to an array for ordering
     uint16_t ordered_variances[64];
@@ -1601,7 +1601,7 @@ static int av1_get_deltaq_sb_variance_boost(uint8_t base_q_idx, uint16_t *varian
     // high and medium variance sbs essentially get no boost, while increasingly lower variance sbs get stronger boosts
     assert(strength >= 1 && strength <= 4);
     double       qstep_ratio = 0;
-    const double strengths[] = {0, 0.65, 1.1, 1.6, 2.5};
+    const double strengths[] = {0, 0.4, 0.8, 1.2, 1.8};
 
     switch (curve) {
     case 1: /* 1: low-medium contrast boosting curve */
@@ -1625,7 +1625,7 @@ static int av1_get_deltaq_sb_variance_boost(uint8_t base_q_idx, uint16_t *varian
         boost = (int32_t)((base_q_idx + 544) * -svt_av1_compute_qdelta_fp(base_q, target_q, bit_depth) / (255 + 1024));
         break;
     default: /* curve 0 & 1 boost (default) */
-        boost = (int32_t)((base_q_idx + 40) * -svt_av1_compute_qdelta_fp(base_q, target_q, bit_depth) / (255 + 40));
+        boost = (int32_t)((base_q_idx + 200) * -svt_av1_compute_qdelta_fp(base_q, target_q, bit_depth) / (255 + 200));
         break;
     }
     boost = AOMMIN(VAR_BOOST_MAX_DELTAQ_RANGE, boost);
