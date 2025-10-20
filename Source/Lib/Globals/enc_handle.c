@@ -4729,12 +4729,7 @@ static void copy_api_from_app(
         scs->static_config.enable_restoration_filtering = 0;
         scs->static_config.spy_rd = 1;
         scs->static_config.complex_hvs = 1;
-
-        if (scs->static_config.transfer_characteristics == EB_CICP_TC_SMPTE_2084) {
-            scs->static_config.ac_bias = 6.0;
-        } else {
-            scs->static_config.ac_bias = 4.0;
-        }
+        scs->static_config.ac_bias = 4.0;
     }
 
     // Override Variance Boost curve for PQ transfer
