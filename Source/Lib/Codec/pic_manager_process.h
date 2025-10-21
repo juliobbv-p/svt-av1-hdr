@@ -30,6 +30,12 @@ typedef struct PictureManagerContext {
     EbFifo  *recon_coef_fifo_ptr;
     uint64_t pmgr_dec_order;
     uint64_t consecutive_dec_order;
+
+#if FIX_QUEUE_DEADLOCK
+    uint64_t *started_pics_dec_order; // Heap storage array
+    int       started_pics_dec_order_size; // Maximum heap capacity
+    int       started_pics_dec_order_count; // Current number of elements in the heap
+#else
     // The started pics buffer should hold as many pictures as are possible to start out of decode order.
     // Can't start more than the number of ppcs.
     uint64_t *started_pics_dec_order;
@@ -37,6 +43,7 @@ typedef struct PictureManagerContext {
     int started_pics_dec_order_size;
     int started_pics_dec_order_head_idx;
     int started_pics_dec_order_tail_idx;
+#endif
 } PictureManagerContext;
 /***************************************
  * Extern Function Declaration

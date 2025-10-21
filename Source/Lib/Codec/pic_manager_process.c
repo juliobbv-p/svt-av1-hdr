@@ -55,6 +55,72 @@ static EbErrorType rtime_alloc_palette_tokens(SequenceControlSet *scs, PictureCo
     }
     return EB_ErrorNone;
 }
+#if FIX_QUEUE_DEADLOCK
+// Min-Heap Utilities
+
+// Swap two elements in the heap
+static inline void heap_swap(uint64_t *heap, int i, int j) {
+    uint64_t t = heap[i];
+    heap[i]    = heap[j];
+    heap[j]    = t;
+}
+
+// Restore heap property upward (after insertion)
+static void heap_sift_up(uint64_t *heap, int index) {
+    while (index > 0) {
+        int parent = (index - 1) >> 1;
+        if (heap[parent] <= heap[index])
+            break;
+        heap_swap(heap, parent, index);
+        index = parent;
+    }
+}
+
+// Restore heap property downward (after removal)
+static void heap_sift_down(uint64_t *heap, int count, int index) {
+    for (;;) {
+        int left  = (index << 1) + 1;
+        int right = left + 1;
+        int min   = index;
+
+        if (left < count && heap[left] < heap[min])
+            min = left;
+        if (right < count && heap[right] < heap[min])
+            min = right;
+
+        if (min == index)
+            break;
+
+        heap_swap(heap, index, min);
+        index = min;
+    }
+}
+
+// Get smallest element (top of heap) without removing it
+static inline uint64_t heap_min(const uint64_t *heap, int count) { return (count > 0) ? heap[0] : UINT64_MAX; }
+// Remove and return smallest element (top of heap)
+static inline uint64_t heap_pop_min(uint64_t *heap, int *count_io) {
+    int      count = *count_io;
+    uint64_t val   = heap[0];
+    heap[0]        = heap[--count];
+    heap_sift_down(heap, count, 0);
+    *count_io = count;
+    return val;
+}
+
+// Insert new value into heap
+// Returns 1 on success, 0 if heap is full (no growth)
+static inline bool heap_push(uint64_t *heap, int *count_io, int capacity, uint64_t value) {
+    int count = *count_io;
+    if (count == capacity)
+        return false; // heap full, drop or handle overflow
+    heap[count] = value;
+    heap_sift_up(heap, count);
+    *count_io = count + 1;
+    return true;
+}
+#endif
+
 extern MvReferenceFrame svt_get_ref_frame_type(uint8_t list, uint8_t ref_idx);
 
 void svt_aom_largest_coding_unit_dctor(EbPtr p);
@@ -88,10 +154,13 @@ EbErrorType svt_aom_picture_manager_context_ctor(EbThreadContext *thread_ctx, co
 
     context_ptr->consecutive_dec_order = 0;
     EB_MALLOC_ARRAY(context_ptr->started_pics_dec_order, ppcs_count);
-    context_ptr->started_pics_dec_order_size     = ppcs_count;
+    context_ptr->started_pics_dec_order_size = ppcs_count;
+#if FIX_QUEUE_DEADLOCK
+    context_ptr->started_pics_dec_order_count = 0;
+#else
     context_ptr->started_pics_dec_order_head_idx = 0;
     context_ptr->started_pics_dec_order_tail_idx = 0;
-
+#endif
     return EB_ErrorNone;
 }
 
@@ -609,7 +678,29 @@ void *svt_aom_picture_manager_kernel(void *input_ptr) {
             child_pcs->enc_dec_coded_sb_count = 0;
             child_pcs->hbd_md                 = entry_ppcs->hbd_md;
             context_ptr->pmgr_dec_order       = child_pcs->ppcs->decode_order;
+#if FIX_QUEUE_DEADLOCK
+            // Update consecutive_dec_order using the min-heap of pending decode orders.
+            // When the next expected picture arrives, consecutive_dec_order is advanced
+            // and any immediately following orders are popped from the heap.
+            // Otherwise, the current decode_order is stored in the heap until the gap is filled.
+            uint64_t *decode_order_heap = context_ptr->started_pics_dec_order;
+            int      *heap_n            = &context_ptr->started_pics_dec_order_count;
 
+            if (entry_ppcs->decode_order == context_ptr->consecutive_dec_order + 1) {
+                // Next expected picture arrived
+                context_ptr->consecutive_dec_order++;
+
+                // Consume consecutive values already waiting in the heap
+                while (*heap_n > 0 && heap_min(decode_order_heap, *heap_n) == context_ptr->consecutive_dec_order + 1) {
+                    heap_pop_min(decode_order_heap, heap_n);
+                    context_ptr->consecutive_dec_order++;
+                }
+            } else if (entry_ppcs->decode_order > context_ptr->consecutive_dec_order) {
+                // Out-of-order arrival, push directly
+                heap_push(
+                    decode_order_heap, heap_n, context_ptr->started_pics_dec_order_size, entry_ppcs->decode_order);
+            }
+#else
             // Update the consecutive decode order count, if this picture is the next
             // picture in decode order. Otherwise, add the picture to the
             // started_pics_dec_order list so the consecutive decode order count can be
@@ -646,6 +737,7 @@ void *svt_aom_picture_manager_kernel(void *input_ptr) {
                     ? 0
                     : context_ptr->started_pics_dec_order_tail_idx + 1;
             }
+#endif
             // 3.make all  init for ChildPCS
             uint16_t pic_width_in_sb = (entry_ppcs->aligned_width + entry_scs_ptr->sb_size - 1) /
                 entry_scs_ptr->sb_size;
