@@ -20,10 +20,10 @@ if(NOT PkgConfig_FOUND)
   message(WARNING "PkgConfig not found; disabled building with dovi & hdr10plus.")
 endif()
 
+
+option(EXT_LIB_STATIC "Force linking with static libraries for external dependencies" OFF)
 set(SUFFIX "")
-if(BUILD_SHARED_LIBS)
-  set(SUFFIX ${CMAKE_SHARED_LIBRARY_SUFFIX})
-else()
+if(EXT_LIB_STATIC)
   set(SUFFIX ${CMAKE_STATIC_LIBRARY_SUFFIX})
 endif()
 
