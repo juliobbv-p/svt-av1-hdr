@@ -25,6 +25,8 @@ option(EXT_LIB_STATIC "Force linking with static libraries for external dependen
 set(SUFFIX "")
 if(EXT_LIB_STATIC)
   set(SUFFIX ${CMAKE_STATIC_LIBRARY_SUFFIX})
+else()
+  set(SUFFIX ${CMAKE_SHARED_LIBRARY_SUFFIX})
 endif()
 
 # libdovi detection & preprocessor macro
