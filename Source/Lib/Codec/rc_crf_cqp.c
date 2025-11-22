@@ -364,6 +364,7 @@ static int crf_qindex_calc(PictureControlSet* pcs, RATE_CONTROL* rc, int qindex)
     return active_best_quality;
 }
 
+#if !TUNE_CQP_CHROMA_SSIM
 /******************************************************
  * non_base_boost
  * Compute a non-base frame boost.
@@ -383,6 +384,7 @@ static int8_t non_base_boost(PictureControlSet* pcs) {
     }
     return q_boost;
 }
+#endif
 
 /******************************************************
  * cqp_qindex_calc
@@ -406,7 +408,7 @@ static int cqp_qindex_calc(PictureControlSet* pcs, int qindex) {
     if (pcs->temporal_layer_index == 0) {
         double qratio_grad = ppcs->hierarchical_levels <= 4 ? 0.3 : 0.2;
         double qstep_ratio = (0.2 + (1.0 - (double)active_worst_quality / MAXQ) * qratio_grad) *
-            qp_scale_compress_weight[scs->static_config.qp_scale_compress_strength];
+            svt_av1_qp_scale_compress_weight[scs->static_config.qp_scale_compress_strength];
         q = scs->cqp_base_q = svt_av1_get_q_index_from_qstep_ratio(active_worst_quality, qstep_ratio, bit_depth);
     } else if (ppcs->is_ref && pcs->temporal_layer_index < ppcs->hierarchical_levels) {
         int this_height = ppcs->temporal_layer_index + 1;
