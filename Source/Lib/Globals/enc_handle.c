@@ -2962,7 +2962,7 @@ void tf_controls(SequenceControlSet* scs, uint8_t tf_level) {
 static void derive_vq_params(SequenceControlSet* scs) {
     VqCtrls* vq_ctrl = &scs->vq_ctrls;
 
-    if (scs->static_config.tune == TUNE_VQ) {
+    if (scs->static_config.tune == TUNE_VQ || scs->static_config.tune == TUNE_FILM_GRAIN) {
 
         // Sharpness
         vq_ctrl->sharpness_ctrls.scene_transition = 1;
@@ -4424,6 +4424,16 @@ static void copy_api_from_app(SequenceControlSet *scs, EbSvtAv1EncConfiguration 
         scs->static_config.variance_boost_strength = 3;
         scs->static_config.variance_boost_curve = 2;
     }
+    // Override settings for Film Grain tune
+    if (scs->static_config.tune == TUNE_FILM_GRAIN) {
+        SVT_WARN("Tune 5: Film Grain is opinionated! Works best with 1080p, 4k and 8k content.\n");
+        SVT_WARN("Tune 5: Film Grain turns off: TF, CDEF, restoration filtering and enables strong AC bias.\n");
+        scs->static_config.enable_tf = 0;
+        scs->static_config.cdef_level = 0;
+        scs->static_config.enable_restoration_filtering = 0;
+        scs->static_config.ac_bias = 4.0;
+    }
+
     return;
 }
 

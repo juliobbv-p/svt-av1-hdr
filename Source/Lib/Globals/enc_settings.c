@@ -501,10 +501,11 @@ EbErrorType svt_av1_verify_settings(SequenceControlSet *scs) {
             config->fast_decode);
         return_error = EB_ErrorBadParameter;
     }
-    if (config->tune > TUNE_MS_SSIM) {
+    if (config->tune > TUNE_FILM_GRAIN) {
         SVT_ERROR(
-            "Invalid tune flag [0 - 4, 0 for VQ, 1 for PSNR, 2 for SSIM, 3 for IQ, and 4 for MS_SSIM], your input: "
-            "%d\n",
+            "Invalid tune flag [0 - 5: 0 for VQ, 1 for PSNR, 2 for SSIM, 3 for IQ, 4 for MS_SSIM and 5 "
+            "for Film Grain], "
+            "your input: %d\n",
             config->tune);
         return_error = EB_ErrorBadParameter;
     }
@@ -518,6 +519,11 @@ EbErrorType svt_av1_verify_settings(SequenceControlSet *scs) {
         }
     }
 
+    if (config->tune == TUNE_FILM_GRAIN) {
+        SVT_WARN(
+            "This tune is optimized for content that has moderate to heavy film grain. "
+            "Keep in mind for benchmarking analysis that this configuration will likely harm metric performance.\n");
+    }
     if (config->superres_mode > SUPERRES_AUTO) {
         SVT_ERROR("invalid superres-mode %d, should be in the range [%d - %d]\n",
                   config->superres_mode,
@@ -730,8 +736,8 @@ EbErrorType svt_av1_verify_settings(SequenceControlSet *scs) {
     }
 
     if (config->pred_structure == LOW_DELAY) {
-        if (config->tune == TUNE_VQ) {
-            SVT_WARN("Tune 0 is not applicable for low-delay, tune will be forced to 1.\n");
+        if (config->tune == TUNE_VQ || config->tune == TUNE_FILM_GRAIN) {
+            SVT_WARN("Tune %i is not applicable for low-delay, tune will be forced to 1.\n", config->tune);
             config->tune = TUNE_PSNR;
         }
 
@@ -1059,7 +1065,8 @@ void svt_av1_print_lib_params(SequenceControlSet *scs) {
                      : config->tune == TUNE_PSNR    ? "PSNR"
                      : config->tune == TUNE_SSIM    ? "SSIM"
                      : config->tune == TUNE_MS_SSIM ? "MS_SSIM"
-                                                    : "IQ",
+                     : config->tune == TUNE_IQ      ? "IQ"
+                                                    : "Film Grain",
                  config->pred_structure == LOW_DELAY           ? "low delay"
                      : config->pred_structure == RANDOM_ACCESS ? "random access"
                                                                : "Unknown pred structure");
