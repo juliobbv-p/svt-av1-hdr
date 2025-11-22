@@ -684,7 +684,7 @@ ConfigDescription config_entry_global_options[] = {
      "2.0-7.3]"},
     {FRAME_RATE_NUMERATOR_TOKEN, "Input video frame rate numerator, default is 60000 [0-2^32-1]"},
     {FRAME_RATE_DENOMINATOR_TOKEN, "Input video frame rate denominator, default is 1000 [0-2^32-1]"},
-    {INPUT_DEPTH_TOKEN, "Input video file and output bitstream bit-depth, default is 8 [8, 10]"},
+    {INPUT_DEPTH_TOKEN, "Input video file and output bitstream bit-depth, default is 10 [8, 10]"},
     // Latency
     {INJECTOR_TOKEN, "Inject pictures to the library at defined frame rate, default is 0 [0-1]"},
     {INJECTOR_FRAMERATE_TOKEN, "Set injector frame rate, only applicable with `--inj 1`, default is 60 [0-240]"},
@@ -773,9 +773,9 @@ ConfigDescription config_entry_rc[] = {
     {VBR_MAX_SECTION_PCT_TOKEN,
      "GOP max bitrate (expressed as a percentage of the target rate), default is 2000 [0-10000]"},
 #if CONFIG_ENABLE_QUANT_MATRIX
-    {ENABLE_QM_TOKEN, "Enable quantisation matrices, default is 0 [0-1]"},
-    {MIN_QM_LEVEL_TOKEN, "Min quant matrix flatness, default is 8 [0-15]"},
-    {MAX_QM_LEVEL_TOKEN, "Max quant matrix flatness, default is 15 [0-15]"},
+    {ENABLE_QM_TOKEN, "Enable quantisation matrices, default is 1 [0-1]"},
+    {MIN_QM_LEVEL_TOKEN, "Min quant matrix flatness, default is 6 [0-15]"},
+    {MAX_QM_LEVEL_TOKEN, "Max quant matrix flatness, default is 10 [0-15]"},
     {MIN_CHROMA_QM_LEVEL_TOKEN, "Min chroma quant matrix flatness, default is 8 [0-15]"},
     {MAX_CHROMA_QM_LEVEL_TOKEN, "Max chroma quant matrix flatness, default is 15 [0-15]"},
 #endif
@@ -785,7 +785,7 @@ ConfigDescription config_entry_rc[] = {
     // Frame-level luminance-based QP bias
     {LUMINANCE_QP_BIAS_TOKEN, "Adjusts a frame's QP based on its average luma value, default is 0 [0-100]"},
     // Sharpness
-    {SHARPNESS_TOKEN, "Bias towards decreased/increased sharpness, default is 0 [-7 to 7]"},
+    {SHARPNESS_TOKEN, "Bias towards decreased/increased sharpness, default is 1 [-7 to 7]"},
     // Termination
     {NULL, NULL}};
 
@@ -936,18 +936,18 @@ ConfigDescription config_entry_color_description[] = {
 
 ConfigDescription config_entry_psychovisual[] = {
     // Variance Boost
-    {ENABLE_VARIANCE_BOOST_TOKEN, "Enable Variance Boost, default is 0 [0-1]"},
+    {ENABLE_VARIANCE_BOOST_TOKEN, "Enable Variance Boost, default is 1 [0-1]"},
     {VARIANCE_BOOST_STRENGTH_TOKEN, "Variance Boost strength, default is 2 [1-4]"},
     {VARIANCE_OCTILE_TOKEN, "Octile for Variance Boost, default is 5 [1-8]"},
     {VARIANCE_BOOST_CURVE_TOKEN, "Curve for Variance Boost, default is 0 [0-2]"},
     // QP scale compress
-    {QP_SCALE_COMPRESS_STRENGTH_TOKEN, "QP scale compress strength, default is 0 [0-3]"},
+    {QP_SCALE_COMPRESS_STRENGTH_TOKEN, "QP scale compress strength, default is 1 [0-3]"},
     // Adaptive film grain
     {ADAPTIVE_FILM_GRAIN_TOKEN, "Adapts film grain blocksize based on video resolution, default is 1 [0-1]"},
     // Max TX size
     {MAX_TX_SIZE_TOKEN, "Limits the allowed transform sizes to the specified, default is 64 [32,64]"},
     //AC-Bias
-    {AC_BIAS_TOKEN, "Strength of AC bias in rate distortion, default is 0.0 [0.0-8.0]"},
+    {AC_BIAS_TOKEN, "Strength of AC bias in rate distortion, default is 1.0 [0.0-8.0]"},
     // Termination
     {NULL, NULL}};
 

@@ -986,6 +986,8 @@ static int crf_qindex_calc(PictureControlSet *pcs, RATE_CONTROL *rc, int qindex)
     assert(ppcs->bottom_index <= rc->worst_quality && ppcs->bottom_index >= rc->best_quality);
     return q;
 }
+
+#if !TUNE_CQP_CHROMA_SSIM
 /******************************************************
  * non_base_boost
  * Compute a non-base frame boost.
@@ -1005,6 +1007,7 @@ static int8_t non_base_boost(PictureControlSet *pcs) {
     }
     return q_boost;
 }
+#endif
 
 /******************************************************
  * cqp_qindex_calc

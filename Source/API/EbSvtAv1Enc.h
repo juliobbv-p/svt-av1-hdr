@@ -300,7 +300,7 @@ typedef struct EbSvtAv1EncConfiguration {
      * 8 = 8 bit.
      * 10 = 10 bit.
      *
-     * Default is 8. */
+     * Default is 10 for SVT-AV1-HDR, mainline default is 8. */
     uint32_t encoder_bit_depth;
 
     /**
@@ -565,7 +565,7 @@ typedef struct EbSvtAv1EncConfiguration {
     * @brief Determines how much denoising is used.
     * Only applicable when film grain is ON.
     *
-    * 0 is no denoising
+    * 0 is no denoising (default)
     * 1 is full denoising
     *
     * Default is 0. */
@@ -737,7 +737,7 @@ typedef struct EbSvtAv1EncConfiguration {
     /**
      * @brief Signal to the library to enable quantisation matrices
      *
-     * Default is false.
+     * Default is true in SVT-AV1-HDR.
      */
     bool enable_qm;
 
@@ -745,14 +745,14 @@ typedef struct EbSvtAv1EncConfiguration {
      * @brief Min quant matrix flatness. Applicable when enable_qm is true.
      * Min value is 0.
      * Max value is 15.
-     * Default is 8.
+     * Default is 6 in SVT-AV1-HDR, mainline default is 8.
      */
     uint8_t min_qm_level;
     /**
      * @brief Max quant matrix flatness. Applicable when enable_qm is true.
      * Min value is 0.
      * Max value is 15.
-     * Default is 15.
+     * Default is 10 in SVT-AV1-HDR, mainline default is 15.
      */
     uint8_t max_qm_level;
 
@@ -822,7 +822,7 @@ typedef struct EbSvtAv1EncConfiguration {
 
     /* Manually adjust temporal filtering strength
      * 10 + (4 - 0) = 14 (8x weaker)
-     * 10 + (4 - 1) = 13 (4x weaker)
+     * 10 + (4 - 1) = 13 (4x weaker, SVT-AV1-HDR default)
      * 10 + (4 - 2) = 12 (2x weaker)
      * 10 + (4 - 3) = 11 (mainline default)
      * 10 + (4 - 4) = 10 (2x stronger) */
@@ -837,7 +837,7 @@ typedef struct EbSvtAv1EncConfiguration {
     /* Variance Boost
      * false = disable Variance Boost
      * true = enable Variance Boost
-     * Default is false. */
+     * Default is true in SVT-AV1-HDR. */
     bool enable_variance_boost;
     /* @brief Selects the curve strength to boost low variance regions according to a fast-growing formula
      * Default is 2 */
@@ -854,7 +854,7 @@ typedef struct EbSvtAv1EncConfiguration {
     /* @brief Bias towards decreased/increased sharpness in the deblocking loop filter & during rate distortion
      * Minimum value is -7 (less sharp).
      * Maximum value is 7 (more sharp).
-     * Default is 0 (medium sharpness). */
+     * Default is 1 in SVT-AV1-HDR, mainline default is 0. */
     int8_t sharpness;
 
     /* @brief Enable the user to configure which curve variance boost uses.
@@ -910,7 +910,7 @@ typedef struct EbSvtAv1EncConfiguration {
     * 0: no compression, original SVT-AV1 scaling
     * 1-3: enable compression, the higher the number the stronger the compression
     *      (different frame quality fluctuation/mean quality tradeoffs)
-    * Default is 1
+    * Default is 1 in SVT-AV1-HDR, mainline default is 0.
     */
     uint8_t qp_scale_compress_strength;
 
@@ -958,7 +958,7 @@ typedef struct EbSvtAv1EncConfiguration {
      * @brief Strength of the internal RD metric to bias toward high-frequency error (helps with texture preservation and film grain retention)
      * 0.00: disable AC bias
      * 1.00: enable AC bias with a strength of 1.00
-     * Default is 0.00.
+     * Default is 1.00 in SVT-AV1-HDR, mainline default is 0.00
      */
      double ac_bias;
 
