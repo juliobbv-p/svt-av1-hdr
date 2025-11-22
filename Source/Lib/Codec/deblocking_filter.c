@@ -1100,7 +1100,8 @@ EbErrorType svt_av1_pick_filter_level(EbPictureBufferDesc* srcBuffer, PictureCon
     LpfPickMethod method = (LpfPickMethod)pcs->ppcs->dlf_ctrls.pick_method;
 
     lf->sharpness_level = sharpness_val;
-    if (frm_hdr->frame_type == KEY_FRAME && pcs->scs->static_config.tune == TUNE_VQ) {
+    if (frm_hdr->frame_type == KEY_FRAME &&
+        (pcs->scs->static_config.tune == TUNE_VQ || pcs->scs->static_config.tune == TUNE_FILM_GRAIN)) {
         lf->sharpness_level = MIN(7, sharpness_val + 2);
     } else if (pcs->scs->static_config.tune == TUNE_IQ || pcs->scs->static_config.tune == TUNE_MS_SSIM) {
         // Loop filter sharpness levels are highly nonlinear. Visually, lf sharpness 1 is closer to 7 than
