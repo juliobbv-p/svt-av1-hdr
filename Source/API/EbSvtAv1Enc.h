@@ -822,7 +822,7 @@ typedef struct EbSvtAv1EncConfiguration {
 
     /* Manually adjust temporal filtering strength
      * 10 + (4 - 0) = 14 (8x weaker)
-     * 10 + (4 - 1) = 13 (4x weaker, PSY default)
+     * 10 + (4 - 1) = 13 (4x weaker)
      * 10 + (4 - 2) = 12 (2x weaker)
      * 10 + (4 - 3) = 11 (mainline default)
      * 10 + (4 - 4) = 10 (2x stronger) */
@@ -973,6 +973,12 @@ typedef struct EbSvtAv1EncConfiguration {
  * @param[out] SVT_AV1_CVS_VERSION
  */
 EB_API const char *svt_av1_get_version(void);
+
+/**
+ * Returns a string containing only the SVT-AV1-HDR micro-release letter
+ * @param[out] SVT_AV1_HDR_RELEASE
+ */
+EB_API const char *svt_hdr_get_version(void);
 
 /**
  * Prints the version header and build information to the file
