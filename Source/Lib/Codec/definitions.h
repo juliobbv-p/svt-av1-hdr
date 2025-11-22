@@ -1855,10 +1855,10 @@ typedef enum Tune {
     TUNE_IQ   = 3, // Image Quality
 #if FTR_TUNE_VMAF
     TUNE_MS_SSIM = 4,  // MS_SSIM and SSIMULACRA2 optimized
-    TUNE_VMAF    = 5   // VMAF preprocessing (unsharp filter on luma)
+    TUNE_VMAF    = 5,   // VMAF preprocessing (unsharp filter on luma)
+    TUNE_FILM_GRAIN = 6 // Film Grain optimized
 #else
-    TUNE_MS_SSIM = 4 // MS_SSIM and SSIMULACRA2 optimized
-
+    TUNE_MS_SSIM = 4, // MS_SSIM and SSIMULACRA2 optimized
 #endif
 } Tune;
 
