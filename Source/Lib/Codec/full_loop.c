@@ -1094,7 +1094,8 @@ static void svt_av1_optimize_b(PictureControlSet *pcs, ModeDecisionContext *ctx,
                                int16_t dc_sign_context, const TranLow *coeff_ptr, const MacroblockPlane *p,
                                TranLow *qcoeff_ptr, TranLow *dqcoeff_ptr, uint16_t *eob, const QuantParam *qparam,
                                TxSize tx_size, TxType tx_type, bool is_inter, uint8_t use_sharpness,
-                               uint8_t delta_q_present, uint8_t picture_qp, uint32_t lambda, int plane) {
+                               uint8_t delta_q_present, uint8_t picture_qp, uint32_t lambda, int plane,
+                               bool light_rdoq) {
 #if OPT_DEFAULT_LAMBDA_MULT
     SequenceControlSet *scs      = pcs->scs;
     bool                allintra = scs->allintra;
@@ -1146,6 +1147,11 @@ static void svt_av1_optimize_b(PictureControlSet *pcs, ModeDecisionContext *ctx,
             rweight   = 0;
         }
     }
+
+    if (light_rdoq) {
+        rweight = 10;
+    }
+
 #if OPT_DEFAULT_LAMBDA_MULT
     const int64_t rdmult = (((((int64_t)lambda * plane_rd_mult[allintra][is_inter][plane_type]) * rweight) / 100) +
                             2) >>
@@ -1655,6 +1661,21 @@ uint8_t svt_aom_quantize_inv_quantize(PictureControlSet *pcs, ModeDecisionContex
             }
         }
     }
+
+    bool light_rdoq = false;
+
+    // have rdoq be lightly performed for blocks with very low dc saturation under certain conditions
+    // to prevent cases of color blotching due to aggressive coefficient decimation/reduction
+    if (is_encode_pass && tx_type != IDTX && component_type != COMPONENT_LUMA && *eob > 0) {
+        const TranLow dc = quant_coeff[0];
+
+        if (dc >= -1 && dc <= 1 && *eob <= (n_coeffs / 16)) {
+            light_rdoq = true;
+        } else if (dc >= -4 && dc <= 4 && *eob <= 1) {
+            light_rdoq = true;
+        }
+    }
+
     if (perform_rdoq && *eob != 0) {
         // Perform rdoq
         svt_av1_optimize_b(pcs,
@@ -1674,7 +1695,8 @@ uint8_t svt_aom_quantize_inv_quantize(PictureControlSet *pcs, ModeDecisionContex
                            pcs->ppcs->frm_hdr.delta_q_params.delta_q_present,
                            pcs->picture_qp,
                            lambda,
-                           (component_type == COMPONENT_LUMA) ? 0 : 1);
+                           (component_type == COMPONENT_LUMA) ? 0 : 1,
+                           light_rdoq);
     }
 
     if (!ctx->rate_est_ctrls.update_skip_ctx_dc_sign_ctx)
