@@ -1598,7 +1598,8 @@ static int av1_get_deltaq_sb_variance_boost(uint8_t base_q_idx, uint64_t mean, d
     // high and medium variance sbs essentially get no boost, while increasingly lower variance sbs get stronger boosts
     assert(strength >= 1 && strength <= 4);
     double       qstep_ratio = 0;
-    const double strengths[] = {0, 0.4, 0.8, 1.2, 1.8};
+    const double strengths[]    = {0, 0.4, 0.8, 1.2, 1.8};
+    const double strengths_pq[] = {0, 0.65, 1.1, 1.6, 2.5};
 
     switch (curve) {
     case 1: /* 1: low-medium contrast boosting curve */
@@ -1607,7 +1608,10 @@ static int av1_get_deltaq_sb_variance_boost(uint8_t base_q_idx, uint64_t mean, d
     case 2: /* 2: still picture curve, tuned for SSIMULACRA2 performance on CID22 */
         qstep_ratio = 0.15 * strength * (-log2(variance) + 10) + 1;
         break;
-    default: /* 0, 3: default q step ratio curve */
+    case 3: /* 3: PQ, HDR curve */
+        qstep_ratio = pow(1.018, strengths_pq[strength] * (-10 * log2(variance) + 80));
+        break;
+    default: /* 0: default q step ratio curve */
         qstep_ratio = pow(1.018, strengths[strength] * (-10 * log2(variance) + 80));
         break;
     }
