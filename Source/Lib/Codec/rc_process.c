@@ -3788,7 +3788,7 @@ void *svt_aom_rate_control_kernel(void *input_ptr) {
 
                     // Tune-independent chroma boosts
                     // Boost chroma in general (4:2:0) with ramp down
-                    chroma_qindex -= CLIP3(0, 4, chroma_qindex_adjustment / 2);
+                    chroma_qindex -= CLIP3(0, 8, chroma_qindex_adjustment / 2);
 
                     // Boost chroma on PQ transfer with ramp down
                     if (scs->static_config.transfer_characteristics == EB_CICP_TC_SMPTE_2084) {
@@ -3807,9 +3807,10 @@ void *svt_aom_rate_control_kernel(void *input_ptr) {
                     }
 
                     chroma_qindex = clamp_qindex(scs, chroma_qindex);
+
                     // Calculate chroma delta q for Cb, and clip it to a valid range
                     frm_hdr->quantization_params.delta_q_dc[1] = frm_hdr->quantization_params.delta_q_ac[1] = CLIP3(
-                        -64, 63, chroma_qindex - frm_hdr->quantization_params.base_q_idx);
+                        -64, 63, chroma_qindex - frm_hdr->quantization_params.base_q_idx + 12);
 
                     // Calculate chroma delta q for Cr, and clip it to a valid range
                     frm_hdr->quantization_params.delta_q_dc[2] = frm_hdr->quantization_params.delta_q_ac[2] = CLIP3(
