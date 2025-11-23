@@ -805,7 +805,7 @@ ConfigDescription config_entry_2p[] = {
 
 ConfigDescription config_entry_intra_refresh[] = {
     {KEYINT_TOKEN,
-     "GOP size (frames), default is -2 [-2: ~5 seconds, -1: \"infinite\" and only applicable for "
+     "GOP size (frames), default is -2 [-2: ~10 seconds - up to 305 frames), -1: \"infinite\" and only applicable for "
      "CRF, 0: same as -1]"},
     {INTRA_REFRESH_TYPE_TOKEN, "Intra refresh type, default is 2 [1: FWD Frame (Open GOP), 2: KEY Frame (Closed GOP)]"},
     {SCENE_CHANGE_DETECTION_TOKEN, "Scene change detection control, default is 0 [0-1]"},
