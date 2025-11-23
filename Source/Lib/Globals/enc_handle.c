@@ -2163,15 +2163,35 @@ EB_API EbErrorType svt_av1_enc_deinit_handle(EbComponentType* svt_enc_component)
     return EB_ErrorInvalidComponent;
 }
 
-// Sets the default intra period the closest possible to 1 second without breaking the minigop
+// Sets the default intra period the closest possible to 10 seconds without breaking the minigop
 static int32_t compute_default_intra_period(SequenceControlSet* scs) {
     EbSvtAv1EncConfiguration* config = &scs->static_config;
 
     double  fps           = scs->frame_rate;
     int32_t mini_gop_size = (1 << (config->hierarchical_levels));
 
-    // use a 5-sec gop by default.
-    int32_t intra_period = (int)((fps + mini_gop_size) / mini_gop_size) * mini_gop_size * 5;
+    // If mini_gop_size = 32, pretend that the minigop size is 16 instead
+    // The calculated intra period will result in either one of these outcomes:
+    // - intra_period is mod 16: every minigop will be 32 except the very last one (i.e. 16)
+    // - intra_period is mod 32: every minigop will be 32 including the very last one
+    if (mini_gop_size == 32) {
+        mini_gop_size = 16;
+    }
+
+    /* Use a 10-sec GOP by default (SVT-AV1-HDR) */
+    int32_t intra_period = (((int)(fps * 10 + mini_gop_size - 1) / mini_gop_size) * (mini_gop_size));
+
+    // Cap intra period to the nearest one that has at least 300 frames that doesn't break the minigop
+    // (to avoid gops that are too big and could cause seeking issues with some players)
+    if (intra_period > 300) {
+        if (mini_gop_size >= 8) {
+            intra_period = 304;
+        } else {
+            // if mini_gop_size <= 4, 300 will result in complete minigops
+            intra_period = 300;
+        }
+    }
+
     if (config->intra_refresh_type == 1) {
         intra_period -= 1;
     }
