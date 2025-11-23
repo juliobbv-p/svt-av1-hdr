@@ -562,7 +562,7 @@ void svt_av1_rc_calc_qindex_crf_cqp(PictureControlSet* pcs, SequenceControlSet* 
 
     // Tune-independent chroma boosts
     // Boost chroma in general (4:2:0) with ramp down
-    chroma_qindex -= CLIP3(0, 4, chroma_qindex_adjustment / 2);
+    chroma_qindex -= CLIP3(0, 8, chroma_qindex_adjustment / 2);
 
     // Boost chroma on PQ transfer with ramp down
     if (scs->static_config.transfer_characteristics == EB_CICP_TC_SMPTE_2084) {
@@ -582,7 +582,7 @@ void svt_av1_rc_calc_qindex_crf_cqp(PictureControlSet* pcs, SequenceControlSet* 
     chroma_qindex = clamp_qindex(scs, chroma_qindex);
 
     // Calculate chroma delta q for Cb and Cr
-    q_params->delta_q_dc[1] = q_params->delta_q_ac[1] = CLIP3(-64, 63, chroma_qindex - new_qindex);
+    q_params->delta_q_dc[1] = q_params->delta_q_ac[1] = CLIP3(-64, 63, chroma_qindex - new_qindex + 12);
     q_params->delta_q_dc[2] = q_params->delta_q_ac[2] = CLIP3(-64, 63, chroma_qindex - new_qindex);
 
     q_params->base_q_idx = new_qindex;
