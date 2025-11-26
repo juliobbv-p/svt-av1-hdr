@@ -559,11 +559,11 @@ EbErrorType svt_av1_verify_settings(SequenceControlSet *scs) {
             config->tune);
         return_error = EB_ErrorBadParameter;
     }
-    if (config->tune == TUNE_SSIM) {
+    if (config->tune == TUNE_SSIM || config->tune == TUNE_IQ) {
         if (config->rate_control_mode != 0 || config->pred_structure != RANDOM_ACCESS) {
-            SVT_ERROR("Instance %u: tune SSIM only supports CRF rate control mode currently\n",
+            SVT_ERROR("Instance %u: tune %s only supports CRF rate control mode currently\n",
                       channel_number + 1,
-                      config->tune);
+                      config->tune == TUNE_SSIM ? "SSIM" : "IQ");
             return_error = EB_ErrorBadParameter;
 #if FIX_TUNE_SSIM_LAMBDA
         }

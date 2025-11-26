@@ -373,7 +373,7 @@ static void av1_encode_loop(PictureControlSet *pcs, EncDecContext *ed_ctx, Super
         md_ctx->blk_org_y = ed_ctx->blk_org_y;
         //Get the new lambda for current block
         svt_aom_set_tuned_blk_lambda(md_ctx, pcs);
-    } else if (pcs->ppcs->scs->static_config.tune == TUNE_SSIM) {
+    } else if (pcs->ppcs->scs->static_config.tune == TUNE_SSIM || pcs->ppcs->scs->static_config.tune == TUNE_IQ) {
         md_ctx->blk_geom  = ed_ctx->blk_geom;
         md_ctx->blk_org_x = ed_ctx->blk_org_x;
         md_ctx->blk_org_y = ed_ctx->blk_org_y;

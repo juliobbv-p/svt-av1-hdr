@@ -4040,8 +4040,9 @@ void *svt_aom_rate_control_kernel(void *input_ptr) {
                 cyclic_sb_qp_derivation(pcs);
             }
 
-            if (pcs->scs->static_config.tune == TUNE_SSIM && !pcs->ppcs->frm_hdr.delta_q_params.delta_q_present) {
-                // enable sb level qindex when tune SSIM
+            if ((pcs->scs->static_config.tune == TUNE_SSIM || pcs->scs->static_config.tune == TUNE_IQ) &&
+                !pcs->ppcs->frm_hdr.delta_q_params.delta_q_present) {
+                // enable sb level qindex when tune SSIM or IQ
                 pcs->ppcs->frm_hdr.delta_q_params.delta_q_present = 1;
             }
 

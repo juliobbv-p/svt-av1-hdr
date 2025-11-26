@@ -2299,7 +2299,7 @@ void *svt_aom_source_based_operations_kernel(void *input_ptr) {
             }
         }
         /*********************************************Picture-based operations**********************************************************/
-        if (scs->static_config.tune == TUNE_SSIM) {
+        if (scs->static_config.tune == TUNE_SSIM || scs->static_config.tune == TUNE_IQ) {
             aom_av1_set_mb_ssim_rdmult_scaling(pcs);
         }
         sbo_send_picture_out(context_ptr, pcs, false);
