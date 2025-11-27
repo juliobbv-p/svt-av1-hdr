@@ -1139,6 +1139,8 @@ typedef struct EbSvtAv1EncConfiguration {
         - sizeof(bool) // add the ability to shut MCTF for key frames
         - sizeof(uint32_t) * 2 // max intra/inter bitrates
         - sizeof(bool) // enable_intrabc
+                    /* SVT-AV1-HDR additions */
+                    - (sizeof(uint8_t) * 8) - (sizeof(int8_t) * 2) - (sizeof(bool) * 3) - (sizeof(double))
     ];
     // clang-format on
 } EbSvtAv1EncConfiguration;
