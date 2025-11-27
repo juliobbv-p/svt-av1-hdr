@@ -70,6 +70,15 @@ The default value is 5. Recommended values are between 4 and 7.
 | ![o1](./img/vb_rock_octile_o1.avif) |![o2](./img/vb_rock_octile_o2.avif) | ![o4](./img/vb_rock_octile_o4.avif) |![o6](./img/vb_rock_octile_o6.avif) | ![o8](./img/vb_rock_octile_o8.avif)|
 | 4,810 bytes    | 4,186 bytes    | 2,507 bytes    | 1,878 bytes    | 1,584 bytes    |
 
+### `--variance-boost-curve [0-3]`
+
+Select the Variance Boost formula (the "curve") used to boost superblocks based on their variance.
+
+0: The default Variance Boost curve. This is a great all-purpose curve.
+1: An alternative curve, with different boosting tradeoffs compared to curve 0.
+2: A curve optimized for still image performance.
+3: A curve specifically tuned for images and videos with a PQ (HDR) transfer.
+
 ## Description of the Algorithm
 
 |Image|Description|
