@@ -1130,6 +1130,10 @@ typedef struct EbSvtAv1EncConfiguration {
         - sizeof(SvtAv1SFramePositions)
         - sizeof(uint8_t)
         - sizeof(int8_t)
+        /* SVT-AV1-HDR additions */
+        - (sizeof(uint8_t) * 8)
+        - (sizeof(bool) * 2)
+        - (sizeof(double)) + (sizeof(uint8_t)) // qp_scale_compress_strength uint8_t -> double
     ];
     // clang-format on
 } EbSvtAv1EncConfiguration;
