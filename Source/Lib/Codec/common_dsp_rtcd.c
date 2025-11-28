@@ -229,6 +229,7 @@ EbCpuFlags svt_aom_get_cpu_flags(void) {
     EbCpuFlags flags = 0;
     if (IsProcessorFeaturePresent(PF_ARM_V8_INSTRUCTIONS_AVAILABLE)) {
         flags |= EB_CPU_FLAGS_NEON;
+    }
 #endif
 #if HAVE_ARM_CRC32
     if (IsProcessorFeaturePresent(PF_ARM_V8_CRC32_INSTRUCTIONS_AVAILABLE)) {
