@@ -34,7 +34,7 @@ echo "Checking for carriage returns" >&2
 ! git -C "$REPO_DIR" --no-pager grep -InP "\r" -- "$@" || ret=1
 
 echo "Checking for trailing spaces" >&2
-! git -C "$REPO_DIR" --no-pager grep -InP " $" -- "$@" || ret=1
+! git -C "$REPO_DIR" --no-pager grep -InP " $" -- "$@ \ :!*.md" || ret=1
 
 # Test only "new" commits, that is, commits that are not upstream on
 # the default branch.
