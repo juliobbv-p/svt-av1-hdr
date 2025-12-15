@@ -164,6 +164,10 @@ Enables VQ psychovisual optimizations from tune 0, as well as changing SSIM rate
 
 A smarter content detection algorithm to optimize the encoder for either screen or photographic content based on the image. This helps Tune IQ achieve better visual fidelity on still images.
 
+- `--noise-adaptive-filtering` *0 to 4*
+
+Controls noise detection which disables CDEF/restoration when noise level is high enough. [0: off, 1: both CDEF and restoration noise-adaptive filtering are on, 2: default tune behavior, 3: noise-adaptive CDEF only, 4: noise-adaptive restoration only] The default is 2.
+
 ### Modified Defaults
 
 SVT-AV1-HDR has different defaults than mainline SVT-AV1 in order to provide better visual fidelity out of the box. They include:
