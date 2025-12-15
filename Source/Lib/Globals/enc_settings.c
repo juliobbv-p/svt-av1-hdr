@@ -943,6 +943,11 @@ EbErrorType svt_av1_verify_settings(SequenceControlSet* scs) {
         return_error = EB_ErrorBadParameter;
     }
 
+    if (config->noise_adaptive_filtering > 4) {
+        SVT_ERROR("Noise-adaptive-filtering must be between 0 and 4\n");
+        return_error = EB_ErrorBadParameter;
+    }
+
     return return_error;
 }
 
@@ -1116,6 +1121,7 @@ EbErrorType svt_av1_set_default_params(EbSvtAv1EncConfiguration* config_ptr) {
     config_ptr->alt_ssim_tuning                   = false;
     config_ptr->tx_bias                           = 0;
     config_ptr->complex_hvs                       = 0;
+    config_ptr->noise_adaptive_filtering          = 2;
     return return_error;
 }
 
@@ -2379,6 +2385,7 @@ EB_API EbErrorType svt_av1_enc_parse_parameter(EbSvtAv1EncConfiguration* config_
         {"sharp-tx", &config_struct->sharp_tx},
         {"tx-bias", &config_struct->tx_bias},
         {"complex-hvs", &config_struct->complex_hvs},
+        {"noise-adaptive-filtering", &config_struct->noise_adaptive_filtering},
     };
 
     const size_t uint8_opts_size = sizeof(uint8_opts) / sizeof(uint8_opts[0]);
