@@ -219,6 +219,7 @@
 #define HBD_MDS_TOKEN "--hbd-mds"
 #define TX_BIAS_TOKEN "--tx-bias"
 #define COMPLEX_HVS_TOKEN "--complex-hvs"
+#define NOISE_ADAPTIVE_FILTERING_TOKEN "--noise-adaptive-filtering"
 
 static EbErrorType validate_error(EbErrorType err, const char *token, const char *value) {
     switch (err) {
@@ -1017,6 +1018,10 @@ ConfigDescription config_entry_psychovisual[] = {
      "Transform size/type bias type, default is 0 [0-3]; 1 = full, 2, transform size only, 3 = interpolation only"},
     //Complex HVS
     {COMPLEX_HVS_TOKEN, "Enable highest complexity HVS model, default is 0 [0-1]"},
+    // Noise adaptive filtering
+    {NOISE_ADAPTIVE_FILTERING_TOKEN,
+     "Control noise detection for CDEF/restoration filtering, default is 2 [0: off, 1: both CDEF and restoration are "
+     "on 2: default tune behavior, 3: CDEF only, 4: restoration only)]"},
     // Termination
     {NULL, NULL}};
 
@@ -1256,6 +1261,9 @@ ConfigEntry config_entry[] = {
 
     // Complex HVS
     {COMPLEX_HVS_TOKEN, "ComplexHVS", set_cfg_generic_token},
+
+    // Noise adaptive filtering
+    {NOISE_ADAPTIVE_FILTERING_TOKEN, "NoiseAdaptiveFiltering", set_cfg_generic_token},
 
     // Termination
     {NULL, NULL, NULL}};
