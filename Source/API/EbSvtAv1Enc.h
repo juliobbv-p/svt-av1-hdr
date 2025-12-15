@@ -1122,6 +1122,17 @@ typedef struct EbSvtAv1EncConfiguration {
      */
     uint8_t complex_hvs;
 
+    /**
+     * @brief Controls noise detection for CDEF/restoration filtering
+     * 0: off
+     * 1: always-on noise-adaptive filters
+     * 2: default tune behavior
+     * 3: noise-adaptive CDEF only
+     * 4: noise-adaptive restoration filtering only
+     * Default is 2
+     */
+    uint8_t noise_adaptive_filtering;
+
     // clang-format off
     /* Add 128 Byte Padding to Struct to avoid changing the size of the public configuration struct */
     uint8_t padding[128
@@ -1140,6 +1151,7 @@ typedef struct EbSvtAv1EncConfiguration {
         - sizeof(bool) // alt_ssim_tuning
         - sizeof(uint8_t) // tx_bias
         - sizeof(uint8_t) // complex_hvs
+        - sizeof(uint8_t) // noise_adaptive_filtering
     ];
     // clang-format on
 } EbSvtAv1EncConfiguration;
