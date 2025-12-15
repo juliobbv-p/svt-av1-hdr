@@ -3280,6 +3280,31 @@ static void derive_vq_params(SequenceControlSet* scs) {
         vq_ctrl->sharpness_ctrls.restoration      = 0;
         vq_ctrl->sharpness_ctrls.rdoq             = 0;
     }
+
+    switch (scs->static_config.noise_adaptive_filtering) {
+        case 0:
+            vq_ctrl->sharpness_ctrls.cdef = 0;
+            vq_ctrl->sharpness_ctrls.restoration = 0;
+            break;
+        case 1:
+            vq_ctrl->sharpness_ctrls.cdef = 1;
+            vq_ctrl->sharpness_ctrls.restoration = 1;
+            break;
+        case 2:
+            // No override; honor tune defaults
+            break;
+        case 3:
+            vq_ctrl->sharpness_ctrls.cdef = 1;
+            vq_ctrl->sharpness_ctrls.restoration = 0;
+            break;
+        case 4:
+            vq_ctrl->sharpness_ctrls.cdef = 0;
+            vq_ctrl->sharpness_ctrls.restoration = 1;
+            break;
+        default:
+            break;
+    }
+
     // Do not use scene_transition if LD or 1st pass or middle pass
     if (scs->static_config.pred_structure != RANDOM_ACCESS || scs->static_config.pass == ENC_FIRST_PASS)
         vq_ctrl->sharpness_ctrls.scene_transition = 0;
@@ -4734,6 +4759,9 @@ static void copy_api_from_app(SequenceControlSet *scs, EbSvtAv1EncConfiguration 
 
     // Complex HVS
     scs->static_config.complex_hvs = config_struct->complex_hvs;
+
+    // Noise adaptive filtering
+    scs->static_config.noise_adaptive_filtering = config_struct->noise_adaptive_filtering;
 
     // Override settings for Still IQ tune
     if (scs->static_config.tune == TUNE_IQ) {

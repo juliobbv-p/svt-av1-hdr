@@ -1091,6 +1091,17 @@ typedef struct EbSvtAv1EncConfiguration {
      */
      uint8_t complex_hvs;
 
+     /**
+     * @brief Controls noise detection for CDEF/restoration filtering
+     * 0: off
+     * 1: always-on noise-adaptive filters
+     * 2: default tune behavior
+     * 3: noise-adaptive CDEF only
+     * 4: noise-adaptive restoration filtering only
+     * Default is 2
+     */
+     uint8_t noise_adaptive_filtering;
+
     /*Add 128 Byte Padding to Struct to avoid changing the size of the public configuration struct*/
     uint8_t padding[128 - (sizeof(uint8_t) * 5)
         - (sizeof(bool) * 2)
@@ -1103,7 +1114,7 @@ typedef struct EbSvtAv1EncConfiguration {
         - sizeof(int8_t)
 #endif // FTR_SFRAME_QP
         /* SVT-AV1-HDR additions */
-        - (sizeof(uint8_t) * 6)
+        - (sizeof(uint8_t) * 7)
         - (sizeof(bool) * 2)
         - (sizeof(double)) + (sizeof(uint8_t)) // qp_scale_compress_strength uint8_t -> double
     ];
