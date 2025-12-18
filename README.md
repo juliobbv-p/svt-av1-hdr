@@ -25,7 +25,14 @@ If desired, additional parameters (described down below) are available for furth
 
 Note: SVT-AV1-HDR allocates bits in a very different way than (mainline) SVT-AV1, so adjusting the CRF value is expected to match a certain bitrate or file size target.
 
-## Documentation
+## Information
+
+Unlike its predecesor (SVT-AV1-PSY), SVT-AV1-HDR features a more relaxed development cycle, and so are its expectations:
+
+- New versions are only used for source code tagging purposes -- no first-party binaries will be provided
+- Rebases onto SVT-AV1 are only guaranteed on **major** version changes (e.g. 4.0, 5.0, etc.)
+- However, minor or patch version releases might still happen in practice
+- Rebases onto SVT-AV1 don't have any set dates to ensure the integration of SVT-AV1-HDR's features with the mainline code is solid
 
 For additional docs (build instructions, documentation, usage, etc.), see the [SVT-AV1 README](README_mainline.md).
 
