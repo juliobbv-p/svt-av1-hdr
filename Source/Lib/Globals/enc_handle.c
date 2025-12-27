@@ -3340,14 +3340,20 @@ static void derive_tf_params(SequenceControlSet *scs) {
     if (do_tf == 0) {
         tf_level = 0;
     }
-    else if (enc_mode <= ENC_M1) {
+    else if (enc_mode <= ENC_M2) {
         tf_level = 1;
     }
-    else if (enc_mode <= ENC_M2) {
+    else if (enc_mode <= ENC_M3) {
         tf_level = 2;
+    }
+    else if (enc_mode <= ENC_M4) {
+        tf_level = 3;
     }
     else if (enc_mode <= ENC_M7) {
         tf_level = 5;
+    }
+    else if (enc_mode <= ENC_M8) {
+        tf_level = 8;
     } else {
         tf_level = 9;
     }
