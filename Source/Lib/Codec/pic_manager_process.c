@@ -673,7 +673,18 @@ void *svt_aom_picture_manager_kernel(void *input_ptr) {
             if (entry_ppcs->decode_order == context_ptr->consecutive_dec_order + 1) {
                 // Next expected picture arrived
                 context_ptr->consecutive_dec_order++;
-
+#if FIX_PIC_MGR_HANG
+                // If we update the consecutive_dec_order, then we should check all pictures in the pic_mgr_input_pic_list
+                // to see if they can be started. This is necessary to avoid a hang. Consider the case where picture B is
+                // stored in pic_mgr_input_pic_list in a spot after picture A. It is possible that picture B could be started
+                // before A and update the consecutive_dec_order. If there are no reference or input frames that occur
+                // after starting picture B (hence pic manager receives no inputs to re-check the loop) then picture A would
+                // never be started. This of course assumes picture B updates the consecutive_dec_order to some value that is
+                // required by picture A to start. An alternative solution to prevent the hang would be to order pic_mgr_input_pic_list
+                // based on decode order, in which case re-iterating through the list would not be necessary, as the previously
+                // described scenario could not happen.
+                input_list_idx = 0;
+#endif
                 // Consume consecutive values already waiting in the heap
                 while (*heap_n > 0 && heap_min(decode_order_heap, *heap_n) == context_ptr->consecutive_dec_order + 1) {
                     heap_pop_min(decode_order_heap, heap_n);
