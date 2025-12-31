@@ -807,7 +807,7 @@ typedef struct EbSvtAv1EncConfiguration {
      * @brief Min quant matrix flatness. Applicable when enable_qm is true.
      * Min value is 0.
      * Max value is 15.
-     * Default is 5 in SVT-AV1-HDR, mainline default is 8.
+     * Default is 6 in SVT-AV1-HDR, mainline default is 8.
      */
     uint8_t min_qm_level;
     /**

@@ -847,7 +847,7 @@ ConfigDescription config_entry_rc[] = {
      "GOP max bitrate (expressed as a percentage of the target rate), default is 2000 [0-10000]"},
 #if CONFIG_ENABLE_QUANT_MATRIX
     {ENABLE_QM_TOKEN, "Enable quantisation matrices, default is 1 [0-1]"},
-    {MIN_QM_LEVEL_TOKEN, "Min quant matrix flatness, default is 5 [0-15]"},
+    {MIN_QM_LEVEL_TOKEN, "Min quant matrix flatness, default is 6 [0-15]"},
     {MAX_QM_LEVEL_TOKEN, "Max quant matrix flatness, default is 10 [0-15]"},
     {MIN_CHROMA_QM_LEVEL_TOKEN, "Min chroma quant matrix flatness, default is 8 [0-15]"},
     {MAX_CHROMA_QM_LEVEL_TOKEN, "Max chroma quant matrix flatness, default is 15 [0-15]"},

@@ -175,7 +175,7 @@ SVT-AV1-HDR has different defaults than mainline SVT-AV1 in order to provide bet
 - Default 10-bit color depth when given a 10-bit input.
 - Disable film grain denoising by default, as it often harms visual fidelity. (**[Merged to Mainline](https://gitlab.com/AOMediaCodec/SVT-AV1/-/commit/8b39b41df9e07bbcdbd19ea618762c5db3353c03)**)
 - Enable quantization matrices by default.
-- Set minimum QM level to 5 by default for more consistent performance than min QM level 0 doesn't offer.
+- Set minimum QM level to 6 by default for more consistent performance than min QM level 0 doesn't offer.
 - Set minimum chroma QM level to 8 by default to prevent the encoder from picking suboptimal chroma QMs.
 - `--enable-variance-boost` enabled by default.
 - `--keyint -2` (the default) uses a ~10s GOP size instead of ~5s.
