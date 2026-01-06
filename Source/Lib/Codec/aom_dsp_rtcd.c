@@ -593,7 +593,7 @@ void svt_aom_setup_rtcd_internal(EbCpuFlags flags) {
 #if CONFIG_ENABLE_HIGH_BIT_DEPTH
     SET_NEON(svt_aom_highbd_quantize_b, svt_aom_highbd_quantize_b_c, svt_aom_highbd_quantize_b_neon);
 #endif
-    SET_NEON(svt_av1_quantize_b_qm, svt_aom_quantize_b_c, svt_aom_quantize_b_neon);
+    SET_ONLY_C(svt_av1_quantize_b_qm, svt_aom_quantize_b_c);
 #if CONFIG_ENABLE_HIGH_BIT_DEPTH
     SET_ONLY_C(svt_av1_highbd_quantize_b_qm, svt_aom_highbd_quantize_b_c);
 #endif
