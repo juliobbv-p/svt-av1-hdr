@@ -296,13 +296,24 @@ EbErrorType svt_av1_verify_settings(SequenceControlSet *scs) {
         return_error = EB_ErrorBadParameter;
     }
 
+#if FIX_FPS_CALC
+    if (scs->frame_rate > 300) {
+#else
+    if (scs->frame_rate > (300 << 16)) {
+#endif
+        SVT_WARN(
+            "Instance %u: Frame rate is greater than 300 fps. Output might not play back correctly with some "
+            "players that use hardware decoding.\n",
+            channel_number + 1);
+    }
+
     // Check if the current input video is conformant with the Level constraint
 #if FIX_FPS_CALC
-    if (scs->frame_rate > 240) {
+    if (scs->frame_rate > 480) {
 #else
-    if (scs->frame_rate > (240 << 16)) {
+    if (scs->frame_rate > (480 << 16)) {
 #endif
-        SVT_ERROR("Instance %u: The maximum allowed frame rate is 240 fps\n", channel_number + 1);
+        SVT_ERROR("Instance %u: The maximum allowed frame rate is 480 fps\n", channel_number + 1);
         return_error = EB_ErrorBadParameter;
     }
     // Check that the frame_rate is non-zero

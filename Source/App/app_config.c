@@ -1741,9 +1741,9 @@ static EbErrorType app_verify_config(EbConfig *app_cfg, uint32_t channel_number)
         return_error = EB_ErrorBadParameter;
     }
 
-    if (app_cfg->injector_frame_rate > 240 && app_cfg->injector) {
+    if (app_cfg->injector_frame_rate > 480 && app_cfg->injector) {
         fprintf(app_cfg->error_log_file,
-                "Error Instance %u: The maximum allowed injector_frame_rate is 240 fps\n",
+                "Error Instance %u: The maximum allowed injector_frame_rate is 480 fps\n",
                 channel_number + 1);
         return_error = EB_ErrorBadParameter;
     }
@@ -1760,9 +1760,9 @@ static EbErrorType app_verify_config(EbConfig *app_cfg, uint32_t channel_number)
                 "greater than 0\n",
                 channel_number + 1);
         return_error = EB_ErrorBadParameter;
-    } else if (app_cfg->config.frame_rate_numerator / app_cfg->config.frame_rate_denominator > 240) {
+    } else if (app_cfg->config.frame_rate_numerator / app_cfg->config.frame_rate_denominator > 480) {
         fprintf(app_cfg->error_log_file,
-                "Error Instance %u: The maximum allowed frame_rate is 240 fps\n",
+                "Error Instance %u: The maximum allowed frame_rate is 480 fps\n",
                 channel_number + 1);
         return_error = EB_ErrorBadParameter;
     }
