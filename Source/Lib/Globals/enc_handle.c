@@ -4561,6 +4561,9 @@ static void copy_api_from_app(SequenceControlSet* scs, EbSvtAv1EncConfiguration*
     // Noise adaptive filtering
     scs->static_config.noise_adaptive_filtering = config_struct->noise_adaptive_filtering;
 
+    // CDEF scaling
+    scs->static_config.cdef_scaling = config_struct->cdef_scaling;
+
     // Override settings for Still IQ tune
     if (scs->static_config.tune == TUNE_IQ) {
         SVT_WARN(
