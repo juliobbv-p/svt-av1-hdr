@@ -1102,6 +1102,13 @@ typedef struct EbSvtAv1EncConfiguration {
      */
      uint8_t noise_adaptive_filtering;
 
+     /* @brief Controls scaling of the CDEF strength computation
+      *  1: minimum CDEF scaling
+      *  8: ~0.5x CDEF scaling
+      *  30: 2x CDEF scaling
+      *  Default is 15 (1x scaling). */
+     uint8_t cdef_scaling;
+
     /*Add 128 Byte Padding to Struct to avoid changing the size of the public configuration struct*/
     uint8_t padding[128 - (sizeof(uint8_t) * 5)
         - (sizeof(bool) * 2)
@@ -1114,7 +1121,7 @@ typedef struct EbSvtAv1EncConfiguration {
         - sizeof(int8_t)
 #endif // FTR_SFRAME_QP
         /* SVT-AV1-HDR additions */
-        - (sizeof(uint8_t) * 7)
+        - (sizeof(uint8_t) * 8)
         - (sizeof(bool) * 2)
         - (sizeof(double)) + (sizeof(uint8_t)) // qp_scale_compress_strength uint8_t -> double
     ];

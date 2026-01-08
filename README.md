@@ -50,6 +50,10 @@ An opinionated tune optimized for film grain retention and temporal consistency.
 
 Tune 4 is equivalent to setting these parameters: `--tune 0 --enable-tf 0 --enable-restoration 0 --enable-cdef 0 --complex-hvs 1 --tx-bias 1 --ac-bias 4.00`.
 
+- `--cdef-scaling` *1 (0.06x) to 30 (2x)*
+
+Controls how 'strongly' the CDEF (Constrained Directional Enhancement Filter) is applied to the output. Lower values make output sharper, at the expense of ringing artifacts. Higher values make output smoother, with fewer ringing artifacts.
+
 ### From SVT-AV1-PSY
 
 - `--variance-boost-strength` *1 to 4* (**[Merged to Mainline](https://gitlab.com/AOMediaCodec/SVT-AV1/-/merge_requests/2195)**)

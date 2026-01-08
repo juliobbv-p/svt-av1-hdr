@@ -228,6 +228,7 @@
 #define TX_BIAS_TOKEN "--tx-bias"
 #define COMPLEX_HVS_TOKEN "--complex-hvs"
 #define NOISE_ADAPTIVE_FILTERING_TOKEN "--noise-adaptive-filtering"
+#define CDEF_SCALING_TOKEN "--cdef-scaling"
 
 static EbErrorType validate_error(EbErrorType err, const char *token, const char *value) {
     switch (err) {
@@ -1063,6 +1064,8 @@ ConfigDescription config_entry_psychovisual[] = {
     {NOISE_ADAPTIVE_FILTERING_TOKEN,
      "Control noise detection for CDEF/restoration filtering, default is 2 [0: off, 1: both CDEF and restoration are "
      "on 2: default tune behavior, 3: CDEF only, 4: restoration only)]"},
+    {CDEF_SCALING_TOKEN,
+     "Controls scaling of the CDEF strength computation, default is 15 (1x scaling) [1: minimum, 8: ~0.5x, 30: 2x]"},
     // Termination
     {NULL, NULL}};
 
@@ -1315,6 +1318,9 @@ ConfigEntry config_entry[] = {
 
     // Noise adaptive filtering
     {NOISE_ADAPTIVE_FILTERING_TOKEN, "NoiseAdaptiveFiltering", set_cfg_generic_token},
+
+    // CDEF scaling
+    {CDEF_SCALING_TOKEN, "CDEFScaling", set_cfg_generic_token},
 
     // Termination
     {NULL, NULL, NULL}};
