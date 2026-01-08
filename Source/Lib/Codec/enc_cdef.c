@@ -900,6 +900,35 @@ void finish_cdef_search(PictureControlSet *pcs) {
     for (i = 0; i < ppcs->nb_cdef_strengths; i++) {
         frm_hdr->cdef_params.cdef_y_strength[i]  = filter_map[frm_hdr->cdef_params.cdef_y_strength[i]];
         frm_hdr->cdef_params.cdef_uv_strength[i] = filter_map[frm_hdr->cdef_params.cdef_uv_strength[i]];
+
+        // Scale CDEF luma and chroma primary and secondary strengths
+        if (ppcs->scs->static_config.cdef_scaling != 15) {
+            uint8_t pri_y_strength  = frm_hdr->cdef_params.cdef_y_strength[i] / CDEF_SEC_STRENGTHS;
+            uint8_t sec_y_strength  = frm_hdr->cdef_params.cdef_y_strength[i] % CDEF_SEC_STRENGTHS;
+            uint8_t pri_uv_strength = frm_hdr->cdef_params.cdef_uv_strength[i] / CDEF_SEC_STRENGTHS;
+            uint8_t sec_uv_strength = frm_hdr->cdef_params.cdef_uv_strength[i] % CDEF_SEC_STRENGTHS;
+
+            // Secondary strengths take values in {0, 1, 2, 4}. If sec_strength are equal to 3 from the step above, change them to 4
+            sec_y_strength += sec_y_strength == 3;
+            sec_uv_strength += sec_uv_strength == 3;
+
+            pri_y_strength  = (pri_y_strength * ppcs->scs->static_config.cdef_scaling + 7) / 15;
+            sec_y_strength  = (sec_y_strength * ppcs->scs->static_config.cdef_scaling + 7) / 15;
+            pri_uv_strength = (pri_uv_strength * ppcs->scs->static_config.cdef_scaling + 7) / 15;
+            sec_uv_strength = (sec_uv_strength * ppcs->scs->static_config.cdef_scaling + 7) / 15;
+
+            // Map strength value of 3 to 2
+            sec_y_strength -= sec_y_strength == 3;
+            sec_uv_strength -= sec_uv_strength == 3;
+
+            pri_y_strength  = AOMMIN(pri_y_strength, CDEF_PRI_STRENGTHS - 1);
+            sec_y_strength  = AOMMIN(sec_y_strength, CDEF_SEC_STRENGTHS - 1);
+            pri_uv_strength = AOMMIN(pri_uv_strength, CDEF_PRI_STRENGTHS - 1);
+            sec_uv_strength = AOMMIN(sec_uv_strength, CDEF_SEC_STRENGTHS - 1);
+
+            frm_hdr->cdef_params.cdef_y_strength[i]  = pri_y_strength * CDEF_SEC_STRENGTHS + sec_y_strength;
+            frm_hdr->cdef_params.cdef_uv_strength[i] = pri_uv_strength * CDEF_SEC_STRENGTHS + sec_uv_strength;
+        }
     }
     //cdef_pri_damping & cdef_sec_damping consolidated to cdef_damping
     frm_hdr->cdef_params.cdef_damping = 3 + (frm_hdr->quantization_params.base_q_idx >> 6);
