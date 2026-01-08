@@ -1047,6 +1047,13 @@ typedef struct EbSvtAv1EncConfiguration {
      */
      uint8_t noise_adaptive_filtering;
 
+     /* @brief Controls scaling of the CDEF strength computation
+      *  1: minimum CDEF scaling
+      *  8: ~0.5x CDEF scaling
+      *  30: 2x CDEF scaling
+      *  Default is 15 (1x scaling). */
+     uint8_t cdef_scaling;
+
     /*Add 128 Byte Padding to Struct to avoid changing the size of the public configuration struct*/
     uint8_t padding[128
     ];
