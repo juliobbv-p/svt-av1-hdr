@@ -553,7 +553,13 @@ static void av1_lambda_assign_md(PictureControlSet *pcs, ModeDecisionContext *ct
 
     if (!pcs->scs->static_config.rtc && pcs->scs->stats_based_sb_lambda_modulation) {
         if (pcs->temporal_layer_index > 0) {
-            if (pcs->ref_intra_percentage < LAMBDA_MOD_INTRA_TH) {
+            //Alternate LAMBDA_MOD_INTRA_TH to revert the change that was added
+            //in svt-av1 >=3.0.0 and improve low light performance a bit.
+            //Otherwise, use the standard LAMBDA_MOD_INTRA_TH
+            const int lambda_mod_intra_threshold = pcs->scs->static_config.alt_lambda_factors ? 65
+                                                                                              : LAMBDA_MOD_INTRA_TH;
+
+            if (pcs->ref_intra_percentage < lambda_mod_intra_threshold) {
                 ctx->full_lambda_md[0] = (ctx->full_lambda_md[0] * LAMBDA_MOD_INTRA_SCALING_FACTOR) >> 7;
                 ctx->fast_lambda_md[0] = (ctx->fast_lambda_md[0] * LAMBDA_MOD_INTRA_SCALING_FACTOR) >> 7;
                 ctx->full_lambda_md[1] = (ctx->full_lambda_md[1] * LAMBDA_MOD_INTRA_SCALING_FACTOR) >> 7;
