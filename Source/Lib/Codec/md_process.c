@@ -554,29 +554,22 @@ static void av1_lambda_assign_md(PictureControlSet *pcs, ModeDecisionContext *ct
     ctx->full_lambda_md[1] = (uint32_t)svt_aom_compute_rd_mult(pcs, ctx->qp_index, ctx->me_q_index, 10);
     ctx->fast_lambda_md[1] = (uint32_t)svt_aom_compute_fast_lambda(pcs, ctx->qp_index, ctx->me_q_index, 10);
 
-    //Alternate LAMBDA_MOD_INTRA_TH to revert the change that was added
-    //in svt-av1 >=3.0.0 and improve low light performance a bit
-    const int alt_lambda_mod_intra_threshold == 65;
-
     if (!pcs->scs->static_config.rtc && pcs->scs->stats_based_sb_lambda_modulation) {
         if (pcs->temporal_layer_index > 0) {
-            if (pcs->scs->static_config.alt_lambda_factors) {
-            //Use the alt_lambda_mod_intra_threshold to reproduce svt-av1-psy 2.3.0-C behavior
-                if (pcs->ref_intra_percentage < alt_lambda_mod_intra_threshold) {
+            //Alternate LAMBDA_MOD_INTRA_TH to revert the change that was added
+            //in svt-av1 >=3.0.0 and improve low light performance a bit.
+            //Otherwise, use the standard LAMBDA_MOD_INTRA_TH
+            const int lambda_mod_intra_threshold =
+                pcs->scs->static_config.alt_lambda_factors ? 65 : LAMBDA_MOD_INTRA_TH;
+
+            if (pcs->ref_intra_percentage < lambda_mod_intra_threshold) {
                 ctx->full_lambda_md[0] = (ctx->full_lambda_md[0] * LAMBDA_MOD_INTRA_SCALING_FACTOR) >> 7;
                 ctx->fast_lambda_md[0] = (ctx->fast_lambda_md[0] * LAMBDA_MOD_INTRA_SCALING_FACTOR) >> 7;
                 ctx->full_lambda_md[1] = (ctx->full_lambda_md[1] * LAMBDA_MOD_INTRA_SCALING_FACTOR) >> 7;
                 ctx->fast_lambda_md[1] = (ctx->fast_lambda_md[1] * LAMBDA_MOD_INTRA_SCALING_FACTOR) >> 7;
-                }
-            } else if (pcs->ref_intra_percentage < LAMBDA_MOD_INTRA_TH) {
-            //Original conditional: Use the standard LAMBDA_MOD_INTRA_TH
-            ctx->full_lambda_md[0] = (ctx->full_lambda_md[0] * LAMBDA_MOD_INTRA_SCALING_FACTOR) >> 7;
-            ctx->fast_lambda_md[0] = (ctx->fast_lambda_md[0] * LAMBDA_MOD_INTRA_SCALING_FACTOR) >> 7;
-            ctx->full_lambda_md[1] = (ctx->full_lambda_md[1] * LAMBDA_MOD_INTRA_SCALING_FACTOR) >> 7;
-            ctx->fast_lambda_md[1] = (ctx->fast_lambda_md[1] * LAMBDA_MOD_INTRA_SCALING_FACTOR) >> 7;
+            }
         }
     }
-}
 
     if (pcs->lambda_weight) {
         ctx->full_lambda_md[0] = (uint32_t)((ctx->full_lambda_md[0] * (uint64_t)pcs->lambda_weight) >> 7);
