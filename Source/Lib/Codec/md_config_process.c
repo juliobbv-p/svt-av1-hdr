@@ -191,6 +191,15 @@ static INLINE int aom_get_qmlevel(int qindex, int first, int last) {
     return CLIP3(first, last, first + (qindex * (last + 1 - first)) / QINDEX_RANGE);
 }
 
+// PSYEX addition: Utilize a sigmoidal curve to adjust the rate of change of qmlevel across qindexes.
+static INLINE double sigmoid_qm_func(int qindex) {
+    return 2 / (1 + exp(0.01 * qindex));
+}
+static INLINE int psy_get_qmlevel(int qindex, int first, int last) {
+    // mapping qindex(0, 255) to QM level(first, last), temporary(?) fix to avoid crash using CLIP3.
+    return CLIP3(first, last, (int)rint(first + (pow((double)(qindex), sigmoid_qm_func(qindex)) * (last + 1 - first)) / pow(QINDEX_RANGE, sigmoid_qm_func(qindex))));
+}
+
 // Polynomial to determine QM levels tuned for still images
 static INLINE int svt_av1_still_get_qmlevel(int qindex, int min, int max) {
     // Polynomial coefficients
@@ -275,6 +284,20 @@ static void svt_av1_qm_init(PictureParentControlSet *pcs) {
                 min_chroma_qmlevel,
                 max_chroma_qmlevel);
             break;
+        case TUNE_VQ:
+            //psy_get_qmlevel has been tuned on varied video content, including live action and some anime clips
+            //at mid to high fidelity or quality targets
+            pcs->frm_hdr.quantization_params.qm[AOM_PLANE_Y] = psy_get_qmlevel(
+                base_qindex, min_qmlevel, max_qmlevel);
+            pcs->frm_hdr.quantization_params.qm[AOM_PLANE_U] = psy_get_qmlevel
+            (base_qindex + pcs->frm_hdr.quantization_params.delta_q_ac[AOM_PLANE_U],
+                min_chroma_qmlevel,
+                max_chroma_qmlevel);
+            pcs->frm_hdr.quantization_params.qm[AOM_PLANE_V] = psy_get_qmlevel(
+                base_qindex + pcs->frm_hdr.quantization_params.delta_q_ac[AOM_PLANE_V],
+                min_chroma_qmlevel,
+                max_chroma_qmlevel);
+                break;
         default:
             pcs->frm_hdr.quantization_params.qm[AOM_PLANE_Y] = aom_get_qmlevel(base_qindex, min_qmlevel, max_qmlevel);
             pcs->frm_hdr.quantization_params.qm[AOM_PLANE_U] = aom_get_qmlevel(
