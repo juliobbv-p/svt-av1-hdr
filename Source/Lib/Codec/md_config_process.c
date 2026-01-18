@@ -298,6 +298,24 @@ static void svt_av1_qm_init(PictureParentControlSet *pcs) {
                 min_chroma_qmlevel,
                 max_chroma_qmlevel);
                 break;
+        //This condition is special, as it only gets enabled when both TUNE_SSIM
+        //and alt_ssim_tuning are active. A good workaround to get tune VQSSIM behavior
+        case TUNE_SSIM:
+            if (pcs->scs->static_config.alt_ssim_tuning) {
+                // Use Psy QM levels only for the alt SSIM tune when alt_ssim_tuning is enabled
+                pcs->frm_hdr.quantization_params.qm[AOM_PLANE_Y] = psy_get_qmlevel(
+                    base_qindex, min_qmlevel, max_qmlevel);
+                pcs->frm_hdr.quantization_params.qm[AOM_PLANE_U] = psy_get_qmlevel(
+                    base_qindex + pcs->frm_hdr.quantization_params.delta_q_ac[AOM_PLANE_U],
+                    min_chroma_qmlevel,
+                    max_chroma_qmlevel);
+                pcs->frm_hdr.quantization_params.qm[AOM_PLANE_V] = psy_get_qmlevel(
+                    base_qindex + pcs->frm_hdr.quantization_params.delta_q_ac[AOM_PLANE_V],
+                    min_chroma_qmlevel,
+                    max_chroma_qmlevel);
+                break;
+            }
+        //Otherwise, if everything else fails, we just go to defaults
         default:
             pcs->frm_hdr.quantization_params.qm[AOM_PLANE_Y] = aom_get_qmlevel(base_qindex, min_qmlevel, max_qmlevel);
             pcs->frm_hdr.quantization_params.qm[AOM_PLANE_U] = aom_get_qmlevel(
