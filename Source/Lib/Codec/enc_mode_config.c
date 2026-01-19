@@ -7477,11 +7477,11 @@ void svt_aom_sig_deriv_mode_decision_config(SequenceControlSet *scs, PictureCont
         if (enc_mode <= ENC_MR) {
             pcs->txt_level = is_base ? 2 : 3;
         } else if (enc_mode <= ENC_M1) {
-            pcs->txt_level = is_base ? 2 : 5;
+            pcs->txt_level = is_base ? 2 : 4;
         } else if (enc_mode <= ENC_M2) {
-            pcs->txt_level = is_base ? 3 : 8;
+            pcs->txt_level = is_base ? 2 : 5;
         } else if (enc_mode <= ENC_M3) {
-            pcs->txt_level = is_base ? 5 : 8;
+            pcs->txt_level = is_base ? 5 : 7;
         } else if (enc_mode <= ENC_M8) {
             pcs->txt_level = is_base ? 7 : 9;
         } else {
@@ -7623,7 +7623,7 @@ void svt_aom_sig_deriv_mode_decision_config(SequenceControlSet *scs, PictureCont
         }
     } else if (enc_mode <= ENC_M2) {
         pcs->txs_level = 2;
-    } else if (enc_mode <= ENC_M2) {
+    } else if (enc_mode <= ENC_M3) {
         pcs->txs_level = is_not_last_layer ? 3 : 0;
     } else if (enc_mode <= ENC_M7) {
         pcs->txs_level = is_base ? 3 : 0;
