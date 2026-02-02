@@ -1659,7 +1659,7 @@ EB_EXTERN void svt_aom_encode_decode(SequenceControlSet *scs, PictureControlSet 
     uint32_t blk_it = 0;
     while (blk_it < scs->max_block_cnt) {
         BlkStruct       *blk_ptr = ctx->blk_ptr = md_ctx->blk_ptr = &md_ctx->md_blk_arr_nsq[blk_it];
-        const BlockGeom *blk_geom = ctx->blk_geom = md_ctx->blk_geom = get_blk_geom_mds(blk_it);
+        const BlockGeom *blk_geom = ctx->blk_geom = md_ctx->blk_geom = get_blk_geom_mds(scs->blk_geom_mds, blk_it);
 
         //At the boundary when it's not a complete super block.
         //We may only use part of the blocks in MD.
@@ -1683,7 +1683,7 @@ EB_EXTERN void svt_aom_encode_decode(SequenceControlSet *scs, PictureControlSet 
                 assert(d1_itr == (d1_start_blk + num_d1_block - 1));
                 continue;
             }
-            blk_geom = ctx->blk_geom = md_ctx->blk_geom = get_blk_geom_mds(d1_itr);
+            blk_geom = ctx->blk_geom = md_ctx->blk_geom = get_blk_geom_mds(scs->blk_geom_mds, d1_itr);
             blk_ptr = ctx->blk_ptr = md_ctx->blk_ptr = &md_ctx->md_blk_arr_nsq[d1_itr];
 
             // PU Stack variables
@@ -1788,7 +1788,7 @@ EB_EXTERN EbErrorType svt_aom_encdec_update(SequenceControlSet *scs, PictureCont
         sb_ptr->cu_partition_array[blk_it] = md_ctx->md_blk_arr_nsq[blk_it].part;
 
         BlkStruct       *blk_ptr = ctx->blk_ptr = md_ctx->blk_ptr = &md_ctx->md_blk_arr_nsq[blk_it];
-        const BlockGeom *blk_geom = ctx->blk_geom = md_ctx->blk_geom = get_blk_geom_mds(blk_it);
+        const BlockGeom *blk_geom = ctx->blk_geom = md_ctx->blk_geom = get_blk_geom_mds(scs->blk_geom_mds, blk_it);
 
         //At the boundary when it's not a complete super block.
         //We may only use part of the blocks in MD.
@@ -1824,7 +1824,7 @@ EB_EXTERN EbErrorType svt_aom_encdec_update(SequenceControlSet *scs, PictureCont
                 assert(d1_itr == (d1_start_blk + num_d1_block - 1));
                 continue;
             }
-            blk_geom = ctx->blk_geom = md_ctx->blk_geom = get_blk_geom_mds(d1_itr);
+            blk_geom = ctx->blk_geom = md_ctx->blk_geom = get_blk_geom_mds(scs->blk_geom_mds, d1_itr);
             blk_ptr = ctx->blk_ptr = md_ctx->blk_ptr = &md_ctx->md_blk_arr_nsq[d1_itr];
 
             ctx->blk_org_x = (uint16_t)(sb_org_x + blk_geom->org_x);

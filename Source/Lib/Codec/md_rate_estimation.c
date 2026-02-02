@@ -648,10 +648,10 @@ static AOM_INLINE void update_inter_mode_stats(FRAME_CONTEXT *fc, PredictionMode
 /*******************************************************************************
  * Updates all the palette stats/CDF for the current block
  ******************************************************************************/
-static AOM_INLINE void update_palette_cdf(MacroBlockD *xd, const MbModeInfo *const mbmi, BlkStruct *blk_ptr,
-                                          const int mi_row, const int mi_col) {
+static AOM_INLINE void update_palette_cdf(SequenceControlSet *scs, MacroBlockD *xd, const MbModeInfo *const mbmi,
+                                          BlkStruct *blk_ptr, const int mi_row, const int mi_col) {
     FRAME_CONTEXT   *fc                = xd->tile_ctx;
-    const BlockGeom *blk_geom          = get_blk_geom_mds(blk_ptr->mds_idx);
+    const BlockGeom *blk_geom          = get_blk_geom_mds(scs->blk_geom_mds, blk_ptr->mds_idx);
     const BlockSize  bsize             = blk_geom->bsize;
     const int        palette_bsize_ctx = svt_aom_get_palette_bsize_ctx(bsize);
 
@@ -684,7 +684,7 @@ static AOM_INLINE void sum_intra_stats(PictureControlSet *pcs, BlkStruct *blk_pt
     const MbModeInfo *const mbmi     = xd->mi[0];
     FRAME_CONTEXT          *fc       = xd->tile_ctx;
     const PredictionMode    y_mode   = mbmi->block_mi.mode;
-    const BlockGeom        *blk_geom = get_blk_geom_mds(blk_ptr->mds_idx);
+    const BlockGeom        *blk_geom = get_blk_geom_mds(pcs->scs->blk_geom_mds, blk_ptr->mds_idx);
     const BlockSize         bsize    = mbmi->bsize;
     assert(bsize < BlockSizeS_ALL);
     assert(y_mode < 13);
@@ -737,7 +737,7 @@ static AOM_INLINE void sum_intra_stats(PictureControlSet *pcs, BlkStruct *blk_pt
                    2 * MAX_ANGLE_DELTA + 1);
     }
     if (svt_aom_allow_palette(pcs->ppcs->frm_hdr.allow_screen_content_tools, bsize)) {
-        update_palette_cdf(xd, mbmi, blk_ptr, mi_row, mi_col);
+        update_palette_cdf(pcs->scs, xd, mbmi, blk_ptr, mi_row, mi_col);
     }
 }
 /*******************************************************************************
@@ -749,7 +749,7 @@ void svt_aom_update_stats(PictureControlSet *pcs, BlkStruct *blk_ptr, int mi_row
     MacroBlockD            *xd      = blk_ptr->av1xd;
     const MbModeInfo *const mbmi    = xd->mi[0];
 
-    const BlockGeom *blk_geom = get_blk_geom_mds(blk_ptr->mds_idx);
+    const BlockGeom *blk_geom = get_blk_geom_mds(pcs->scs->blk_geom_mds, blk_ptr->mds_idx);
     BlockSize        bsize    = blk_geom->bsize;
     assert(bsize < BlockSizeS_ALL);
     FRAME_CONTEXT *fc             = xd->tile_ctx;
@@ -964,7 +964,7 @@ void svt_aom_update_stats(PictureControlSet *pcs, BlkStruct *blk_ptr, int mi_row
 void svt_aom_update_part_stats(PictureControlSet *pcs, BlkStruct *blk_ptr, uint16_t tile_idx, int mi_row, int mi_col) {
     const AV1_COMMON *const cm       = pcs->ppcs->av1_cm;
     MacroBlockD            *xd       = blk_ptr->av1xd;
-    const BlockGeom        *blk_geom = get_blk_geom_mds(blk_ptr->mds_idx);
+    const BlockGeom        *blk_geom = get_blk_geom_mds(pcs->scs->blk_geom_mds, blk_ptr->mds_idx);
     BlockSize               bsize    = blk_geom->bsize;
     FRAME_CONTEXT          *fc       = xd->tile_ctx;
     assert(bsize < BlockSizeS_ALL);

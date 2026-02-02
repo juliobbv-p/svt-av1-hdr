@@ -2611,6 +2611,7 @@ uint64_t svt_aom_d1_non_square_block_decision(PictureControlSet *pcs, ModeDecisi
 static void compute_depth_costs(ModeDecisionContext *ctx, PictureParentControlSet *pcs, uint32_t curr_depth_mds,
                                 uint32_t above_depth_mds, uint32_t step, uint64_t *above_depth_cost,
                                 uint64_t *curr_depth_cost) {
+    SequenceControlSet *scs = pcs->scs;
     /*
     ___________
     |     |     |
@@ -2629,16 +2630,16 @@ static void compute_depth_costs(ModeDecisionContext *ctx, PictureParentControlSe
     * anyway (as they are completely outside the picture).  If the block does have area inside the picture, it will have
     * a cost, and if the cost is not valid, that partition scheme cannot be selected.
     */
-    const BlockGeom *curr_blk_geom = get_blk_geom_mds(curr_depth_blk0_mds);
+    const BlockGeom *curr_blk_geom = get_blk_geom_mds(scs->blk_geom_mds, curr_depth_blk0_mds);
     const bool blk0_within_pic     = (pcs->sb_geom[ctx->sb_index].org_x + curr_blk_geom->org_x < pcs->aligned_width) &&
         (pcs->sb_geom[ctx->sb_index].org_y + curr_blk_geom->org_y < pcs->aligned_height);
-    curr_blk_geom              = get_blk_geom_mds(curr_depth_blk1_mds);
+    curr_blk_geom              = get_blk_geom_mds(scs->blk_geom_mds, curr_depth_blk1_mds);
     const bool blk1_within_pic = (pcs->sb_geom[ctx->sb_index].org_x + curr_blk_geom->org_x < pcs->aligned_width) &&
         (pcs->sb_geom[ctx->sb_index].org_y + curr_blk_geom->org_y < pcs->aligned_height);
-    curr_blk_geom              = get_blk_geom_mds(curr_depth_blk2_mds);
+    curr_blk_geom              = get_blk_geom_mds(scs->blk_geom_mds, curr_depth_blk2_mds);
     const bool blk2_within_pic = (pcs->sb_geom[ctx->sb_index].org_x + curr_blk_geom->org_x < pcs->aligned_width) &&
         (pcs->sb_geom[ctx->sb_index].org_y + curr_blk_geom->org_y < pcs->aligned_height);
-    curr_blk_geom              = get_blk_geom_mds(curr_depth_blk3_mds);
+    curr_blk_geom              = get_blk_geom_mds(scs->blk_geom_mds, curr_depth_blk3_mds);
     const bool blk3_within_pic = (pcs->sb_geom[ctx->sb_index].org_x + curr_blk_geom->org_x < pcs->aligned_width) &&
         (pcs->sb_geom[ctx->sb_index].org_y + curr_blk_geom->org_y < pcs->aligned_height);
 
@@ -2691,7 +2692,7 @@ uint32_t svt_aom_d2_inter_depth_block_decision(PictureControlSet *pcs, ModeDecis
     uint64_t         parent_depth_cost = 0, current_depth_cost = 0;
     bool             last_depth_flag = (ctx->md_blk_arr_nsq[blk_mds].split_flag == false);
     uint32_t         last_blk_index = blk_mds, current_depth_idx_mds = blk_mds;
-    const BlockGeom *blk_geom = get_blk_geom_mds(blk_mds);
+    const BlockGeom *blk_geom = get_blk_geom_mds(pcs->scs->blk_geom_mds, blk_mds);
     if (last_depth_flag) {
         while (blk_geom->is_last_quadrant) {
             //get parent idx
@@ -2726,7 +2727,7 @@ uint32_t svt_aom_d2_inter_depth_block_decision(PictureControlSet *pcs, ModeDecis
             }
 
             //setup next parent inter depth
-            blk_geom              = get_blk_geom_mds(parent_depth_idx_mds);
+            blk_geom              = get_blk_geom_mds(pcs->scs->blk_geom_mds, parent_depth_idx_mds);
             current_depth_idx_mds = parent_depth_idx_mds;
         }
     }

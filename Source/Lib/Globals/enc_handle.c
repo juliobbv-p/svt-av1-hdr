@@ -69,7 +69,6 @@
 #include <windows.h>
 #else
 #include <errno.h>
-#include <pthread.h>
 #include <unistd.h>
 #endif
 
@@ -1249,14 +1248,16 @@ EB_API EbErrorType svt_av1_enc_init(EbComponentType *svt_enc_component)
 
     svt_aom_init_intra_predictors_internal();
 #ifdef MINIMAL_BUILD
-    if (svt_aom_blk_geom_mds == NULL) {
-        // NOTE: this must be re-allocated if configuration changes!
-        int max_block_count = scs->max_block_cnt;
-        svt_aom_blk_geom_mds = svt_aom_malloc(max_block_count * sizeof(svt_aom_blk_geom_mds[0]));
-        svt_aom_build_blk_geom(scs->svt_aom_geom_idx);
+    // Per-instance block geometry table allocation
+    scs->blk_geom_mds = svt_aom_malloc(scs->max_block_cnt * sizeof(scs->blk_geom_mds[0]));
+    if (scs->blk_geom_mds == NULL) {
+        return EB_ErrorInsufficientResources;
     }
+    svt_aom_build_blk_geom(scs->svt_aom_geom_idx, scs->blk_geom_mds);
 #else
-    svt_aom_build_blk_geom(scs->svt_aom_geom_idx);
+    // Point to global static array
+    scs->blk_geom_mds = svt_aom_blk_geom_mds;
+    svt_aom_build_blk_geom(scs->svt_aom_geom_idx, scs->blk_geom_mds);
 #endif
 
     svt_av1_init_me_luts();
@@ -2094,9 +2095,10 @@ EB_API EbErrorType svt_av1_enc_deinit(EbComponentType *svt_enc_component) {
             return return_error;
     }
 #ifdef MINIMAL_BUILD
-    if (svt_aom_blk_geom_mds != NULL) {
-        svt_aom_free(svt_aom_blk_geom_mds);
-        svt_aom_blk_geom_mds = NULL;
+    // Free per-instance block geometry table
+    if (handle->scs_instance && handle->scs_instance->scs && handle->scs_instance->scs->blk_geom_mds != NULL) {
+        svt_aom_free(handle->scs_instance->scs->blk_geom_mds);
+        handle->scs_instance->scs->blk_geom_mds = NULL;
     }
 #endif
     svt_shutdown_process(handle->input_buffer_resource_ptr);

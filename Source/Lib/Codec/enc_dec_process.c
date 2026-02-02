@@ -1368,23 +1368,30 @@ static void copy_neighbour_arrays_light_pd0(PictureControlSet *pcs, ModeDecision
 }
 void svt_aom_copy_neighbour_arrays(PictureControlSet *pcs, ModeDecisionContext *ctx, uint32_t src_idx, uint32_t dst_idx,
                                    uint32_t blk_mds);
-static void set_parent_to_be_considered(ModeDecisionContext *ctx, MdcSbData *results_ptr, uint32_t blk_index,
-                                        int32_t sb_size, int8_t pred_depth, uint8_t pred_sq_idx, int8_t depth_step,
-                                        const uint8_t disallow_nsq) {
-    const BlockGeom *blk_geom = get_blk_geom_mds(blk_index);
+static void set_parent_to_be_considered(const BlockGeom *blk_geom_mds, ModeDecisionContext *ctx, MdcSbData *results_ptr,
+                                        uint32_t blk_index, int32_t sb_size, int8_t pred_depth, uint8_t pred_sq_idx,
+                                        int8_t depth_step, const uint8_t disallow_nsq) {
+    const BlockGeom *blk_geom = get_blk_geom_mds(blk_geom_mds, blk_index);
     if (blk_geom->sq_size < ((sb_size == BLOCK_128X128) ? 128 : 64)) {
         //Set parent to be considered
         uint32_t parent_depth_idx_mds                     = blk_geom->parent_depth_idx_mds;
         results_ptr->consider_block[parent_depth_idx_mds] = 1;
         if (depth_step < -1)
-            set_parent_to_be_considered(
-                ctx, results_ptr, parent_depth_idx_mds, sb_size, pred_depth, pred_sq_idx, depth_step + 1, disallow_nsq);
+            set_parent_to_be_considered(blk_geom_mds,
+                                        ctx,
+                                        results_ptr,
+                                        parent_depth_idx_mds,
+                                        sb_size,
+                                        pred_depth,
+                                        pred_sq_idx,
+                                        depth_step + 1,
+                                        disallow_nsq);
     }
 }
 static void set_child_to_be_considered(PictureControlSet *pcs, ModeDecisionContext *ctx, MdcSbData *results_ptr,
                                        uint32_t blk_index, uint32_t sb_index, int32_t sb_size, int8_t pred_depth,
                                        uint8_t pred_sq_idx, int8_t depth_step, const uint8_t disallow_nsq) {
-    const BlockGeom *blk_geom = get_blk_geom_mds(blk_index);
+    const BlockGeom *blk_geom = get_blk_geom_mds(pcs->scs->blk_geom_mds, blk_index);
     if (blk_geom->sq_size <= 4 || // 4x4 blocks have no children
         (blk_geom->sq_size == 8 && ctx->disallow_4x4) || (blk_geom->sq_size == 16 && ctx->disallow_8x8))
         return;
@@ -1529,7 +1536,7 @@ static void build_cand_block_array(SequenceControlSet *scs, PictureControlSet *p
     // Safety check: Restrict min sq size so mode decision can always find at least one valid partition scheme
     min_sq_size = MIN(min_sq_size, scs->static_config.max_tx_size);
     while (blk_index < max_block_cnt) {
-        const BlockGeom *blk_geom = get_blk_geom_mds(blk_index);
+        const BlockGeom *blk_geom = get_blk_geom_mds(scs->blk_geom_mds, blk_index);
 
         assert(min_sq_size <= max_sq_size);
 
@@ -1808,7 +1815,7 @@ static void get_max_min_pd0_depths(SequenceControlSet *scs, PictureControlSet *p
     uint16_t min_pd0_size = 255;
     uint32_t blk_index    = 0;
     while (blk_index < scs->max_block_cnt) {
-        const BlockGeom *blk_geom = get_blk_geom_mds(blk_index);
+        const BlockGeom *blk_geom = get_blk_geom_mds(scs->blk_geom_mds, blk_index);
         // if the parent square is inside inject this block
         const uint8_t is_blk_allowed = pcs->slice_type != I_SLICE ? 1 : (blk_geom->sq_size < 128) ? 1 : 0;
 
@@ -1844,7 +1851,7 @@ static void perform_pred_depth_refinement(SequenceControlSet *scs, PictureContro
             memset(results_ptr->refined_split_flag, 1, sizeof(uint8_t) * scs->max_block_cnt);
         } else {
             while (blk_index < scs->max_block_cnt) {
-                const BlockGeom *blk_geom = get_blk_geom_mds(blk_index);
+                const BlockGeom *blk_geom = get_blk_geom_mds(scs->blk_geom_mds, blk_index);
 
                 bool split_flag                            = blk_geom->sq_size > 4 ? true : false;
                 results_ptr->consider_block[blk_index]     = 0;
@@ -1855,7 +1862,7 @@ static void perform_pred_depth_refinement(SequenceControlSet *scs, PictureContro
     } else {
         // Reset mdc_sb_array data to defaults; it will be updated based on the predicted blocks (stored in md_blk_arr_nsq)
         while (blk_index < scs->max_block_cnt) {
-            const BlockGeom *blk_geom                  = get_blk_geom_mds(blk_index);
+            const BlockGeom *blk_geom                  = get_blk_geom_mds(scs->blk_geom_mds, blk_index);
             results_ptr->consider_block[blk_index]     = 0;
             results_ptr->refined_split_flag[blk_index] = blk_geom->sq_size > 4 ? true : false;
             blk_index++;
@@ -1872,7 +1879,7 @@ static void perform_pred_depth_refinement(SequenceControlSet *scs, PictureContro
     bool pred_depth_only    = 1;
 
     while (blk_index < scs->max_block_cnt) {
-        const BlockGeom *blk_geom = get_blk_geom_mds(blk_index);
+        const BlockGeom *blk_geom = get_blk_geom_mds(scs->blk_geom_mds, blk_index);
         ctx->blk_ptr              = &ctx->md_blk_arr_nsq[blk_index];
 
         // if the parent square is inside inject this block
@@ -2011,7 +2018,8 @@ static void perform_pred_depth_refinement(SequenceControlSet *scs, PictureContro
                             pred_depth_only = 0;
 
                         if (s_depth != 0 && add_parent_depth)
-                            set_parent_to_be_considered(ctx,
+                            set_parent_to_be_considered(scs->blk_geom_mds,
+                                                        ctx,
                                                         results_ptr,
                                                         blk_index,
                                                         scs->seq_header.sb_size,

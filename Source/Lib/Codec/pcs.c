@@ -1606,8 +1606,8 @@ EbErrorType sb_geom_init(SequenceControlSet *scs, uint16_t width, uint16_t heigh
         }
 
         for (int md_scan_block_index = 0; md_scan_block_index < max_block_count; md_scan_block_index++) {
-            const BlockGeom *blk_geom    = get_blk_geom_mds(md_scan_block_index);
-            const BlockGeom *sq_blk_geom = get_blk_geom_mds(blk_geom->sqi_mds);
+            const BlockGeom *blk_geom    = get_blk_geom_mds(scs->blk_geom_mds, md_scan_block_index);
+            const BlockGeom *sq_blk_geom = get_blk_geom_mds(scs->blk_geom_mds, blk_geom->sqi_mds);
             if (scs->over_boundary_block_mode == 1) {
                 uint8_t has_rows = (sb_geom->org_y + sq_blk_geom->org_y + sq_blk_geom->bheight / 2 < height);
                 uint8_t has_cols = (sb_geom->org_x + sq_blk_geom->org_x + sq_blk_geom->bwidth / 2 < width);

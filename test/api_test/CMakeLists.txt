@@ -19,6 +19,7 @@ include_directories(${PROJECT_SOURCE_DIR}/test/
     ${PROJECT_SOURCE_DIR}/Source/API)
 
 set(all_files
+    MultiEncoderTest.cc
     SvtAv1EncApiTest.cc
     SvtAv1EncApiTest.h
     SvtAv1EncParamsTest.cc

@@ -532,7 +532,7 @@ static EbErrorType av1_encode_tx_coef_y(PictureControlSet *pcs, EntropyCodingCon
                                         NeighborArrayUnit *luma_dc_sign_level_coeff_na) {
     EbErrorType      return_error = EB_ErrorNone;
     bool             is_inter     = is_inter_mode(mbmi->block_mi.mode) || mbmi->block_mi.use_intrabc;
-    const BlockGeom *blk_geom     = get_blk_geom_mds(blk_ptr->mds_idx);
+    const BlockGeom *blk_geom     = get_blk_geom_mds(pcs->scs->blk_geom_mds, blk_ptr->mds_idx);
     const uint8_t    tx_depth     = mbmi->block_mi.tx_depth;
     const uint16_t   txb_count    = blk_geom->txb_count[mbmi->block_mi.tx_depth];
 
@@ -598,7 +598,7 @@ static EbErrorType av1_encode_tx_coef_uv(PictureControlSet *pcs, EntropyCodingCo
                                          NeighborArrayUnit *cb_dc_sign_level_coeff_na) {
     EbErrorType      return_error = EB_ErrorNone;
     int32_t          is_inter     = is_inter_mode(ec_ctx->mbmi->block_mi.mode) || ec_ctx->mbmi->block_mi.use_intrabc;
-    const BlockGeom *blk_geom     = get_blk_geom_mds(blk_ptr->mds_idx);
+    const BlockGeom *blk_geom     = get_blk_geom_mds(pcs->scs->blk_geom_mds, blk_ptr->mds_idx);
 
     if (!blk_geom->has_uv)
         return return_error;
@@ -736,7 +736,7 @@ static EbErrorType av1_encode_coeff_1d(PictureControlSet *pcs, EntropyCodingCont
                               cb_dc_sign_level_coeff_na);
     } else {
         // Transform partitioning free patch (except the 128x128 case)
-        const BlockGeom *blk_geom = get_blk_geom_mds(blk_ptr->mds_idx);
+        const BlockGeom *blk_geom = get_blk_geom_mds(pcs->scs->blk_geom_mds, blk_ptr->mds_idx);
         int32_t          cul_level_y, cul_level_cb = 0, cul_level_cr = 0;
 
         const uint8_t tx_depth  = ec_ctx->mbmi->block_mi.tx_depth;
@@ -3985,7 +3985,7 @@ static EbErrorType ec_update_neighbors(PictureControlSet *pcs, EntropyCodingCont
     NeighborArrayUnit *luma_dc_sign_level_coeff_na = pcs->luma_dc_sign_level_coeff_na[tile_idx];
     NeighborArrayUnit *cr_dc_sign_level_coeff_na   = pcs->cr_dc_sign_level_coeff_na[tile_idx];
     NeighborArrayUnit *cb_dc_sign_level_coeff_na   = pcs->cb_dc_sign_level_coeff_na[tile_idx];
-    const BlockGeom   *blk_geom                    = get_blk_geom_mds(blk_ptr->mds_idx);
+    const BlockGeom   *blk_geom                    = get_blk_geom_mds(pcs->scs->blk_geom_mds, blk_ptr->mds_idx);
     MbModeInfo        *mbmi                        = get_mbmi(pcs, blk_org_x, blk_org_y);
     uint8_t            skip_coeff                  = mbmi->block_mi.skip;
     PartitionContext   partition;
@@ -4677,7 +4677,7 @@ static EbErrorType write_modes_b(PictureControlSet *pcs, EntropyCodingContext *e
     NeighborArrayUnit *cr_dc_sign_level_coeff_na   = pcs->cr_dc_sign_level_coeff_na[tile_idx];
     NeighborArrayUnit *cb_dc_sign_level_coeff_na   = pcs->cb_dc_sign_level_coeff_na[tile_idx];
     NeighborArrayUnit *txfm_context_array          = pcs->txfm_context_array[tile_idx];
-    const BlockGeom   *blk_geom                    = get_blk_geom_mds(blk_ptr->mds_idx);
+    const BlockGeom   *blk_geom                    = get_blk_geom_mds(scs->blk_geom_mds, blk_ptr->mds_idx);
     uint32_t           blk_org_x                   = ec_ctx->sb_origin_x + blk_geom->org_x;
     uint32_t           blk_org_y                   = ec_ctx->sb_origin_y + blk_geom->org_y;
     BlockSize          bsize                       = blk_geom->bsize;
@@ -5188,7 +5188,7 @@ EB_EXTERN EbErrorType svt_aom_write_sb(EntropyCodingContext *ec_ctx, SuperBlock 
     do {
         bool             code_blk_cond = true; // Code cu only if it is inside the picture
         EcBlkStruct     *blk_ptr       = &tb_ptr->final_blk_arr[final_blk_index];
-        const BlockGeom *blk_geom      = get_blk_geom_mds(blk_index);
+        const BlockGeom *blk_geom      = get_blk_geom_mds(scs->blk_geom_mds, blk_index);
 
         const BlockSize bsize     = blk_geom->bsize;
         const uint32_t  blk_org_x = ec_ctx->sb_origin_x + blk_geom->org_x;

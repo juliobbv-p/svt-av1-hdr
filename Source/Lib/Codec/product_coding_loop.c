@@ -403,7 +403,7 @@ void svt_aom_copy_neighbour_arrays(PictureControlSet *pcs, ModeDecisionContext *
                                    uint32_t blk_mds) {
     uint16_t tile_idx = ctx->tile_index;
 
-    const BlockGeom *blk_geom = get_blk_geom_mds(blk_mds);
+    const BlockGeom *blk_geom = get_blk_geom_mds(pcs->scs->blk_geom_mds, blk_mds);
 
     uint32_t blk_org_x    = ctx->sb_origin_x + blk_geom->org_x;
     uint32_t blk_org_y    = ctx->sb_origin_y + blk_geom->org_y;
@@ -636,7 +636,7 @@ void svt_aom_copy_neighbour_arrays(PictureControlSet *pcs, ModeDecisionContext *
 
 static void md_update_all_neighbour_arrays(PictureControlSet *pcs, ModeDecisionContext *ctx,
                                            uint32_t last_blk_index_mds) {
-    ctx->blk_geom       = get_blk_geom_mds(last_blk_index_mds);
+    ctx->blk_geom       = get_blk_geom_mds(pcs->scs->blk_geom_mds, last_blk_index_mds);
     ctx->blk_org_x      = ctx->sb_origin_x + ctx->blk_geom->org_x;
     ctx->blk_org_y      = ctx->sb_origin_y + ctx->blk_geom->org_y;
     ctx->round_origin_x = ((ctx->blk_org_x >> 3) << 3);
@@ -654,7 +654,7 @@ static void md_update_all_neighbour_arrays(PictureControlSet *pcs, ModeDecisionC
 
 static void md_update_all_neighbour_arrays_multiple(PictureControlSet *pcs, ModeDecisionContext *ctx,
                                                     uint32_t blk_mds) {
-    ctx->blk_geom = get_blk_geom_mds(blk_mds);
+    ctx->blk_geom = get_blk_geom_mds(pcs->scs->blk_geom_mds, blk_mds);
 
     uint32_t blk_it;
     for (blk_it = 0; blk_it < ctx->blk_geom->totns; blk_it++) {
@@ -9859,7 +9859,7 @@ static bool update_redundant(PictureControlSet *pcs, ModeDecisionContext *ctx) {
 static void process_block_light_pd0(SequenceControlSet *scs, PictureControlSet *pcs, ModeDecisionContext *ctx,
                                     const uint8_t blk_split_flag, EbPictureBufferDesc *in_pic, uint32_t sb_addr,
                                     uint32_t blk_idx_mds, uint32_t *next_non_skip_blk_idx_mds, bool *md_early_exit_sq) {
-    ctx->blk_geom      = get_blk_geom_mds(blk_idx_mds);
+    ctx->blk_geom      = get_blk_geom_mds(scs->blk_geom_mds, blk_idx_mds);
     BlkStruct *blk_ptr = ctx->blk_ptr = &ctx->md_blk_arr_nsq[blk_idx_mds];
 
     // Neighbour partition array is not updated in PD0, so set neighbour info to invalid.
@@ -9895,8 +9895,9 @@ static bool get_skip_processing_nsq_block(PictureControlSet *pcs, ModeDecisionCo
  */
 static void process_block_light_pd1(PictureControlSet *pcs, ModeDecisionContext *ctx, EbPictureBufferDesc *in_pic,
                                     uint32_t sb_addr, uint32_t blk_idx_mds) {
-    ctx->blk_geom = get_blk_geom_mds(blk_idx_mds);
-    ctx->blk_ptr  = &ctx->md_blk_arr_nsq[blk_idx_mds];
+    SequenceControlSet *scs = pcs->scs;
+    ctx->blk_geom           = get_blk_geom_mds(scs->blk_geom_mds, blk_idx_mds);
+    ctx->blk_ptr            = &ctx->md_blk_arr_nsq[blk_idx_mds];
 
     // LPD1 assumes a fixed partition structure, so partition neighbour arrays (blk_ptr->left_neighbor_partition and
     // blk_ptr->above_neighbor_partition) are not updated, and the neighbour arrays will not be accessed, since the
@@ -10076,7 +10077,7 @@ static void update_d2_decision_light_pd0(PictureControlSet *pcs, ModeDecisionCon
 
     // only needed to update recon
     if (!ctx->skip_intra && !ctx->lpd0_use_src_samples && ctx->md_blk_arr_nsq[last_blk_index_mds].split_flag == false) {
-        ctx->blk_geom  = get_blk_geom_mds(ctx->md_blk_arr_nsq[last_blk_index_mds].best_d1_blk);
+        ctx->blk_geom  = get_blk_geom_mds(pcs->scs->blk_geom_mds, ctx->md_blk_arr_nsq[last_blk_index_mds].best_d1_blk);
         ctx->blk_org_x = ctx->sb_origin_x + ctx->blk_geom->org_x;
         ctx->blk_org_y = ctx->sb_origin_y + ctx->blk_geom->org_y;
         ctx->blk_ptr   = &ctx->md_blk_arr_nsq[ctx->md_blk_arr_nsq[last_blk_index_mds].best_d1_blk];
@@ -10407,7 +10408,7 @@ void svt_aom_mode_decision_sb(SequenceControlSet *scs, PictureControlSet *pcs, M
         uint32_t                   base_blk_idx_mds = leaf_data_array[blk_idx].mds_idx;
         const EbMdcLeafData *const leaf_data_ptr    = &leaf_data_array[blk_idx];
         const uint8_t              blk_split_flag   = mdc_sb_data->split_flag[blk_idx];
-        ctx->blk_geom                               = get_blk_geom_mds(base_blk_idx_mds);
+        ctx->blk_geom                               = get_blk_geom_mds(scs->blk_geom_mds, base_blk_idx_mds);
         ctx->blk_ptr                                = &ctx->md_blk_arr_nsq[base_blk_idx_mds];
 
         // Reset settings, in case they were over-written by previous block
@@ -10445,7 +10446,7 @@ void svt_aom_mode_decision_sb(SequenceControlSet *scs, PictureControlSet *pcs, M
 
             for (uint32_t nsi = 0; nsi < shape_block_cnt; nsi++, blk_idx_mds++) {
                 // Get the blk_geom and blk_ptr for the current block within the shape being tested
-                ctx->blk_geom = get_blk_geom_mds(blk_idx_mds);
+                ctx->blk_geom = get_blk_geom_mds(scs->blk_geom_mds, blk_idx_mds);
                 ctx->blk_ptr  = &ctx->md_blk_arr_nsq[blk_idx_mds];
 
                 init_block_data(pcs, ctx, blk_split_flag, blk_idx_mds);

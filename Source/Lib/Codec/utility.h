@@ -39,7 +39,6 @@ typedef enum GeomIndex {
     GEOM_10, //128x128->8x8    NSQ:ON (only H, V, H4, V4 shapes)
     GEOM_TOT
 } GeomIndex;
-void svt_aom_build_blk_geom(GeomIndex geom);
 
 typedef struct BlockGeom {
     Part    shape; // P_N..P_V4 . P_S is not used.
@@ -84,6 +83,8 @@ typedef struct BlockGeom {
     uint8_t     redund; // 1: means that this block is redundant to another
     BlockList_t redund_list; // the list where the block is redundant
 } BlockGeom;
+
+void svt_aom_build_blk_geom(GeomIndex geom, BlockGeom* blk_geom_table);
 
 static const BlockSize ss_size_lookup[BlockSizeS_ALL][2][2] = {
     //  ss_x == 0    ss_x == 0        ss_x == 1      ss_x == 1
@@ -179,13 +180,13 @@ static const uint32_t blk32_idx_tab[GEOM_TOT - 1][4] = {{1, 22, 43, 64},
                                                         {5, 174, 343, 512},
                                                         {13, 222, 431, 640},
                                                         {25, 294, 563, 832}};
-#ifdef MINIMAL_BUILD
-extern BlockGeom* svt_aom_blk_geom_mds;
-#else
+#ifndef MINIMAL_BUILD
 extern BlockGeom svt_aom_blk_geom_mds[MAX_NUM_BLOCKS_ALLOC];
 #endif
 
-static INLINE const BlockGeom* get_blk_geom_mds(uint32_t bidx_mds) { return &svt_aom_blk_geom_mds[bidx_mds]; }
+static INLINE const BlockGeom* get_blk_geom_mds(const BlockGeom* blk_geom_table, uint32_t bidx_mds) {
+    return &blk_geom_table[bidx_mds];
+}
 // CU Stats Helper Functions
 typedef struct CodedBlockStats {
     uint8_t depth;

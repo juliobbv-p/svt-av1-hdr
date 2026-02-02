@@ -1471,7 +1471,7 @@ static void apply_filtering_block_plane_wise(MeContext *me_ctx, int block_row, i
                 }
     }
 }
-uint32_t    get_mds_idx(uint32_t orgx, uint32_t orgy, uint32_t size, uint32_t use_128x128);
+uint32_t    get_mds_idx(const BlockGeom* blk_geom_table, uint32_t max_block_count, uint32_t orgx, uint32_t orgy, uint32_t size);
 /*
  * Perform compensation and compute variance for a single block; used in TF subpel search.
  * If the searched MV has a better distortion than the passed best_dist, update best_mv_x,
@@ -2226,10 +2226,9 @@ static void tf_64x64_inter_prediction(PictureParentControlSet* pcs, MeContext* m
     uint16_t pu_origin_y = sb_origin_y + local_origin_y;
     int32_t mirow = pu_origin_y >> MI_SIZE_LOG2;
     int32_t micol = pu_origin_x >> MI_SIZE_LOG2;
-    blk_ptr.mds_idx = get_mds_idx(local_origin_x,
+    blk_ptr.mds_idx = get_mds_idx(pcs->scs->blk_geom_mds, pcs->scs->max_block_cnt, local_origin_x,
         local_origin_y,
-        bsize,
-        pcs->scs->seq_header.sb_size == BLOCK_128X128);
+        bsize);
 
     const int32_t bw = mi_size_wide[BLOCK_64X64];
     const int32_t bh = mi_size_high[BLOCK_64X64];
@@ -2250,7 +2249,7 @@ static void tf_64x64_inter_prediction(PictureParentControlSet* pcs, MeContext* m
         .mode = NEWMV,
         .use_intrabc = 0
     };
-    const BlockGeom* blk_geom = get_blk_geom_mds(blk_ptr.mds_idx);
+    const BlockGeom* blk_geom = get_blk_geom_mds(scs->blk_geom_mds, blk_ptr.mds_idx);
     svt_aom_inter_prediction(
         scs,
         NULL, //pcs,
@@ -2341,10 +2340,9 @@ static void tf_32x32_inter_prediction(PictureParentControlSet *pcs, MeContext *m
                     uint16_t pu_origin_y = sb_origin_y + local_origin_y;
                     int32_t mirow = pu_origin_y >> MI_SIZE_LOG2;
                     int32_t micol = pu_origin_x >> MI_SIZE_LOG2;
-                    blk_ptr.mds_idx = get_mds_idx(local_origin_x,
+                    blk_ptr.mds_idx = get_mds_idx(pcs->scs->blk_geom_mds, pcs->scs->max_block_cnt, local_origin_x,
                         local_origin_y,
-                        bsize,
-                        pcs->scs->seq_header.sb_size == BLOCK_128X128);
+                        bsize);
 
                     const int32_t bw = mi_size_wide[BLOCK_8X8];
                     const int32_t bh = mi_size_high[BLOCK_8X8];
@@ -2366,7 +2364,7 @@ static void tf_32x32_inter_prediction(PictureParentControlSet *pcs, MeContext *m
                         .mode = NEWMV,
                         .use_intrabc = 0
                     };
-                    const BlockGeom* blk_geom = get_blk_geom_mds(blk_ptr.mds_idx);
+                    const BlockGeom* blk_geom = get_blk_geom_mds(scs->blk_geom_mds, blk_ptr.mds_idx);
                     svt_aom_inter_prediction(
                         scs,
                         NULL, //pcs,
@@ -2405,10 +2403,9 @@ static void tf_32x32_inter_prediction(PictureParentControlSet *pcs, MeContext *m
             uint16_t pu_origin_y    = sb_origin_y + local_origin_y;
             int32_t mirow = pu_origin_y >> MI_SIZE_LOG2;
             int32_t micol = pu_origin_x >> MI_SIZE_LOG2;
-            blk_ptr.mds_idx = get_mds_idx(local_origin_x,
+            blk_ptr.mds_idx = get_mds_idx(pcs->scs->blk_geom_mds, pcs->scs->max_block_cnt, local_origin_x,
                                           local_origin_y,
-                                          bsize,
-                                          pcs->scs->seq_header.sb_size == BLOCK_128X128);
+                                          bsize);
 
             const int32_t bw                 = mi_size_wide[BLOCK_16X16];
             const int32_t bh                 = mi_size_high[BLOCK_16X16];
@@ -2430,7 +2427,7 @@ static void tf_32x32_inter_prediction(PictureParentControlSet *pcs, MeContext *m
                 .mode = NEWMV,
                 .use_intrabc = 0
             };
-            const BlockGeom* blk_geom = get_blk_geom_mds(blk_ptr.mds_idx);
+            const BlockGeom* blk_geom = get_blk_geom_mds(scs->blk_geom_mds, blk_ptr.mds_idx);
             svt_aom_inter_prediction(
                 scs,
                 NULL, //pcs,
@@ -2469,10 +2466,9 @@ static void tf_32x32_inter_prediction(PictureParentControlSet *pcs, MeContext *m
         uint16_t pu_origin_y    = sb_origin_y + local_origin_y;
         int32_t mirow = pu_origin_y >> MI_SIZE_LOG2;
         int32_t micol = pu_origin_x >> MI_SIZE_LOG2;
-        blk_ptr.mds_idx = get_mds_idx(local_origin_x,
+        blk_ptr.mds_idx = get_mds_idx(pcs->scs->blk_geom_mds, pcs->scs->max_block_cnt, local_origin_x,
                                       local_origin_y,
-                                      bsize,
-                                      pcs->scs->seq_header.sb_size == BLOCK_128X128);
+                                      bsize);
 
         const int32_t bw                 = mi_size_wide[BLOCK_32X32];
         const int32_t bh                 = mi_size_high[BLOCK_32X32];
@@ -2493,7 +2489,7 @@ static void tf_32x32_inter_prediction(PictureParentControlSet *pcs, MeContext *m
             .mode = NEWMV,
             .use_intrabc = 0
         };
-        const BlockGeom* blk_geom = get_blk_geom_mds(blk_ptr.mds_idx);
+        const BlockGeom* blk_geom = get_blk_geom_mds(scs->blk_geom_mds, blk_ptr.mds_idx);
         svt_aom_inter_prediction(
             scs,
             NULL, //pcs,

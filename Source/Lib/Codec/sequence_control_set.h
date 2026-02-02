@@ -19,6 +19,9 @@
 #include "object.h"
 #include "firstpass.h"
 
+// Forward declaration for block geometry
+struct BlockGeom;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -153,6 +156,8 @@ typedef struct SequenceControlSet {
     uint16_t picture_height_in_sb;
     uint16_t sb_total_count;
     uint16_t max_block_cnt;
+    // Pointer to block geometry table (owned by EbEncHandle)
+    struct BlockGeom *blk_geom_mds;
     /*!< Restoration Unit parameters set for the stream */
     int32_t rest_units_per_tile;
     /*!< Sub picture reagions for picture analysis */

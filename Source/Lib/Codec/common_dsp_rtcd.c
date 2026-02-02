@@ -23,6 +23,7 @@
 #include "pic_operators.h"
 #include "pack_unpack_c.h"
 #include "utility.h"
+#include "svt_threads.h"
 
 #if defined ARCH_X86_64
 #define AOM_ARCH_X86_64 ARCH_X86_64
@@ -448,7 +449,13 @@ EbCpuFlags svt_aom_get_cpu_flags_to_use() { return 0; }
 #define SET_NEON_SVE2(ptr, c, neon, sve2)                       SET_FUNCTIONS_NEON(ptr, c, neon, 0, 0, 0, sve2)
 #endif
 
+// Thread-safe RTCD initialization using lazily-initialized mutex
+DEFINE_ONCE_MUTEX(common_rtcd_init_mutex);
+
 void svt_aom_setup_common_rtcd_internal(EbCpuFlags flags) {
+    RUN_ONCE_MUTEX(common_rtcd_init_mutex);
+    svt_block_on_mutex(common_rtcd_init_mutex);
+
     /* Avoid check that pointer is set double, after first setup. */
     static bool first_call_setup = true;
     bool        check_pointer_was_set = first_call_setup;
@@ -2153,5 +2160,6 @@ void svt_aom_setup_common_rtcd_internal(EbCpuFlags flags) {
     }
     (void)flags;
 
+    svt_release_mutex(common_rtcd_init_mutex);
 }
 // clang-format on

@@ -1760,7 +1760,7 @@ uint64_t svt_aom_get_tx_size_bits(ModeDecisionCandidateBuffer *candidateBuffer, 
 uint64_t svt_aom_partition_rate_cost(PictureParentControlSet *pcs, ModeDecisionContext *ctx, uint32_t blk_mds_idx,
                                      PartitionType p, uint64_t lambda, bool use_accurate_part_ctx,
                                      MdRateEstimationContext *md_rate_est_ctx) {
-    const BlockGeom *blk_geom = get_blk_geom_mds(blk_mds_idx);
+    const BlockGeom *blk_geom = get_blk_geom_mds(pcs->scs->blk_geom_mds, blk_mds_idx);
     const BlockSize  bsize    = blk_geom->bsize;
     assert(mi_size_wide_log2[bsize] == mi_size_high_log2[bsize]);
     assert(bsize < BlockSizeS_ALL);

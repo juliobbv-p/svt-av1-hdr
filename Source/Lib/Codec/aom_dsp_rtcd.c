@@ -22,6 +22,7 @@
 #include "compute_mean.h"
 #include "me_sad_calculation.h"
 #include "pack_unpack_c.h"
+#include "svt_threads.h"
 
 /**************************************
  * Instruction Set Support
@@ -174,7 +175,13 @@
 #define SET_NEON_SVE(ptr, c, neon, sve)                               SET_FUNCTIONS_NEON(ptr, c, neon, 0, sve, 0)
 #endif
 
+// Thread-safe RTCD initialization using lazily-initialized mutex
+DEFINE_ONCE_MUTEX(rtcd_init_mutex);
+
 void svt_aom_setup_rtcd_internal(EbCpuFlags flags) {
+    RUN_ONCE_MUTEX(rtcd_init_mutex);
+    svt_block_on_mutex(rtcd_init_mutex);
+
     /* Avoid check that pointer is set double, after first setup. */
     static bool first_call_setup = true;
     bool        check_pointer_was_set = first_call_setup;
@@ -1335,5 +1342,6 @@ void svt_aom_setup_rtcd_internal(EbCpuFlags flags) {
     }
     (void)flags;
 
+    svt_release_mutex(rtcd_init_mutex);
 }
 // clang-format on

@@ -376,7 +376,7 @@ EbErrorType svt_aom_mode_decision_context_ctor(ModeDecisionContext *ctx, Sequenc
     for (coded_leaf_index = 0; coded_leaf_index < block_max_count_sb; ++coded_leaf_index) {
         ctx->md_blk_arr_nsq[coded_leaf_index].av1xd      = ctx->md_blk_arr_nsq[0].av1xd + coded_leaf_index;
         ctx->md_blk_arr_nsq[coded_leaf_index].segment_id = 0;
-        const BlockGeom *blk_geom                        = get_blk_geom_mds(coded_leaf_index);
+        const BlockGeom *blk_geom                        = get_blk_geom_mds(scs->blk_geom_mds, coded_leaf_index);
 
         if (svt_aom_get_bypass_encdec(enc_mode, encoder_bit_depth)) {
             EbPictureBufferDescInitData init_data;
