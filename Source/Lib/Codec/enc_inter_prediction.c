@@ -3008,7 +3008,7 @@ static void av1_inter_prediction_obmc(PictureControlSet *pcs, BlkStruct *blk_ptr
                                       uint32_t component_mask, uint8_t bit_depth, uint8_t is_16bit_pipeline) {
     uint8_t is16bit = bit_depth > EB_EIGHT_BIT || is_16bit_pipeline;
 
-    const BlockGeom *blk_geom = get_blk_geom_mds(scs->blk_geom_mds, blk_ptr->mds_idx);
+    const BlockGeom *blk_geom = get_blk_geom_mds(pcs->scs->blk_geom_mds, blk_ptr->mds_idx);
 
     // cppcheck-suppress unassignedVariable
     DECLARE_ALIGNED(16, uint8_t, obmc_buff_0[2 * MAX_MB_PLANE * MAX_SB_SQUARE]);

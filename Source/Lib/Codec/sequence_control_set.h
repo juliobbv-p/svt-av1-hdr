@@ -19,9 +19,6 @@
 #include "object.h"
 #include "firstpass.h"
 
-// Forward declaration for block geometry
-struct BlockGeom;
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -59,6 +56,10 @@ typedef struct QpBasedThScaling {
     bool cap_max_size_qp_based_th_scaling;
     bool var_skip_sub_depth_qp_based_th_scaling;
 } QpBasedThScaling;
+
+// Forward declaration for block geometry
+struct BlockGeom;
+
 /************************************
      * Sequence Control Set
      ************************************/

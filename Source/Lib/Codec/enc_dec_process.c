@@ -1397,11 +1397,11 @@ static void set_child_to_be_considered(PictureControlSet *pcs, ModeDecisionConte
         return;
     const uint32_t child_block_idx_1 = blk_index + blk_geom->d1_depth_offset;
     const uint32_t child_block_idx_2 = child_block_idx_1 +
-        ns_depth_offset[blk_geom->svt_aom_geom_idx][blk_geom->depth + 1];
+        ns_depth_offset[pcs->scs->svt_aom_geom_idx][blk_geom->depth + 1];
     const uint32_t child_block_idx_3 = child_block_idx_2 +
-        ns_depth_offset[blk_geom->svt_aom_geom_idx][blk_geom->depth + 1];
+        ns_depth_offset[pcs->scs->svt_aom_geom_idx][blk_geom->depth + 1];
     const uint32_t child_block_idx_4 = child_block_idx_3 +
-        ns_depth_offset[blk_geom->svt_aom_geom_idx][blk_geom->depth + 1];
+        ns_depth_offset[pcs->scs->svt_aom_geom_idx][blk_geom->depth + 1];
     results_ptr->refined_split_flag[blk_index] = true;
     //Set first child to be considered
     results_ptr->consider_block[child_block_idx_1]     = 2;
@@ -1736,7 +1736,7 @@ static void is_child_to_current_deviation_small(PictureControlSet *pcs, ModeDeci
     const uint32_t ns_d1_offset = blk_geom->d1_depth_offset;
 
     assert(blk_geom->depth < 6);
-    const uint32_t ns_depth_plus1_offset = ns_depth_offset[blk_geom->svt_aom_geom_idx][blk_geom->depth + 1];
+    const uint32_t ns_depth_plus1_offset = ns_depth_offset[pcs->scs->svt_aom_geom_idx][blk_geom->depth + 1];
     const uint32_t child_block_idx_1     = blk_index + ns_d1_offset;
     const uint32_t child_block_idx_2     = child_block_idx_1 + ns_depth_plus1_offset;
     const uint32_t child_block_idx_3     = child_block_idx_2 + ns_depth_plus1_offset;

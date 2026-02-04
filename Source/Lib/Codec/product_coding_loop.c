@@ -9717,7 +9717,7 @@ static void check_curr_to_parent_cost_light_pd0(SequenceControlSet *scs, Picture
             if (parent_depth_cost != MAX_MODE_COST && (parent_depth_cost * th) <= (current_depth_cost * 1000)) {
                 *md_early_exit_sq          = 1;
                 *next_non_skip_blk_idx_mds = parent_depth_idx_mds +
-                    ns_depth_offset[blk_geom->svt_aom_geom_idx][blk_geom->depth - 1];
+                    ns_depth_offset[pcs->scs->svt_aom_geom_idx][blk_geom->depth - 1];
             } else {
                 *md_early_exit_sq = 0;
             }
@@ -9758,7 +9758,7 @@ static void check_curr_to_parent_cost(SequenceControlSet *scs, PictureControlSet
         if (parent_depth_cost != MAX_MODE_COST && (parent_depth_cost * th) <= (current_depth_cost * 1000)) {
             *md_early_exit_sq          = 1;
             *next_non_skip_blk_idx_mds = parent_depth_idx_mds +
-                ns_depth_offset[blk_geom->svt_aom_geom_idx][blk_geom->depth - 1];
+                ns_depth_offset[pcs->scs->svt_aom_geom_idx][blk_geom->depth - 1];
         } else {
             *md_early_exit_sq = 0;
         }

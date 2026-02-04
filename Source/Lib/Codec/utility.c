@@ -259,14 +259,7 @@ static uint32_t max_sb    = 64;
 static uint32_t max_depth = 5;
 static uint32_t max_part  = 9;
 static uint32_t max_num_active_blocks;
-
-GeomIndex svt_aom_geom_idx;
 //TODO need to remove above globals for multi-channel support
-
-/* to access geom info of a particular block; use this table if you have the block index in md scan */
-#ifndef MINIMAL_BUILD
-BlockGeom svt_aom_blk_geom_mds[MAX_NUM_BLOCKS_ALLOC];
-#endif
 
 static INLINE TxSize av1_get_tx_size(BlockSize bsize, int32_t plane /*, const MacroBlockD *xd*/) {
     UNUSED(plane);
@@ -286,8 +279,8 @@ static uint32_t get_num_ns_per_part(uint32_t part_it, uint32_t sq_size) {
     return tot_num_ns_per_part;
 }
 
-static void md_scan_all_blks(BlockGeom* blk_geom, uint32_t* idx_mds, uint32_t sq_size, uint32_t x, uint32_t y,
-                             int32_t is_last_quadrant, uint8_t quad_it, uint8_t min_nsq_bsize) {
+static void md_scan_all_blks(GeomIndex geom, BlockGeom* blk_geom, uint32_t* idx_mds, uint32_t sq_size, uint32_t x,
+                             uint32_t y, int32_t is_last_quadrant, uint8_t quad_it, uint8_t min_nsq_bsize) {
     //the input block is the parent square block of size sq_size located at pos (x,y)
 
     assert(quad_it <= 3);
@@ -332,14 +325,12 @@ static void md_scan_all_blks(BlockGeom* blk_geom, uint32_t* idx_mds, uint32_t sq
             blk_geom[*idx_mds].d1i     = d1_it++;
             blk_geom[*idx_mds].sqi_mds = sqi_mds;
 
-            blk_geom[*idx_mds].svt_aom_geom_idx = svt_aom_geom_idx;
-
             blk_geom[*idx_mds].parent_depth_idx_mds = sqi_mds == 0
                 ? 0
-                : (sqi_mds + (3 - quad_it) * ns_depth_offset[svt_aom_geom_idx][blk_geom[*idx_mds].depth]) -
-                    parent_depth_offset[svt_aom_geom_idx][blk_geom[*idx_mds].depth];
-            blk_geom[*idx_mds].d1_depth_offset      = d1_depth_offset[svt_aom_geom_idx][blk_geom[*idx_mds].depth];
-            blk_geom[*idx_mds].ns_depth_offset      = ns_depth_offset[svt_aom_geom_idx][blk_geom[*idx_mds].depth];
+                : (sqi_mds + (3 - quad_it) * ns_depth_offset[geom][blk_geom[*idx_mds].depth]) -
+                    parent_depth_offset[geom][blk_geom[*idx_mds].depth];
+            blk_geom[*idx_mds].d1_depth_offset      = d1_depth_offset[geom][blk_geom[*idx_mds].depth];
+            blk_geom[*idx_mds].ns_depth_offset      = ns_depth_offset[geom][blk_geom[*idx_mds].depth];
             blk_geom[*idx_mds].totns                = tot_num_ns_per_part;
             blk_geom[*idx_mds].nsi                  = nsq_it;
             blk_geom[*idx_mds].bwidth               = quartsize * ns_quarter_size_mult[part_it_idx][0][nsq_it];
@@ -1020,10 +1011,10 @@ static void md_scan_all_blks(BlockGeom* blk_geom, uint32_t* idx_mds, uint32_t sq
 
     uint32_t min_size = max_sb >> (max_depth - 1);
     if (halfsize >= min_size) {
-        md_scan_all_blks(blk_geom, idx_mds, halfsize, x, y, 0, 0, min_nsq_bsize);
-        md_scan_all_blks(blk_geom, idx_mds, halfsize, x + halfsize, y, 0, 1, min_nsq_bsize);
-        md_scan_all_blks(blk_geom, idx_mds, halfsize, x, y + halfsize, 0, 2, min_nsq_bsize);
-        md_scan_all_blks(blk_geom, idx_mds, halfsize, x + halfsize, y + halfsize, 1, 3, min_nsq_bsize);
+        md_scan_all_blks(geom, blk_geom, idx_mds, halfsize, x, y, 0, 0, min_nsq_bsize);
+        md_scan_all_blks(geom, blk_geom, idx_mds, halfsize, x + halfsize, y, 0, 1, min_nsq_bsize);
+        md_scan_all_blks(geom, blk_geom, idx_mds, halfsize, x, y + halfsize, 0, 2, min_nsq_bsize);
+        md_scan_all_blks(geom, blk_geom, idx_mds, halfsize, x + halfsize, y + halfsize, 1, 3, min_nsq_bsize);
     }
 }
 static uint32_t count_total_num_of_active_blks(uint8_t min_nsq_bsize) {
@@ -1087,7 +1078,6 @@ static void log_redundancy_similarity(BlockGeom* blk_geom, uint32_t max_block_co
 */
 void svt_aom_build_blk_geom(GeomIndex geom, BlockGeom* blk_geom) {
     uint32_t max_block_count;
-    svt_aom_geom_idx = geom;
     uint32_t min_nsq_bsize;
     if (geom == GEOM_0) {
         max_sb          = 64;
@@ -1162,11 +1152,11 @@ void svt_aom_build_blk_geom(GeomIndex geom, BlockGeom* blk_geom) {
         SVT_LOG(" \n\n Error %i blocks\n\n ", max_num_active_blocks);
     //(2) Construct md scan blk_geom_mds:  use info from dps
     uint32_t idx_mds = 0;
-    md_scan_all_blks(blk_geom, &idx_mds, max_sb, 0, 0, 0, 0, min_nsq_bsize);
+    md_scan_all_blks(geom, blk_geom, &idx_mds, max_sb, 0, 0, 0, 0, min_nsq_bsize);
     log_redundancy_similarity(blk_geom, max_block_count);
 }
-uint32_t get_mds_idx(const BlockGeom* blk_geom_table, uint32_t max_block_count, uint32_t orgx, uint32_t orgy,
-                     uint32_t size) {
+uint32_t svt_aom_get_mds_idx(const BlockGeom* blk_geom_table, uint32_t max_block_count, uint32_t orgx, uint32_t orgy,
+                             uint32_t size) {
     uint32_t mds = 0;
 
     for (uint32_t blk_it = 0; blk_it < max_block_count; blk_it++) {

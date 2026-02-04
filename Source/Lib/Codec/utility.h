@@ -75,7 +75,6 @@ typedef struct BlockGeom {
     uint8_t     totns;
     uint8_t     nsi; // non square index within a partition  0..totns-1
     uint8_t     quadi; // parent square is in which quadrant 0..3
-    GeomIndex   svt_aom_geom_idx; //type of geom this block belongs
     uint8_t     depth; // depth of the block
     uint16_t    d1_depth_offset; // offset to the next d1 sq block
     uint16_t    ns_depth_offset; // offset to the next nsq block (skip remaining d2 blocks)
@@ -180,13 +179,13 @@ static const uint32_t blk32_idx_tab[GEOM_TOT - 1][4] = {{1, 22, 43, 64},
                                                         {5, 174, 343, 512},
                                                         {13, 222, 431, 640},
                                                         {25, 294, 563, 832}};
-#ifndef MINIMAL_BUILD
-extern BlockGeom svt_aom_blk_geom_mds[MAX_NUM_BLOCKS_ALLOC];
-#endif
 
 static INLINE const BlockGeom* get_blk_geom_mds(const BlockGeom* blk_geom_table, uint32_t bidx_mds) {
     return &blk_geom_table[bidx_mds];
 }
+uint32_t svt_aom_get_mds_idx(const BlockGeom* blk_geom_table, uint32_t max_block_count, uint32_t orgx, uint32_t orgy,
+                             uint32_t size);
+
 // CU Stats Helper Functions
 typedef struct CodedBlockStats {
     uint8_t depth;

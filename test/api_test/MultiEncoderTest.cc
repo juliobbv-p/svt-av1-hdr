@@ -22,14 +22,17 @@
 
 #include "EbSvtAv1Enc.h"
 #include "gtest/gtest.h"
+#include "DummyVideoSource.h"
 #include <atomic>
 #include <chrono>
 #include <cstring>
-#include <fstream>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <thread>
 #include <vector>
+
+using svt_av1_video_source::DummyVideoSource;
 
 namespace {
 
@@ -37,14 +40,10 @@ namespace {
 static constexpr int kNumEncoders = 2;
 static constexpr int kWidth = 640;
 static constexpr int kHeight = 360;
-static constexpr int kFrameSize = kWidth * kHeight * 3 / 2;  // YUV420
 static constexpr int kNumFrames = 30;
 static constexpr int kTargetBitrateKbps = 500;
 static constexpr int kFrameRate = 30;
 static constexpr int kTimeoutSeconds = 30;
-
-// Path to test YUV file (relative to test executable location)
-static const char *kYuvFilePath = "test/vectors/kirland_640_480_30.yuv";
 
 // Global test state
 static std::mutex g_log_mutex;
@@ -123,34 +122,6 @@ static void configure_encoder(
     }
 }
 
-// Load YUV data from test file, falling back to synthetic data
-static std::vector<uint8_t> load_yuv_data(size_t total_size) {
-    std::vector<uint8_t> yuv_data(total_size);
-
-    std::ifstream yuv_file(kYuvFilePath, std::ios::binary);
-    if (!yuv_file.is_open()) {
-        std::string alt_path = std::string("../") + kYuvFilePath;
-        yuv_file.open(alt_path, std::ios::binary);
-    }
-    if (!yuv_file.is_open()) {
-        std::string alt_path = std::string("../../") + kYuvFilePath;
-        yuv_file.open(alt_path, std::ios::binary);
-    }
-
-    if (yuv_file.is_open()) {
-        yuv_file.read(reinterpret_cast<char *>(yuv_data.data()),
-                      static_cast<std::streamsize>(total_size));
-        yuv_file.close();
-    } else {
-        // Fall back to synthetic data if file not found
-        for (size_t i = 0; i < total_size; i++) {
-            yuv_data[i] = static_cast<uint8_t>(i & 0xFF);
-        }
-    }
-
-    return yuv_data;
-}
-
 // Initialize encoder: init_handle -> set_parameter -> init
 // Returns true on success, false on failure (logs error and sets g_test_failed)
 static bool init_encoder(EbComponentType **encoder_handle,
@@ -189,34 +160,26 @@ static void shutdown_encoder(EbComponentType *encoder_handle) {
     }
 }
 
-// Encode frames and drain output
+// Encode frames from video source and drain output
 // Returns true on success, false on failure
-static bool encode_frames(EbComponentType *encoder_handle, uint8_t *yuv_data,
-                          int num_frames, int id) {
-    constexpr int luma_size = kWidth * kHeight;
-    constexpr int chroma_size = luma_size / 4;
-
-    EbSvtIOFormat input_picture;
-    memset(&input_picture, 0, sizeof(input_picture));
-    input_picture.y_stride = kWidth;
-    input_picture.cb_stride = kWidth / 2;
-    input_picture.cr_stride = kWidth / 2;
-
+static bool encode_frames(EbComponentType *encoder_handle,
+                          DummyVideoSource &video_source, int num_frames,
+                          int id) {
     EbBufferHeaderType input_header;
     memset(&input_header, 0, sizeof(input_header));
     input_header.size = sizeof(EbBufferHeaderType);
-    input_header.p_buffer = reinterpret_cast<uint8_t *>(&input_picture);
 
     // Encode frames
     for (int frame_idx = 0; frame_idx < num_frames && !g_test_failed;
          frame_idx++) {
-        uint8_t *frame_data = yuv_data + frame_idx * kFrameSize;
+        EbSvtIOFormat *frame = video_source.get_next_frame();
+        if (!frame) {
+            log_error(id, "Failed to get frame from video source", EB_ErrorMax);
+            return false;
+        }
 
-        input_picture.luma = frame_data;
-        input_picture.cb = frame_data + luma_size;
-        input_picture.cr = frame_data + luma_size + chroma_size;
-
-        input_header.n_filled_len = kFrameSize;
+        input_header.p_buffer = reinterpret_cast<uint8_t *>(frame);
+        input_header.n_filled_len = video_source.get_frame_size();
         input_header.pts = frame_idx;
         input_header.flags = 0;
         input_header.pic_type =
@@ -314,24 +277,30 @@ static void reset_test_state() {
 TEST(MultiEncoderTest, ConcurrentEncoders) {
     reset_test_state();
 
-    size_t total_size = static_cast<size_t>(kFrameSize) * kNumFrames;
-    std::vector<uint8_t> yuv_data = load_yuv_data(total_size);
+    auto encoder_thread = [](int encoder_id) {
+        // Each thread has its own video source
+        DummyVideoSource video_source(IMG_FMT_420, kWidth, kHeight, 8);
+        if (video_source.open_source(0, kNumFrames) != EB_ErrorNone) {
+            log_error(encoder_id, "Failed to open video source", EB_ErrorMax);
+            return;
+        }
 
-    auto encoder_thread = [&](int encoder_id) {
         EbComponentType *encoder_handle = nullptr;
         EbSvtAv1EncConfiguration config;
         memset(&config, 0, sizeof(config));
 
         if (!init_encoder(&encoder_handle, &config, encoder_id)) {
+            video_source.close_source();
             return;
         }
 
         if (encode_frames(
-                encoder_handle, yuv_data.data(), kNumFrames, encoder_id)) {
+                encoder_handle, video_source, kNumFrames, encoder_id)) {
             flush_encoder(encoder_handle);
         }
 
         shutdown_encoder(encoder_handle);
+        video_source.close_source();
         g_completed_encoders++;
     };
 
@@ -356,24 +325,29 @@ TEST(MultiEncoderTest, ConcurrentEncoders) {
 TEST(MultiEncoderTest, RepeatedInitDeinit) {
     constexpr int kIterations = 5;
 
-    size_t total_size = static_cast<size_t>(kFrameSize) * kNumFrames;
-    std::vector<uint8_t> yuv_data = load_yuv_data(total_size);
+    auto encoder_thread = [](int encoder_id) {
+        DummyVideoSource video_source(IMG_FMT_420, kWidth, kHeight, 8);
+        if (video_source.open_source(0, kNumFrames) != EB_ErrorNone) {
+            log_error(encoder_id, "Failed to open video source", EB_ErrorMax);
+            return;
+        }
 
-    auto encoder_thread = [&](int encoder_id) {
         EbComponentType *encoder_handle = nullptr;
         EbSvtAv1EncConfiguration config;
         memset(&config, 0, sizeof(config));
 
         if (!init_encoder(&encoder_handle, &config, encoder_id)) {
+            video_source.close_source();
             return;
         }
 
         if (encode_frames(
-                encoder_handle, yuv_data.data(), kNumFrames, encoder_id)) {
+                encoder_handle, video_source, kNumFrames, encoder_id)) {
             flush_encoder(encoder_handle);
         }
 
         shutdown_encoder(encoder_handle);
+        video_source.close_source();
         g_completed_encoders++;
     };
 
@@ -407,12 +381,16 @@ TEST(MultiEncoderTest, UnsynchronizedRecreation) {
     constexpr int kCyclesPerThread = 3;
     constexpr int kFramesPerCycle = 5;
 
-    size_t total_size = static_cast<size_t>(kFrameSize) * kNumFrames;
-    std::vector<uint8_t> yuv_data = load_yuv_data(total_size);
-
-    auto cycling_encoder_thread = [&](int thread_id) {
+    auto cycling_encoder_thread = [=](int thread_id) {
         for (int cycle = 0; cycle < kCyclesPerThread && !g_test_failed;
              cycle++) {
+            DummyVideoSource video_source(IMG_FMT_420, kWidth, kHeight, 8);
+            if (video_source.open_source(0, kFramesPerCycle) != EB_ErrorNone) {
+                log_error(
+                    thread_id, "Failed to open video source", EB_ErrorMax);
+                return;
+            }
+
             EbComponentType *encoder_handle = nullptr;
             EbSvtAv1EncConfiguration config;
             memset(&config, 0, sizeof(config));
@@ -422,17 +400,17 @@ TEST(MultiEncoderTest, UnsynchronizedRecreation) {
             std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
 
             if (!init_encoder(&encoder_handle, &config, thread_id)) {
+                video_source.close_source();
                 return;
             }
 
-            if (encode_frames(encoder_handle,
-                              yuv_data.data(),
-                              kFramesPerCycle,
-                              thread_id)) {
+            if (encode_frames(
+                    encoder_handle, video_source, kFramesPerCycle, thread_id)) {
                 flush_encoder(encoder_handle);
             }
 
             shutdown_encoder(encoder_handle);
+            video_source.close_source();
         }
 
         g_completed_encoders++;
@@ -460,7 +438,7 @@ TEST(MultiEncoderTest, UnsynchronizedRecreation) {
  * cause out-of-bounds access, crash, or hang.
  *
  * Configuration strategy:
- * - GeometrySize::SMALL (enc_mode=12 + rtc=true) → small max_block_cnt
+ * - GeometrySize::SMALL (enc_mode=11 + rtc=true) → small max_block_cnt
  * - GeometrySize::LARGE (enc_mode=0 + rtc=false) → large max_block_cnt
  */
 TEST(MultiEncoderTest, VaryingBlockGeometrySizes) {
@@ -469,13 +447,17 @@ TEST(MultiEncoderTest, VaryingBlockGeometrySizes) {
     constexpr int kCyclesPerThread = 3;
     constexpr int kFramesPerCycle = 3;
 
-    size_t total_size = static_cast<size_t>(kFrameSize) * kNumFrames;
-    std::vector<uint8_t> yuv_data = load_yuv_data(total_size);
-
     // Thread that alternates between small and large geometry configurations
-    auto varying_geometry_thread = [&](int thread_id) {
+    auto varying_geometry_thread = [=](int thread_id) {
         for (int cycle = 0; cycle < kCyclesPerThread && !g_test_failed;
              cycle++) {
+            DummyVideoSource video_source(IMG_FMT_420, kWidth, kHeight, 8);
+            if (video_source.open_source(0, kFramesPerCycle) != EB_ErrorNone) {
+                log_error(
+                    thread_id, "Failed to open video source", EB_ErrorMax);
+                return;
+            }
+
             EbComponentType *encoder_handle = nullptr;
             EbSvtAv1EncConfiguration config;
             memset(&config, 0, sizeof(config));
@@ -491,17 +473,17 @@ TEST(MultiEncoderTest, VaryingBlockGeometrySizes) {
                                         : GeometrySize::LARGE;
 
             if (!init_encoder(&encoder_handle, &config, thread_id, geometry)) {
+                video_source.close_source();
                 return;
             }
 
-            if (encode_frames(encoder_handle,
-                              yuv_data.data(),
-                              kFramesPerCycle,
-                              thread_id)) {
+            if (encode_frames(
+                    encoder_handle, video_source, kFramesPerCycle, thread_id)) {
                 flush_encoder(encoder_handle);
             }
 
             shutdown_encoder(encoder_handle);
+            video_source.close_source();
         }
 
         g_completed_encoders++;

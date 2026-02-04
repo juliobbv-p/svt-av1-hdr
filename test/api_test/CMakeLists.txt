@@ -14,6 +14,7 @@
 
 # Include Subdirectories
 include_directories(${PROJECT_SOURCE_DIR}/test/
+    ${PROJECT_SOURCE_DIR}/test/e2e_test/
     ${PROJECT_SOURCE_DIR}/third_party/googletest/include
     ${PROJECT_SOURCE_DIR}/third_party/googletest/src
     ${PROJECT_SOURCE_DIR}/Source/API)
@@ -24,6 +25,7 @@ set(all_files
     SvtAv1EncApiTest.h
     SvtAv1EncParamsTest.cc
     params.h
+    ${PROJECT_SOURCE_DIR}/test/e2e_test/VideoSource.cc
     )
 
 set(lib_list
