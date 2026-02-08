@@ -1481,7 +1481,7 @@ static uint8_t get_dlf_level(PictureControlSet *pcs, EncMode enc_mode, uint8_t i
             modulation_mode = 3;
         }
     } else if (fast_decode <= 1 || resolution <= INPUT_SIZE_360p_RANGE) { // fast-decode 0 && fast-decode 1
-        if (enc_mode <= ENC_M0) {
+        if (enc_mode <= ENC_M2) {
             dlf_level = 1;
         } else if ((!sc_class1 && enc_mode <= ENC_M3) || (sc_class1 && enc_mode <= ENC_M4)) {
             dlf_level = 2;
@@ -7180,6 +7180,8 @@ uint8_t svt_aom_get_nsq_geom_level(bool allintra, ResolutionRange input_resoluti
                     nsq_geom_level = 2;
                 else // regular or low
                     nsq_geom_level = 1;
+            } else if (enc_mode <= ENC_M2) {
+                nsq_geom_level = 2;
             } else if (enc_mode <= ENC_M5) {
                 if (coeff_lvl == HIGH_LVL)
                     nsq_geom_level = 3;
@@ -7237,6 +7239,8 @@ uint8_t svt_aom_get_nsq_search_level(PictureControlSet *pcs, EncMode enc_mode, I
     } else if (enc_mode <= ENC_M0) {
         const uint8_t is_base = pcs->ppcs->temporal_layer_index == 0;
         nsq_search_level      = is_base ? 2 : 3;
+    } else if (enc_mode <= ENC_M1) {
+        nsq_search_level = 6;
     } else if (enc_mode <= ENC_M2) {
         nsq_search_level = 7;
     } else if (enc_mode <= ENC_M3) {
@@ -8132,6 +8136,8 @@ void svt_aom_sig_deriv_mode_decision_config(SequenceControlSet *scs, PictureCont
         }
     } else if (enc_mode <= ENC_M1) {
         pcs->txs_level = 2;
+    } else if (enc_mode <= ENC_M2) {
+        pcs->txs_level = is_not_last_layer ? 2 : 3;
     } else if (enc_mode <= ENC_M8) {
         pcs->txs_level = is_base ? 3 : 0;
     } else if (enc_mode <= ENC_M9) {
