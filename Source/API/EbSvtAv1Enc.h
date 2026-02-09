@@ -213,7 +213,7 @@ typedef struct EbSvtAv1EncConfiguration {
      *
      * Min value is -3.
      * Max value is 13.
-     * Default is 12.
+     * Default is 4.
      */
     int8_t enc_mode;
 

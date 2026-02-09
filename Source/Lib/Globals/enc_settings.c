@@ -947,7 +947,7 @@ EbErrorType svt_av1_set_default_params(EbSvtAv1EncConfiguration *config_ptr) {
     config_ptr->max_qp_allowed               = 63;
     config_ptr->min_qp_allowed               = MIN_QP_AUTO;
     config_ptr->aq_mode                      = 2;
-    config_ptr->enc_mode                     = ENC_M8;
+    config_ptr->enc_mode                     = ENC_M4;
     config_ptr->intra_period_length          = -2;
     config_ptr->multiply_keyint              = false;
     config_ptr->intra_refresh_type           = 2;
