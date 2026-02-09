@@ -182,6 +182,7 @@ Controls noise detection which disables CDEF/restoration when noise level is hig
 
 SVT-AV1-HDR has different defaults than mainline SVT-AV1 in order to provide better visual fidelity out of the box. They include:
 
+- Set default encoding preset to 4.
 - Default 10-bit color depth when given a 10-bit input.
 - Disable film grain denoising by default, as it often harms visual fidelity. (**[Merged to Mainline](https://gitlab.com/AOMediaCodec/SVT-AV1/-/commit/8b39b41df9e07bbcdbd19ea618762c5db3353c03)**)
 - Enable quantization matrices by default.
