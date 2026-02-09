@@ -1225,6 +1225,20 @@ static int create_ref_buf_descs(EbEncHandle *enc_handle_ptr) {
 void init_fn_ptr(void);
 void svt_av1_init_wedge_masks(void);
 void init_ii_masks(void);
+
+static ONCE_ROUTINE(init_global_tables) {
+    svt_aom_asm_set_convolve_asm_table();
+    svt_aom_init_intra_dc_predictors_c_internal();
+    svt_aom_asm_set_convolve_hbd_asm_table();
+    svt_aom_init_intra_predictors_internal();
+    svt_av1_init_me_luts();
+    init_fn_ptr();
+    svt_av1_init_wedge_masks();
+    init_ii_masks();
+    ONCE_ROUTINE_EPILOG;
+}
+DEFINE_ONCE(global_tables_once);
+
 /**********************************
 * Initialize Encoder Library
 **********************************/
@@ -1239,23 +1253,11 @@ EB_API EbErrorType svt_av1_enc_init(EbComponentType *svt_enc_component)
 
     svt_aom_setup_common_rtcd_internal(scs->static_config.use_cpu_flags);
     svt_aom_setup_rtcd_internal(scs->static_config.use_cpu_flags);
-
-    svt_aom_asm_set_convolve_asm_table();
-
-    svt_aom_init_intra_dc_predictors_c_internal();
-
-    svt_aom_asm_set_convolve_hbd_asm_table();
-
-    svt_aom_init_intra_predictors_internal();
+    svt_run_once(&global_tables_once, init_global_tables);
 
     // Per-instance block geometry table allocation
     EB_MALLOC_ARRAY(scs->blk_geom_mds, scs->max_block_cnt);
     svt_aom_build_blk_geom(scs->svt_aom_geom_idx, scs->blk_geom_mds);
-
-    svt_av1_init_me_luts();
-    init_fn_ptr();
-    svt_av1_init_wedge_masks();
-    init_ii_masks();
     /************************************
      * Sequence Control Set
      ************************************/
