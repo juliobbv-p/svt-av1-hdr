@@ -2580,15 +2580,13 @@ static void enc_make_inter_predictor_light_pd0(uint8_t *src, uint8_t *dst, Subpe
                                                int32_t src_stride, int32_t dst_stride) {
     svt_inter_predictor_light_pd0(src, src_stride, dst, dst_stride, blk_width, blk_height, subpel_params, conv_params);
 }
-void svt_aom_enc_make_inter_predictor(SequenceControlSet *scs, uint8_t *src_ptr, uint8_t *src_ptr_2b, uint8_t *dst_ptr,
-                                      int16_t pre_y, int16_t pre_x, Mv mv, const struct ScaleFactors *const sf,
-                                      ConvolveParams *conv_params, InterpFilters interp_filters,
-                                      const InterInterCompoundData *const interinter_comp, uint8_t *seg_mask,
-                                      uint16_t frame_width, uint16_t frame_height, uint8_t blk_width,
-                                      uint8_t blk_height, BlockSize bsize, MacroBlockD *av1xd, int32_t src_stride,
-                                      int32_t dst_stride, uint8_t plane, const uint32_t ss_y, const uint32_t ss_x,
-                                      uint8_t bit_depth, uint8_t use_intrabc, uint8_t is_masked_compound,
-                                      uint8_t is16bit, bool is_wm, WarpedMotionParams *wm_params) {
+void NOINLINE svt_aom_enc_make_inter_predictor(
+    SequenceControlSet *scs, uint8_t *src_ptr, uint8_t *src_ptr_2b, uint8_t *dst_ptr, int16_t pre_y, int16_t pre_x,
+    Mv mv, const struct ScaleFactors *const sf, ConvolveParams *conv_params, InterpFilters interp_filters,
+    const InterInterCompoundData *const interinter_comp, uint8_t *seg_mask, uint16_t frame_width, uint16_t frame_height,
+    uint8_t blk_width, uint8_t blk_height, BlockSize bsize, MacroBlockD *av1xd, int32_t src_stride, int32_t dst_stride,
+    uint8_t plane, const uint32_t ss_y, const uint32_t ss_x, uint8_t bit_depth, uint8_t use_intrabc,
+    uint8_t is_masked_compound, uint8_t is16bit, bool is_wm, WarpedMotionParams *wm_params) {
     if (is_wm) {
         if (is_masked_compound) {
             conv_params->do_average = 0;
