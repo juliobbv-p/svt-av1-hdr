@@ -220,7 +220,11 @@ endif()
 
 # Always build with -fPIC
 set(CMAKE_POSITION_INDEPENDENT_CODE OFF)
-set(CMAKE_C_STANDARD 23)
+if(WIN32)
+    set(CMAKE_C_STANDARD 17)
+else()
+    set(CMAKE_C_STANDARD 23)
+endif()
 set(CMAKE_CXX_STANDARD 23)
 
 # BUILD_SHARED_LIBS is a standard CMake variable, but we declare it here to
