@@ -1560,6 +1560,8 @@ static uint8_t get_dlf_level_default(PictureControlSet* pcs, EncMode enc_mode, u
             dlf_level = 1;
         } else if ((!sc_class1 && enc_mode <= ENC_M3) || (sc_class1 && enc_mode <= ENC_M4)) {
             dlf_level = 2;
+        } else if (enc_mode <= ENC_M5) {
+            dlf_level = 3;
         } else if (enc_mode <= ENC_M6) {
             dlf_level = is_not_last_layer ? 3 : 6;
         } else if (enc_mode <= ENC_M7) {
@@ -8950,7 +8952,7 @@ void svt_aom_sig_deriv_mode_decision_config_default(SequenceControlSet* scs, Pic
         mfmv_level = 0;
     } else {
         if (fast_decode == 0 || input_resolution <= INPUT_SIZE_360p_RANGE) {
-            if (enc_mode <= ENC_MR) {
+            if (enc_mode <= ENC_M5) {
                 mfmv_level = 1;
             } else if (enc_mode <= ENC_M8) {
                 mfmv_level = (input_resolution <= INPUT_SIZE_360p_RANGE) ? 1 : 2;
