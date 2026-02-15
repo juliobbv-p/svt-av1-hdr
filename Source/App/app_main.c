@@ -140,7 +140,7 @@ static int compar_uint64(const void* a, const void* b) {
 }
 
 static EbErrorType enc_context_ctor(EncApp* enc_app, EncContext* enc_context, int32_t argc, char* const argv[],
-                                    EncPass enc_pass, int32_t passes) {
+                                    EncPass enc_pass, int32_t passes, bool color) {
 #if LOG_ENC_DONE
     tot_frames_done = 0;
 #endif
@@ -151,7 +151,7 @@ static EbErrorType enc_context_ctor(EncApp* enc_app, EncContext* enc_context, in
 
     EncChannel* c = &enc_context->channel;
 
-    EbErrorType return_error = enc_channel_ctor(c);
+    EbErrorType return_error = enc_channel_ctor(c, color);
     if (return_error != EB_ErrorNone) {
         return return_error;
     }
@@ -445,8 +445,16 @@ int main(int argc, char* argv[]) {
     EncApp      enc_app;
     EncContext  enc_context;
 
+    // Read NO_COLOR hint (https://no-color.org/)
+    char* no_color = getenv("NO_COLOR");
+    bool  color    = true;
+
+    if (no_color != NULL && no_color[0] != '\0') {
+        color = false;
+    }
+
     signal(SIGINT, event_handler);
-    if (get_version(argc, argv)) {
+    if (get_version(argc, argv, color)) {
         return 0;
     }
 
@@ -461,7 +469,7 @@ int main(int argc, char* argv[]) {
     enc_app_ctor(&enc_app);
     passes = get_passes(argc, argv, enc_pass);
     for (uint8_t pass_idx = 0; pass_idx < passes; pass_idx++) {
-        return_error = enc_context_ctor(&enc_app, &enc_context, argc, argv, enc_pass[pass_idx], passes);
+        return_error = enc_context_ctor(&enc_app, &enc_context, argc, argv, enc_pass[pass_idx], passes, color);
 
         if (return_error == EB_ErrorNone) {
             return_error = encode(&enc_app, &enc_context);
