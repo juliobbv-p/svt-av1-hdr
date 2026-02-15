@@ -1277,7 +1277,7 @@ ConfigEntry config_entry[] = {
 /**********************************
  * Constructor
  **********************************/
-EbConfig *svt_config_ctor() {
+EbConfig *svt_config_ctor(bool color) {
     EbConfig *app_cfg = (EbConfig *)calloc(1, sizeof(EbConfig));
     if (!app_cfg)
         return NULL;
@@ -1294,6 +1294,7 @@ EbConfig *svt_config_ctor() {
 #ifdef LIBHDR10PLUS_RS_FOUND
     app_cfg->hdr10plus_json = NULL;
 #endif
+    app_cfg->color = color;
 
     return app_cfg;
 }
@@ -1374,8 +1375,8 @@ void svt_config_dtor(EbConfig *app_cfg) {
     free(app_cfg);
     return;
 }
-EbErrorType enc_channel_ctor(EncChannel *c) {
-    c->app_cfg = svt_config_ctor();
+EbErrorType enc_channel_ctor(EncChannel *c, bool color) {
+    c->app_cfg = svt_config_ctor(color);
     if (!c->app_cfg)
         return EB_ErrorInsufficientResources;
 
@@ -1772,7 +1773,7 @@ static void print_options(const char *title, const ConfigDescription *options) {
     }
 }
 
-int get_version(int argc, char *const argv[]) {
+int get_version(int argc, char *const argv[], bool color) {
 #ifdef NDEBUG
 #define BUILD_TYPE_STRING "release"
 #else
@@ -1785,9 +1786,17 @@ int get_version(int argc, char *const argv[]) {
     printf("HDR Release: %s\n", svt_hdr_get_version());
 #else
     if (strcmp(svt_hdr_get_version(), "N/A")) {
-        printf("HDR Release: \x1b[32m%s\x1b[0m\n", svt_hdr_get_version());
+        if (color) {
+            printf("HDR Release: \x1b[32m%s\x1b[0m\n", svt_hdr_get_version());
+        } else {
+            printf("HDR Release: %s\n", svt_hdr_get_version());
+        }
     } else {
-        printf("HDR Release: \x1b[38;5;248m%s\x1b[0m\n", svt_hdr_get_version());
+        if (color) {
+            printf("HDR Release: \x1b[38;5;248m%s\x1b[0m\n", svt_hdr_get_version());
+        } else {
+            printf("HDR Release: %s\n", svt_hdr_get_version());
+        }
     }
 #endif
     return 1;

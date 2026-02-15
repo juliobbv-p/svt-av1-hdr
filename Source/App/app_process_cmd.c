@@ -1056,18 +1056,32 @@ void process_output_stream_buffer(EncChannel *channel, EncApp *enc_app, int32_t 
 
                 if ((int)app_cfg->frames_to_be_encoded == -1) {
                     // Encoder doesn't know how many frames are to be encoded, therefore an ETA can't be calculated
-                    fprintf(stderr,
-                            "\rEncoding: \x1b[33m%4d Frames\x1b[0m @ \x1b[32m%.2f\x1b[0m fp%c | \x1b[35m%.2f "
-                            "kb/s\x1b[0m | Size: \x1b[31m%.2f MB\x1b[0m | Time: \x1b[36m%d:%02d:%02d\x1b[0m ",
-                            *frame_count,
-                            fps >= 1.0 ? fps : fps * 60,
-                            fps >= 1.0 ? 's' : 'm',
-                            ((double)(app_cfg->performance_context.byte_count << 3) * frame_rate /
-                             (app_cfg->frames_encoded * 1000)),
-                            size,
-                            ete_hours,
-                            ete_minutes,
-                            ete_seconds);
+                    if (app_cfg->color) {
+                        fprintf(stderr,
+                                "\rEncoding: \x1b[33m%4d Frames\x1b[0m @ \x1b[32m%.2f\x1b[0m fp%c | \x1b[35m%.2f "
+                                "kb/s\x1b[0m | Size: \x1b[31m%.2f MB\x1b[0m | Time: \x1b[36m%d:%02d:%02d\x1b[0m ",
+                                *frame_count,
+                                fps >= 1.0 ? fps : fps * 60,
+                                fps >= 1.0 ? 's' : 'm',
+                                ((double)(app_cfg->performance_context.byte_count << 3) * frame_rate /
+                                 (app_cfg->frames_encoded * 1000)),
+                                size,
+                                ete_hours,
+                                ete_minutes,
+                                ete_seconds);
+                    } else {
+                        fprintf(stderr,
+                                "\rEncoding: %4d Frames @ %.2f fp%c | %.2f kb/s | Size: %.2f MB | Time: %d:%02d:%02d ",
+                                *frame_count,
+                                fps >= 1.0 ? fps : fps * 60,
+                                fps >= 1.0 ? 's' : 'm',
+                                ((double)(app_cfg->performance_context.byte_count << 3) * frame_rate /
+                                 (app_cfg->frames_encoded * 1000)),
+                                size,
+                                ete_hours,
+                                ete_minutes,
+                                ete_seconds);
+                    }
                 } else {
                     const double eta = (app_cfg->performance_context.total_encode_time / *frame_count) *
                         (app_cfg->frames_to_be_encoded - *frame_count);
@@ -1078,24 +1092,44 @@ void process_output_stream_buffer(EncChannel *channel, EncApp *enc_app, int32_t 
                     const double estsz       = size * app_cfg->frames_to_be_encoded / *frame_count;
 
                     // Encoder knows how many frames are to be encoded, therefore an ETA can be calculated
-                    fprintf(stderr,
-                            "\rEncoding: \x1b[33m%4d/%d Frames\x1b[0m @ \x1b[32m%.2f\x1b[0m fp%c | \x1b[35m%.2f "
-                            "kb/s\x1b[0m | Size: \x1b[31m%.2f MB\x1b[0m \x1b[38;5;248m[%.2f MB]\x1b[0m | Time: "
-                            "\x1b[36m%d:%02d:%02d\x1b[0m \x1b[38;5;248m[-%d:%02d:%02d]\x1b[0m ",
-                            *frame_count,
-                            (int)app_cfg->frames_to_be_encoded,
-                            fps >= 1.0 ? fps : fps * 60,
-                            fps >= 1.0 ? 's' : 'm',
-                            ((double)(app_cfg->performance_context.byte_count << 3) * frame_rate /
-                             (app_cfg->frames_encoded * 1000)),
-                            size,
-                            estsz,
-                            ete_hours,
-                            ete_minutes,
-                            ete_seconds,
-                            eta_hours,
-                            eta_minutes,
-                            eta_seconds);
+                    if (app_cfg->color) {
+                        fprintf(stderr,
+                                "\rEncoding: \x1b[33m%4d/%d Frames\x1b[0m @ \x1b[32m%.2f\x1b[0m fp%c | \x1b[35m%.2f "
+                                "kb/s\x1b[0m | Size: \x1b[31m%.2f MB\x1b[0m \x1b[38;5;248m[%.2f MB]\x1b[0m | Time: "
+                                "\x1b[36m%d:%02d:%02d\x1b[0m \x1b[38;5;248m[-%d:%02d:%02d]\x1b[0m ",
+                                *frame_count,
+                                (int)app_cfg->frames_to_be_encoded,
+                                fps >= 1.0 ? fps : fps * 60,
+                                fps >= 1.0 ? 's' : 'm',
+                                ((double)(app_cfg->performance_context.byte_count << 3) * frame_rate /
+                                 (app_cfg->frames_encoded * 1000)),
+                                size,
+                                estsz,
+                                ete_hours,
+                                ete_minutes,
+                                ete_seconds,
+                                eta_hours,
+                                eta_minutes,
+                                eta_seconds);
+                    } else {
+                        fprintf(stderr,
+                                "\rEncoding: %4d/%d Frames @ %.2f fp%c | %.2f kb/s | Size: %.2f MB [%.2f MB] | Time: "
+                                "%d:%02d:%02d [-%d:%02d:%02d] ",
+                                *frame_count,
+                                (int)app_cfg->frames_to_be_encoded,
+                                fps >= 1.0 ? fps : fps * 60,
+                                fps >= 1.0 ? 's' : 'm',
+                                ((double)(app_cfg->performance_context.byte_count << 3) * frame_rate /
+                                 (app_cfg->frames_encoded * 1000)),
+                                size,
+                                estsz,
+                                ete_hours,
+                                ete_minutes,
+                                ete_seconds,
+                                eta_hours,
+                                eta_minutes,
+                                eta_seconds);
+                    }
                 }
             } break;
             default: break;
