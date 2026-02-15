@@ -27,7 +27,7 @@ Note: SVT-AV1-HDR allocates bits in a very different way than (mainline) SVT-AV1
 
 ## Information
 
-Unlike its predecesor (SVT-AV1-PSY), SVT-AV1-HDR features a more relaxed development cycle, and so are its expectations:
+Unlike its predecessor (SVT-AV1-PSY), SVT-AV1-HDR features a more relaxed development cycle, and so are its expectations:
 
 - New versions are only used for source code tagging purposes -- no first-party binaries will be provided
 - Rebases onto SVT-AV1 are only guaranteed on **major** version changes (e.g. 4.0, 5.0, etc.)
