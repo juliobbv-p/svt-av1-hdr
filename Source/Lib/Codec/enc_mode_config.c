@@ -2189,14 +2189,14 @@ void svt_aom_sig_deriv_multi_processes_default(SequenceControlSet* scs, PictureP
     } else if (pcs->scs->static_config.hbd_mds != DEFAULT) {
         pcs->hbd_md = pcs->scs->static_config.hbd_mds;
     } else {
-        // HDR uses full 10-bit mode decision through preset 4 by default.
+        // HDR uses full 10-bit mode decision through preset 5 by default.
         // The light PD0 pass continues to use its dedicated 8-bit buffers.
-        if (enc_mode <= ENC_M4) {
+        if (enc_mode <= ENC_M5) {
             pcs->hbd_md = 1;
-        } else if (enc_mode <= ENC_M5) {
-            pcs->hbd_md = 2;
-        } else if (enc_mode <= ENC_M6) {
-            pcs->hbd_md = is_base ? 2 : 0;
+        } else if (enc_mode <= ENC_M8) {
+            pcs->hbd_md = (pcs->temporal_layer_index <= 2) ? 1 : 0;
+        } else if (enc_mode <= ENC_M9) {
+            pcs->hbd_md = (pcs->temporal_layer_index <= 1) ? 1 : 0;
         } else {
             pcs->hbd_md = is_islice ? 2 : 0;
         }
