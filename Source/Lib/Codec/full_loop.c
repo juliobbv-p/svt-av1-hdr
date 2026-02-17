@@ -1062,7 +1062,9 @@ static void svt_av1_optimize_b(PictureControlSet *pcs, ModeDecisionContext *ctx,
     int           rweight       = 100;
     const int32_t sharpness_val = CLIP3(0, 7, pcs->scs->static_config.sharpness);
     const int     rshift        = MAX(2, (int)sharpness_val);
-    if (use_sharpness && delta_q_present && plane == 0) {
+    //sharp-tx is now available on every tune
+    //including tune PSNR and SSIM derived based tunes
+    if ((use_sharpness || pcs->scs->static_config.sharp_tx == 1) && delta_q_present && plane == 0) {
         int diff = ctx->sb_ptr->qindex - quantizer_to_qindex[picture_qp];
         //Only activate on 2 conditions: diff<0
         //or if the user controlled sharp-tx is active
