@@ -140,6 +140,14 @@ static double smpte428_from_linear(double y) {
 static double identity_to_linear(double x) { return x; }
 static double identity_from_linear(double x) { return x; }
 
+static EbColorRange find_color_range(EbSvtAv1EncConfiguration *config) {
+    // If the color range is explicitly provided, use it.
+    if (config->color_range_provided) {
+        return config->color_range;
+    }
+    return config->avif ? EB_CR_FULL_RANGE : EB_CR_STUDIO_RANGE;
+}
+
 static TransferFunction find_transfer_function(EbTransferCharacteristics tc) {
     TransferFunction tf = {NULL, NULL, 0.18};
 
@@ -239,7 +247,8 @@ static TransferFunction find_transfer_function(EbTransferCharacteristics tc) {
     return tf;
 }
 
-static void svt_av1_generate_photon_noise(const PhotonNoiseArgs *photon_noise_args, EbSvtAv1EncConfiguration *cfg) {
+static void svt_av1_generate_photon_noise(const PhotonNoiseArgs *photon_noise_args, EbSvtAv1EncConfiguration *cfg,
+                                          const EbColorRange color_range) {
     AomFilmGrain *film_grain;
     film_grain = (AomFilmGrain *)calloc(1, sizeof(AomFilmGrain));
     // Assumes a daylight-like spectrum.
@@ -267,6 +276,10 @@ static void svt_av1_generate_photon_noise(const PhotonNoiseArgs *photon_noise_ar
         pixel_area_um2;
     const double max_electrons_per_pixel = mid_tone_electrons_per_pixel / photon_noise_args->transfer_function.mid_tone;
 
+    const uint32_t max_value = (color_range == EB_CR_STUDIO_RANGE) ? 235 : 255;
+    const uint32_t min_value = (color_range == EB_CR_STUDIO_RANGE) ? 16 : 0;
+    const uint32_t range     = max_value - min_value;
+
     film_grain->num_y_points = 14;
     for (int32_t i = 0; i < film_grain->num_y_points; ++i) {
         double       x                   = i / (film_grain->num_y_points - 1.0);
@@ -288,8 +301,8 @@ static void svt_av1_generate_photon_noise(const PhotonNoiseArgs *photon_noise_ar
             (linear_range_end - linear_range_start);
         double encoded_noise = linear_noise * tf_slope;
 
-        x             = round(255.0 * x);
-        encoded_noise = minf(255.0, round(255.0 * 7.88 * encoded_noise));
+        x             = round(min_value + (range * x));
+        encoded_noise = minf((double)range, round(range * 7.88 * encoded_noise));
 
         film_grain->scaling_points_y[i][0] = (int32_t)x;
         film_grain->scaling_points_y[i][1] = (int32_t)encoded_noise;
@@ -315,18 +328,19 @@ static void svt_av1_generate_photon_noise(const PhotonNoiseArgs *photon_noise_ar
     film_grain->overlap_flag             = 1;
     film_grain->grain_scale_shift        = 0;
     film_grain->chroma_scaling_from_luma = photon_noise_args->chroma_setting;
-    film_grain->clip_to_restricted_range = 0;
+    film_grain->clip_to_restricted_range = (color_range == EB_CR_STUDIO_RANGE) ? 1 : 0;
     cfg->fgs_table                       = film_grain;
 }
 
 EbErrorType svt_av1_generate_photon_noise_table(EbSvtAv1EncConfiguration *config) {
-    PhotonNoiseArgs args = {.width             = config->source_width,
-                            .height            = config->source_height,
-                            .iso_setting       = config->photon_noise_iso,
-                            .chroma_setting    = config->enable_photon_noise_chroma,
-                            .transfer_function = find_transfer_function(config->transfer_characteristics)};
+    EbColorRange    color_range = find_color_range(config);
+    PhotonNoiseArgs args        = {.width             = config->source_width,
+                                   .height            = config->source_height,
+                                   .iso_setting       = config->photon_noise_iso,
+                                   .chroma_setting    = config->enable_photon_noise_chroma,
+                                   .transfer_function = find_transfer_function(config->transfer_characteristics)};
 
-    svt_av1_generate_photon_noise(&args, config);
+    svt_av1_generate_photon_noise(&args, config, color_range);
 
     return EB_ErrorNone;
 }
