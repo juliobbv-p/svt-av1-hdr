@@ -205,6 +205,8 @@ set(all_files
         palette.c
         pass2_strategy.c
         pass2_strategy.h
+        photon_noise.c
+        photon_noise.h
         pic_analysis_process.c
         pic_analysis_process.h
         pic_analysis_results.c

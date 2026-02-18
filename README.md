@@ -54,6 +54,14 @@ Tune 5 is equivalent to setting these parameters: `--tune 0 --enable-tf 0 --enab
 
 Controls how 'strongly' the CDEF (Constrained Directional Enhancement Filter) is applied to the output. Lower values make output sharper, at the expense of ringing artifacts. Higher values make output smoother, with fewer ringing artifacts.
 
+- `--photon-noise` *0 to 100000*
+
+Generates and adds photon noise table with specified ISO value to be used as fgs-table during the encode.
+
+- `--photon-noise-chroma` *0 to 1*
+
+Enables chroma noise in the photon noise table.
+
 ### From SVT-AV1-PSY
 
 - `--variance-boost-strength` *1 to 4* (**[Merged to Mainline](https://gitlab.com/AOMediaCodec/SVT-AV1/-/merge_requests/2195)**)
