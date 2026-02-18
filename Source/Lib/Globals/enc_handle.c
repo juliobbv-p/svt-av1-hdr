@@ -55,6 +55,7 @@
 #include "rc_results.h"
 #include "definitions.h"
 #include "metadata_handle.h"
+#include "photon_noise.h"
 
 #include "pack_unpack_c.h"
 #include "enc_mode_config.h"
@@ -3910,6 +3911,27 @@ static void set_param_based_on_input(SequenceControlSet* scs) {
             "Fwd key frame is only supported for hierarchical levels 4 at this point. Hierarchical levels are set to "
             "4\n");
     }
+    if (scs->static_config.photon_noise_iso > 0) {
+        // Check if film-grain-denoise is also enabled (should be disabled if fgs_table is present)
+        if (scs->static_config.film_grain_denoise_strength > 0) {
+            SVT_WARN("Both film-grain-denoise and photon-noise were specified; film-grain-denoise will be disabled\n");
+            scs->static_config.film_grain_denoise_strength = 0;
+        }
+        // Check if fgs_table is present
+        if (scs->static_config.fgs_table) {
+            SVT_WARN("Both photon-noise and fgs-table were specified; photon-noise will be disabled\n");
+            scs->static_config.photon_noise_iso = 0;
+        } else {
+            if (scs->static_config.transfer_characteristics == EB_CICP_TC_UNSPECIFIED) {
+                SVT_WARN("Transfer characteristics is not specified, photon noise will be defaulting to BT.709\n");
+            }
+            svt_av1_generate_photon_noise_table(&scs->static_config);
+        }
+    } else {
+        if (scs->static_config.enable_photon_noise_chroma == 1) {
+            SVT_WARN("Photon noise chroma signal is going to be ignored when photon noise level is 0.\n");
+        }
+    }
     bool    disallow_nsq  = true;
     uint8_t allow_HVA_HVB = 0;
     uint8_t allow_HV4     = 0;
@@ -4216,8 +4238,10 @@ static void copy_api_from_app(SequenceControlSet* scs, EbSvtAv1EncConfiguration*
     if (scs->static_config.film_grain_denoise_strength == 0 && scs->static_config.film_grain_denoise_apply == 1) {
         SVT_WARN("Film grain denoise apply signal is going to be ignored when film grain is off.\n");
     }
-    scs->seq_header.film_grain_params_present = (uint8_t)(scs->static_config.film_grain_denoise_strength > 0);
-    scs->static_config.fgs_table              = config_struct->fgs_table;
+    scs->seq_header.film_grain_params_present     = (uint8_t)(scs->static_config.film_grain_denoise_strength > 0);
+    scs->static_config.fgs_table                  = config_struct->fgs_table;
+    scs->static_config.photon_noise_iso           = config_struct->photon_noise_iso;
+    scs->static_config.enable_photon_noise_chroma = config_struct->enable_photon_noise_chroma;
 
     // MD Parameters
     scs->enable_hbd_mode_decision = config_struct->encoder_bit_depth > 8 ? DEFAULT : 0;
@@ -4462,6 +4486,7 @@ static void copy_api_from_app(SequenceControlSet* scs, EbSvtAv1EncConfiguration*
     scs->static_config.transfer_characteristics = config_struct->transfer_characteristics;
     scs->static_config.matrix_coefficients      = config_struct->matrix_coefficients;
     scs->static_config.color_range              = config_struct->color_range;
+    scs->static_config.color_range_provided     = config_struct->color_range_provided;
     scs->static_config.chroma_sample_position   = config_struct->chroma_sample_position;
     scs->static_config.mastering_display        = config_struct->mastering_display;
     scs->static_config.content_light_level      = config_struct->content_light_level;

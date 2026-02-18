@@ -743,6 +743,15 @@ EbErrorType svt_av1_verify_settings(SequenceControlSet* scs) {
         return_error = EB_ErrorBadParameter;
     }
 
+    if (config->enable_photon_noise_chroma != 0 && config->enable_photon_noise_chroma != 1) {
+        SVT_ERROR("Photon noise chroma signal can only have a value of 0 or 1.\n");
+        return_error = EB_ErrorBadParameter;
+    }
+    if (config->photon_noise_iso > 100000) {
+        SVT_ERROR("Photon noise ISO value should be in range [0-100000]");
+        return_error = EB_ErrorBadParameter;
+    }
+
     // Limit 8K & 16K support
     if ((uint64_t)(scs->max_input_luma_width * scs->max_input_luma_height) > INPUT_SIZE_4K_TH) {
         SVT_WARN(
@@ -989,6 +998,8 @@ EbErrorType svt_av1_set_default_params(EbSvtAv1EncConfiguration* config_ptr) {
     // Film grain denoising
     config_ptr->film_grain_denoise_strength = 0;
     config_ptr->film_grain_denoise_apply    = 0;
+    config_ptr->photon_noise_iso            = 0;
+    config_ptr->enable_photon_noise_chroma  = 0;
 
     // CPU Flags
     config_ptr->use_cpu_flags = EB_CPU_FLAGS_ALL;
@@ -1020,6 +1031,7 @@ EbErrorType svt_av1_set_default_params(EbSvtAv1EncConfiguration* config_ptr) {
     config_ptr->transfer_characteristics = 2;
     config_ptr->matrix_coefficients      = 2;
     config_ptr->color_range              = EB_CR_STUDIO_RANGE;
+    config_ptr->color_range_provided     = false;
     config_ptr->chroma_sample_position   = EB_CSP_UNKNOWN;
     config_ptr->pass                     = 0;
     memset(&config_ptr->mastering_display, 0, sizeof(config_ptr->mastering_display));
@@ -1215,6 +1227,12 @@ void svt_av1_print_lib_params(SequenceControlSet* scs) {
                     config->film_grain_denoise_apply,
                     config->film_grain_denoise_strength);
             }
+        }
+        if (config->photon_noise_iso > 0) {
+            SVT_INFO("SVT [config]: photon noise synth / ISO / chroma \t\t\t\t: %d / %d / %s\n",
+                     1,
+                     config->photon_noise_iso,
+                     config->enable_photon_noise_chroma ? "on" : "off");
         }
         SVT_INFO("SVT [config]: sharpness / luminance-based QP bias \t\t\t\t: %d / %d\n",
                  config->sharpness,
@@ -2172,7 +2190,22 @@ EB_API EbErrorType svt_av1_enc_parse_parameter(EbSvtAv1EncConfiguration* config_
     COLOR_OPT("color-primaries", color_primaries);
     COLOR_OPT("transfer-characteristics", transfer_characteristics);
     COLOR_OPT("matrix-coefficients", matrix_coefficients);
-    COLOR_OPT("color-range", color_range);
+
+    if (!strcmp(name, "color-range")) {
+        return_error = str_to_color_range(value, &config_struct->color_range);
+        if (return_error == EB_ErrorNone) {
+            config_struct->color_range_provided = true;
+            return return_error;
+        }
+        uint32_t val;
+        return_error = str_to_uint(value, &val, NULL);
+        if (return_error == EB_ErrorNone) {
+            config_struct->color_range          = val;
+            config_struct->color_range_provided = true;
+        }
+        return return_error;
+    }
+
     COLOR_OPT("chroma-sample-position", chroma_sample_position);
 
     // custom struct fields
@@ -2228,6 +2261,7 @@ EB_API EbErrorType svt_av1_enc_parse_parameter(EbSvtAv1EncConfiguration* config_
         {"q", &config_struct->qp},
         {"qp", &config_struct->qp},
         {"film-grain", &config_struct->film_grain_denoise_strength},
+        {"photon-noise", &config_struct->photon_noise_iso},
         {"hierarchical-levels", &config_struct->hierarchical_levels},
         {"tier", &config_struct->tier},
         {"level", &config_struct->level},
@@ -2272,6 +2306,7 @@ EB_API EbErrorType svt_av1_enc_parse_parameter(EbSvtAv1EncConfiguration* config_
         {"superres-kf-denom", &config_struct->superres_kf_denom},
         {"tune", &config_struct->tune},
         {"film-grain-denoise", &config_struct->film_grain_denoise_apply},
+        {"photon-noise-chroma", &config_struct->enable_photon_noise_chroma},
         {"enable-dlf", &config_struct->enable_dlf_flag},
         {"resize-mode", &config_struct->resize_mode},
         {"resize-denom", &config_struct->resize_denom},
