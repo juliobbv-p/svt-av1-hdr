@@ -1098,10 +1098,31 @@ typedef struct EbSvtAv1EncConfiguration {
       *  Default is 15 (1x scaling). */
     uint8_t cdef_scaling;
 
-    // clang-format off
-    /* Add 128 Byte Padding to Struct to avoid changing the size of the public configuration struct */
-    uint8_t padding[128
-        - sizeof(PredStructure) + sizeof (uint8_t) // pred_strucutre type was changed from uint8_t to PredStructure
+    /**
+     * @brief Photon noise ISO value
+     *
+     * Default is 0.
+     */
+    uint32_t photon_noise_iso;
+
+    /**
+     * @brief Enable chroma noise, which will is scaled based on luma values for generated film grain table.
+     *
+     * 0: disable chroma scaling
+     * 1: enable chroma scaling
+     *
+     * Default is 0.
+     */
+    uint8_t enable_photon_noise_chroma;
+
+    /**
+     * @brief Check if color range is provided by the user
+     */
+    bool color_range_provided;
+
+    /*Add 128 Byte Padding to Struct to avoid changing the size of the public configuration struct*/
+    uint8_t padding[128 - sizeof(PredStructure) +
+                    sizeof(uint8_t) // pred_strucutre type was changed from uint8_t to PredStructure
         - sizeof(int) // This was added to take into account the new hbd_mds field while keeping previous ABI compat
         - sizeof(bool) // add the ability to shut MCTF for key frames
         - sizeof(uint32_t) * 2 // max intra/inter bitrates
