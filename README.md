@@ -52,7 +52,7 @@ Tune 5 is equivalent to setting these parameters: `--tune 0 --enable-tf 0 --enab
 
 - `--cdef-scaling` *1 (0.06x) to 30 (2x)*
 
-Controls how 'strongly' the CDEF (Constrained Directional Enhancement Filter) is applied to the output. Lower values make output sharper, at the expense of ringing artifacts. Higher values make output smoother, with fewer ringing artifacts.
+Controls how 'strongly' the CDEF (Constrained Directional Enhancement Filter) is applied to the output. Lower values make output sharper, at the expense of ringing artifacts. Higher values make output smoother, with fewer ringing artifacts. Values of 10-12 have been reported to be useful by multiple people.
 
 - `--photon-noise` *0 to 100000*
 
