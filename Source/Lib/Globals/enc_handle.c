@@ -4400,6 +4400,7 @@ static void copy_api_from_app(SequenceControlSet *scs, EbSvtAv1EncConfiguration 
     scs->static_config.transfer_characteristics = config_struct->transfer_characteristics;
     scs->static_config.matrix_coefficients = config_struct->matrix_coefficients;
     scs->static_config.color_range = config_struct->color_range;
+    scs->static_config.color_range_provided = config_struct->color_range_provided;
     scs->static_config.chroma_sample_position = config_struct->chroma_sample_position;
     scs->static_config.mastering_display = config_struct->mastering_display;
     scs->static_config.content_light_level = config_struct->content_light_level;
