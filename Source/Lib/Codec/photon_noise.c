@@ -289,6 +289,8 @@ static void svt_av1_generate_photon_noise(const PhotonNoiseArgs *photon_noise_ar
     for (int32_t i = 0; i < film_grain->num_y_points; ++i) {
         double x = (ramp_offset + (range - 2 * ramp_offset) * ((i - 1) / (film_grain->num_y_points - 3.0))) / range;
 
+        // Applying photon noise "as is" results in unwanted brightening of darkest and darkening of brightest luma values;
+        // clamping scaling points to a maximum of 1 at those min and max values prevents that.
         if (i == min_edge)
             x = 0;
         else if (i == max_edge)
