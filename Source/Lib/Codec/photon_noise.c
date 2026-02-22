@@ -276,13 +276,26 @@ static void svt_av1_generate_photon_noise(const PhotonNoiseArgs *photon_noise_ar
         pixel_area_um2;
     const double max_electrons_per_pixel = mid_tone_electrons_per_pixel / photon_noise_args->transfer_function.mid_tone;
 
-    const uint32_t max_value = (color_range == EB_CR_STUDIO_RANGE) ? 235 : 255;
-    const uint32_t min_value = (color_range == EB_CR_STUDIO_RANGE) ? 16 : 0;
-    const uint32_t range     = max_value - min_value;
+    const uint32_t max_value   = (color_range == EB_CR_STUDIO_RANGE) ? 235 : 255;
+    const uint32_t min_value   = (color_range == EB_CR_STUDIO_RANGE) ? 16 : 0;
+    const uint32_t range       = max_value - min_value;
+    const uint32_t ramp_offset = 3;
 
     film_grain->num_y_points = 14;
+
+    const int32_t min_edge = 0;
+    const int32_t max_edge = film_grain->num_y_points - 1;
+
     for (int32_t i = 0; i < film_grain->num_y_points; ++i) {
-        double       x                   = i / (film_grain->num_y_points - 1.0);
+        double x = (ramp_offset + (range - 2 * ramp_offset) * ((i - 1) / (film_grain->num_y_points - 3.0))) / range;
+
+        // Applying photon noise "as is" results in unwanted brightening of darkest and darkening of brightest luma values;
+        // clamping scaling points to a maximum of 1 at those min and max values prevents that.
+        if (i == min_edge)
+            x = 0;
+        else if (i == max_edge)
+            x = 1;
+
         const double linear              = photon_noise_args->transfer_function.to_linear(x);
         const double electrons_per_pixel = max_electrons_per_pixel * linear;
         // Quadrature sum of the relevant sources of noise, in electrons rms. Photon
@@ -305,6 +318,12 @@ static void svt_av1_generate_photon_noise(const PhotonNoiseArgs *photon_noise_ar
         encoded_noise = minf((double)range, round(range * 7.88 * encoded_noise));
 
         film_grain->scaling_points_y[i][0] = (int32_t)x;
+
+        if (i == min_edge || i == max_edge) {
+            film_grain->scaling_points_y[i][1] = (encoded_noise >= 1) ? 1 : 0;
+            continue;
+        }
+
         film_grain->scaling_points_y[i][1] = (int32_t)encoded_noise;
     }
 
