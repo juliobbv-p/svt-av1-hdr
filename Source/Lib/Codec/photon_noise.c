@@ -152,9 +152,15 @@ static TransferFunction find_transfer_function(EbTransferCharacteristics tc) {
     TransferFunction tf = {NULL, NULL, 0.18};
 
     switch (tc) {
+    // Rec.709 and Rec.2020 define the same nonlinear transfer function for gamma correction as Rec.601,
+    // with expection of 12 bit BT.2020 parameters being more precise.
+    // Thus, Rec.601 transfer function can be reused here.
     case EB_CICP_TC_BT_709:
-        tf.to_linear   = srgb_to_linear;
-        tf.from_linear = srgb_from_linear;
+    case EB_CICP_TC_BT_601:
+    case EB_CICP_TC_BT_2020_10_BIT:
+    case EB_CICP_TC_BT_2020_12_BIT:
+        tf.to_linear   = bt601_to_linear;
+        tf.from_linear = bt601_from_linear;
         break;
 
     case EB_CICP_TC_UNSPECIFIED:
@@ -170,11 +176,6 @@ static TransferFunction find_transfer_function(EbTransferCharacteristics tc) {
     case EB_CICP_TC_BT_470_B_G:
         tf.to_linear   = gamma28_to_linear;
         tf.from_linear = gamma28_from_linear;
-        break;
-
-    case EB_CICP_TC_BT_601:
-        tf.to_linear   = bt601_to_linear;
-        tf.from_linear = bt601_from_linear;
         break;
 
     case EB_CICP_TC_SMPTE_240:
@@ -209,12 +210,6 @@ static TransferFunction find_transfer_function(EbTransferCharacteristics tc) {
         break;
 
     case EB_CICP_TC_SRGB:
-        tf.to_linear   = srgb_to_linear;
-        tf.from_linear = srgb_from_linear;
-        break;
-
-    case EB_CICP_TC_BT_2020_10_BIT:
-    case EB_CICP_TC_BT_2020_12_BIT:
         tf.to_linear   = srgb_to_linear;
         tf.from_linear = srgb_from_linear;
         break;
