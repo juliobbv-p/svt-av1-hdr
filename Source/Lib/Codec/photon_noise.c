@@ -152,6 +152,9 @@ static TransferFunction find_transfer_function(EbTransferCharacteristics tc) {
     TransferFunction tf = {NULL, NULL, 0.18};
 
     switch (tc) {
+    // Rec.709 and Rec.2020 define the same nonlinear transfer function for gamma correction as Rec.601,
+    // with expection of 12 bit BT.2020 parameters being more precise.
+    // Thus, Rec.601 transfer function can be reused here.
     case EB_CICP_TC_BT_709:
     case EB_CICP_TC_BT_601:
     case EB_CICP_TC_BT_2020_10_BIT:
