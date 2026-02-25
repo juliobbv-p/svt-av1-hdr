@@ -1136,6 +1136,13 @@ void svt_av1_print_lib_params(SequenceControlSet *scs) {
                 : config->encoder_color_format == EB_YUV444 ? "YUV444"
                                                             : "Unknown color format");
 
+        if (config->color_primaries != 2 || config->transfer_characteristics != 2 || config->matrix_coefficients != 2) {
+            SVT_INFO("SVT [config]: Color prim / Transfer char / Matrix coeff \t\t\t: %d / %d / %d\n",
+                    config->color_primaries,
+                    config->transfer_characteristics,
+                    config->matrix_coefficients);
+        }
+
         SVT_INFO("SVT [config]: preset / tune / pred struct \t\t\t\t\t: %d / %s%s / %s\n",
                  config->enc_mode,
                  config->tune == TUNE_VQ            ? "VQ"
@@ -1230,7 +1237,7 @@ void svt_av1_print_lib_params(SequenceControlSet *scs) {
 
         switch (config->enable_tf) {
         case 1:
-            SVT_INFO("SVT [config]: Temporal Filtering / keyframe strength \t\t\t: %d / %d \n",
+            SVT_INFO("SVT [config]: Temporal filtering strength / keyframe strength \t\t: %d / %d \n",
                      config->tf_strength,
                      config->kf_tf_strength);
             break;
@@ -1256,6 +1263,36 @@ void svt_av1_print_lib_params(SequenceControlSet *scs) {
                      config->cdef_scaling,
                      config->cdef_scaling / 15.0);
         }
+
+        if (config->enable_qm == 1) {
+            SVT_INFO("SVT [config]: Quantization matrices min / max / chroma-min / chroma-max \t: %d / %d / %d / %d\n",
+                    config->min_qm_level,
+                    config->max_qm_level,
+                    config->min_chroma_qm_level,
+                    config->max_chroma_qm_level);
+        }
+
+        if (config->alt_lambda_factors == 1) {
+            SVT_INFO("SVT [config]: Alternate RDO lambda factors \t\t\t\t\t: %d\n",
+                    config->alt_lambda_factors);
+        }
+
+        if (config->sharp_tx == 1) {
+            SVT_INFO("SVT [config]: Sharp transform optimization \t\t\t\t\t: %d\n",
+                    config->sharp_tx);
+        }
+
+        if (config->complex_hvs == 1 || config->hbd_mds != 0) {
+            SVT_INFO("SVT [config]: highest complexity HVS model / High bit-depth mode \t\t: %d / %s\n",
+                    config->complex_hvs,
+                    config->hbd_mds == 0 ? "Preset"
+                        : config->hbd_mds == 1 ? "10-bit"
+                        : config->hbd_mds == 2 ? "8/10-bit"
+                                               : "unknown"
+                        );
+        }
+
+
     }
 #if DEBUG_BUFFERS
     SVT_INFO("SVT [config]: INPUT / OUTPUT \t\t\t\t\t\t\t: %d / %d\n",
