@@ -2321,6 +2321,9 @@ typedef enum {
 // Both SFRAME_FLEXIBLE_BASE and SFRAME_DEC_POSI_BASE use flexible insertion
 #define IS_SFRAME_FLEXIBLE_INSERT(mode) (mode == SFRAME_FLEXIBLE_BASE || mode == SFRAME_DEC_POSI_BASE)
 
+#define CONVERT_TO_STR_COMPILE_TIME_HELPER(x) #x
+#define CONVERT_TO_STR_COMPILE_TIME(x) CONVERT_TO_STR_COMPILE_TIME_HELPER(x)
+
 #ifdef __cplusplus
 }
 #endif
