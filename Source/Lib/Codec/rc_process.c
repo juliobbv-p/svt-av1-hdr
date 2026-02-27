@@ -479,29 +479,6 @@ void svt_aom_lambda_assign(PictureControlSet* pcs, uint32_t* fast_lambda, uint32
     *fast_lambda          = (uint32_t)((*fast_lambda * scale_factor) >> 7);
 }
 
-/******************************************************************************
-* svt_av1_compute_deltaq
-* Compute delta-q based on the q, bitdepth and cyclic refresh parameters
-*******************************************************************************/
-int svt_av1_compute_deltaq(PictureParentControlSet* ppcs, int q, double rate_ratio_qdelta) {
-    SequenceControlSet* scs       = ppcs->scs;
-    RATE_CONTROL*       rc        = &scs->enc_ctx->rc;
-    int                 bit_depth = scs->static_config.encoder_bit_depth;
-
-    rate_factor_level rf_lvl     = svt_av1_rate_factor_levels[ppcs->update_type];
-    FrameType         frame_type = (rf_lvl == KF_STD) ? KEY_FRAME : INTER_FRAME;
-
-    int deltaq = svt_av1_compute_qdelta_by_rate(rc, frame_type, q, rate_ratio_qdelta, bit_depth, ppcs->sc_class1);
-    deltaq     = AOMMAX(deltaq, -ppcs->cyclic_refresh.max_qdelta_perc * q / 100);
-
-    if (scs->enc_ctx->rc_cfg.mode != AOM_CBR) {
-        // RA uses a scale factor of 4 for the deltaQ range. Found it beneficial for low delay to have a larger deltaQ range, so we scale by 8
-        deltaq = AOMMIN(deltaq, 9 * 8 - 1);
-        deltaq = AOMMAX(deltaq, -9 * 8 + 1);
-    }
-    return deltaq;
-}
-
 void svt_av1_rc_init(SequenceControlSet* scs) {
     EncodeContext*  enc_ctx = scs->enc_ctx;
     RATE_CONTROL*   rc      = &enc_ctx->rc;
@@ -738,6 +715,23 @@ static bool rc_handle_superres(PictureControlSet* pcs, RateControlContext* conte
     return false;
 }
 
+static void generate_sb_qindex(PictureControlSet* pcs) {
+    PictureParentControlSet* ppcs = pcs->ppcs;
+    SequenceControlSet*      scs  = pcs->scs;
+
+    svt_av1_rc_init_sb_qindex(pcs, scs);
+
+    if (ppcs->frm_hdr.delta_q_params.delta_q_present && ppcs->frm_hdr.delta_q_params.delta_q_res != 1) {
+        // adjust delta q res and normalize superblock delta q values to reduce signaling overhead
+        svt_av1_normalize_sb_delta_q(pcs);
+    }
+
+    // Derive a QP per 64x64 using ME distortions (to be used for lambda modulation only; not at Q/Q-1)
+    if (scs->stats_based_sb_lambda_modulation) {
+        svt_av1_generate_b64_me_qindex_map(pcs);
+    }
+}
+
 // Process packetization feedback: update RC parameters and release resources.
 static void rc_process_packetization_feedback(PictureParentControlSet* ppcs,
                                               const EbObjectWrapper* restrict rate_control_tasks_wrapper_ptr) {
@@ -856,7 +850,7 @@ void* svt_aom_rate_control_kernel(void* input_ptr) {
                 }
             }
 
-            svt_av1_rc_init_sb_qindex(pcs, scs);
+            generate_sb_qindex(pcs);
 
             // Get Empty Rate Control Results Buffer
             EbObjectWrapper* rc_results_wrapper;

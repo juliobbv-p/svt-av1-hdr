@@ -61,10 +61,6 @@ typedef enum rate_factor_level {
 #define BOOST_KF_HIGH 5000
 #define BOOST_KF_LOW 400
 
-#define CR_SEGMENT_ID_BASE 0
-#define CR_SEGMENT_ID_BOOST1 1
-#define CR_SEGMENT_ID_BOOST2 2
-
 extern const int svt_av1_non_base_qindex_weight_ref[EB_MAX_TEMPORAL_LAYERS];
 extern const int svt_av1_non_base_qindex_weight_wq[EB_MAX_TEMPORAL_LAYERS];
 
@@ -237,6 +233,7 @@ void svt_av1_rc_init_sb_qindex(struct PictureControlSet* pcs, struct SequenceCon
 void svt_av1_variance_adjust_qp(struct PictureControlSet* pcs);
 void svt_aom_sb_qp_derivation_tpl_la(struct PictureControlSet* pcs);
 void svt_av1_normalize_sb_delta_q(struct PictureControlSet* pcs);
+void svt_av1_generate_b64_me_qindex_map(struct PictureControlSet* pcs);
 
 int32_t svt_av1_convert_qindex_to_q_fp8(int32_t qindex, EbBitDepth bit_depth);
 int32_t svt_av1_compute_qdelta_fp(int32_t qstart_fp8, int32_t qtarget_fp8, EbBitDepth bit_depth);

@@ -1351,14 +1351,14 @@ static void av1_rc_update_rate_correction_factors(PictureParentControlSet* ppcs,
                     frame_type, base_q_idx, MBs, rate_correction_factor, bit_depth, ppcs->sc_class1) +
             weight_segment1 *
                 av1_estimate_bits_at_q(frame_type,
-                                       base_q_idx + cr->qindex_delta[CR_SEGMENT_ID_BOOST1],
+                                       base_q_idx + cr->qindex_delta[1],
                                        MBs,
                                        rate_correction_factor,
                                        bit_depth,
                                        ppcs->sc_class1) +
             weight_segment2 *
                 av1_estimate_bits_at_q(frame_type,
-                                       base_q_idx + cr->qindex_delta[CR_SEGMENT_ID_BOOST2],
+                                       base_q_idx + cr->qindex_delta[2],
                                        MBs,
                                        rate_correction_factor,
                                        bit_depth,

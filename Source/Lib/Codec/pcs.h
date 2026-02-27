@@ -651,7 +651,7 @@ typedef struct CyclicRefresh {
 
     int apply_cyclic_refresh;
     /*!
-     * Boost factor for rate target ratio, for segment CR_SEGMENT_ID_BOOST2.
+     * Boost factor for rate target ratio, for segment 2.
      */
     int rate_boost_fac;
     int qindex_delta[3];
