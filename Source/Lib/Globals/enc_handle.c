@@ -5562,8 +5562,10 @@ EB_API void svt_av1_print_version(void) {
     SVT_INFO("-------------------------------------------\n");
     SVT_INFO("SVT [version]:\tSVT-AV1-HDR Encoder Lib %s \"Saint-14\"\n", SVT_AV1_CVS_VERSION);
     const char *compiler =
-#if defined(__clang__)
+#if defined(__clang__) && defined(__apple_build_version__)
     __VERSION__ "\t"
+#elif defined(__clang__)
+    "Clang " CONVERT_TO_STR_COMPILE_TIME(__clang_major__) "." CONVERT_TO_STR_COMPILE_TIME(__clang_minor__) "." CONVERT_TO_STR_COMPILE_TIME(__clang_patchlevel__) "\t"
 #elif defined(__GNUC__)
     "GCC " __VERSION__ "\t"
 #elif defined( _MSC_VER ) && (_MSC_VER >= 1930)
