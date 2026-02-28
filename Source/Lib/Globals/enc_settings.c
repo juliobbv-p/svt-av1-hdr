@@ -1112,11 +1112,11 @@ void svt_av1_print_lib_params(SequenceControlSet *scs) {
     if (config->pass == ENC_FIRST_PASS) {
         SVT_INFO("SVT [config]: preset \t\t\t\t\t\t\t: Pass 1\n");
     } else {
-        SVT_INFO("SVT [config]: %s\ttier %s\tlevel %s\n",
-                 config->profile == MAIN_PROFILE               ? "main profile"
-                     : config->profile == HIGH_PROFILE         ? "high profile"
-                     : config->profile == PROFESSIONAL_PROFILE ? "professional profile"
-                                                               : "Unknown profile",
+        SVT_INFO("SVT [config]: profile / tier / level \t\t\t\t\t: %s / %s / %s\n",
+                 config->profile == MAIN_PROFILE               ? "main"
+                     : config->profile == HIGH_PROFILE         ? "high"
+                     : config->profile == PROFESSIONAL_PROFILE ? "professional"
+                                                               : "unknown",
                  tier_to_str(config->tier),
                  level_to_str(config->level));
         SVT_INFO(
