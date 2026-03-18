@@ -243,6 +243,7 @@ set(all_files
         rc_process.h
         rc_results.c
         rc_results.h
+        rc_rtc_cbr.c
         rc_tables.h
         rc_tasks.c
         rc_tasks.h

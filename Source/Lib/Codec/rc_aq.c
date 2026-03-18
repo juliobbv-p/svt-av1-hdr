@@ -316,18 +316,33 @@ static void cyclic_sb_qp_derivation(PictureControlSet* pcs) {
 
     ppcs->frm_hdr.delta_q_params.delta_q_present = 1;
 
+    cr->me_distortion[0] = 0;
+    cr->me_distortion[1] = 0;
+    cr->me_distortion[2] = 0;
+
     cr->actual_num_seg1_sbs = 0;
     cr->actual_num_seg2_sbs = 0;
     uint64_t seg2_dist      = 0;
     uint64_t avg_me_dist    = ppcs->norm_me_dist;
-    for (uint32_t b64_idx = cr->sb_start; b64_idx < cr->sb_end; ++b64_idx) {
-        if (ppcs->me_8x8_distortion[b64_idx] < avg_me_dist) {
-            seg2_dist += ppcs->me_8x8_distortion[b64_idx];
-            cr->actual_num_seg2_sbs++;
+    for (uint32_t b64_idx = 0; b64_idx < ppcs->b64_total_count; ++b64_idx) {
+        if (b64_idx >= cr->sb_start && b64_idx < cr->sb_end) {
+            if (ppcs->me_8x8_distortion[b64_idx] < avg_me_dist) {
+                seg2_dist += ppcs->me_8x8_distortion[b64_idx];
+                cr->me_distortion[2] += ppcs->me_64x64_distortion[b64_idx];
+                cr->actual_num_seg2_sbs++;
+            } else {
+                cr->me_distortion[1] += ppcs->me_64x64_distortion[b64_idx];
+                cr->actual_num_seg1_sbs++;
+            }
         } else {
-            cr->actual_num_seg1_sbs++;
+            cr->me_distortion[0] += ppcs->me_64x64_distortion[b64_idx];
         }
     }
+
+    int actual_num_seg0_sbs = ppcs->b64_total_count - cr->actual_num_seg1_sbs - cr->actual_num_seg2_sbs;
+    cr->me_distortion[0]    = actual_num_seg0_sbs ? cr->me_distortion[0] / actual_num_seg0_sbs : 0;
+    cr->me_distortion[1]    = cr->actual_num_seg1_sbs ? cr->me_distortion[1] / cr->actual_num_seg1_sbs : 0;
+    cr->me_distortion[2]    = cr->actual_num_seg2_sbs ? cr->me_distortion[2] / cr->actual_num_seg2_sbs : 0;
 
     int rate_boost_fac = cr->rate_boost_fac;
     if (!ppcs->sc_class1 && cr->actual_num_seg2_sbs) {

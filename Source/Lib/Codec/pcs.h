@@ -648,13 +648,22 @@ typedef struct CyclicRefresh {
      * Rate target ratio to set q delta.
      */
     double rate_ratio_qdelta;
-
+    /*!
+     * Enable/disable refresh.
+     */
     int apply_cyclic_refresh;
     /*!
      * Boost factor for rate target ratio, for segment 2.
      */
     int rate_boost_fac;
+    /*!
+     * Qdeltas for 3 segments.
+     */
     int qindex_delta[3];
+    /*!
+     * ME distortions for 3 segments.
+     */
+    uint64_t me_distortion[3];
     /*!
     * Actual number of SB(s) that were applied delta-q,
     * for segment 1.

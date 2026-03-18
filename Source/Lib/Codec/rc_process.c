@@ -31,6 +31,10 @@
 #include "src_ops_process.h"
 #include "enc_mode_config.h"
 
+static bool use_rtc_cbr_path(SequenceControlSet* scs) {
+    return scs->enc_ctx->rc_cfg.mode == AOM_CBR && scs->static_config.rtc;
+}
+
 // Specifies the weights of the ref frame in calculating qindex of non base layer frames
 const int svt_av1_non_base_qindex_weight_ref[EB_MAX_TEMPORAL_LAYERS] = {100, 100, 100, 100, 100, 100};
 // Specifies the weights of the worst quality in calculating qindex of non base layer frames
@@ -530,6 +534,7 @@ void svt_av1_rc_init(SequenceControlSet* scs) {
     rc->cur_avg_base_me_dist  = 0;
     rc->prev_avg_base_me_dist = 0;
     rc->avg_frame_low_motion  = 0;
+    rc->ema_me_dist           = 0.0;
 }
 
 /*********************************************************************************************
@@ -586,10 +591,6 @@ static void rc_init_frame_stats(PictureControlSet* pcs, SequenceControlSet* scs)
     // Get r0
     if (ppcs->r0_gen) {
         svt_aom_generate_r0beta(ppcs);
-    }
-
-    if (scs->static_config.aq_mode && scs->super_block_size == 64 && scs->enc_ctx->rc_cfg.mode == AOM_CBR) {
-        svt_aom_cyclic_refresh_init(ppcs);
     }
 
     // Get reference frame statistics
@@ -756,17 +757,21 @@ static void rc_process_packetization_feedback(PictureParentControlSet* ppcs,
             svt_av1_coded_frames_stat_calc(ppcs);
         }
     } else {
-        if (scs->static_config.gop_constraint_rc) {
-            svt_av1_rc_postencode_update_gop_const(ppcs);
-            // Qindex calculating
-            if (scs->enc_ctx->rc_cfg.mode == AOM_VBR) {
-                svt_av1_twopass_postencode_update_gop_const(ppcs);
-            }
+        if (use_rtc_cbr_path(scs)) {
+            svt_av1_rc_postencode_update_rtc_cbr(ppcs);
         } else {
-            svt_av1_rc_postencode_update(ppcs);
-            // Qindex calculating
-            if (scs->enc_ctx->rc_cfg.mode == AOM_VBR) {
-                svt_av1_twopass_postencode_update(ppcs);
+            if (scs->static_config.gop_constraint_rc) {
+                svt_av1_rc_postencode_update_gop_const(ppcs);
+                // Qindex calculating
+                if (scs->enc_ctx->rc_cfg.mode == AOM_VBR) {
+                    svt_av1_twopass_postencode_update_gop_const(ppcs);
+                }
+            } else {
+                svt_av1_rc_postencode_update(ppcs);
+                // Qindex calculating
+                if (scs->enc_ctx->rc_cfg.mode == AOM_VBR) {
+                    svt_av1_twopass_postencode_update(ppcs);
+                }
             }
         }
         svt_aom_update_rc_counts(ppcs);
@@ -827,7 +832,14 @@ void* svt_aom_rate_control_kernel(void* input_ptr) {
                 if (scs->enc_ctx->rc_cfg.mode == AOM_Q) {
                     svt_av1_rc_calc_qindex_crf_cqp(pcs, scs);
                     svt_aom_setup_segmentation(pcs, scs);
+                } else if (use_rtc_cbr_path(scs)) {
+                    svt_av1_rc_calc_qindex_rtc_cbr(pcs);
                 } else {
+                    if (scs->static_config.aq_mode && scs->super_block_size == 64 &&
+                        scs->enc_ctx->rc_cfg.mode == AOM_CBR) {
+                        svt_aom_cyclic_refresh_init(ppcs);
+                    }
+
                     if (!is_superres_recode_task) {
                         svt_av1_rc_process_rate_allocation(pcs, scs);
                     }
