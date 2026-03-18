@@ -274,40 +274,10 @@ static int adjust_q_cbr(PictureParentControlSet* ppcs, int q) {
     return AOMMAX(AOMMIN(q, rc->worst_quality), rc->best_quality);
 }
 
-/******************************************************************************
-* svt_av1_cyclic_refresh_rc_bits_per_mb
-* Compute bits per mb for cyclic refresh mode
-*******************************************************************************/
-static int svt_av1_cyclic_refresh_rc_bits_per_mb(PictureParentControlSet* ppcs, double correction_factor, int q) {
-    double weight_segment = (double)ppcs->cyclic_refresh.percent_refresh / 100;
-
-    SequenceControlSet* scs = ppcs->scs;
-    CyclicRefresh*      cr  = &ppcs->cyclic_refresh;
-    // Compute delta-q corresponding to qindex i.
-    int deltaq = svt_av1_compute_deltaq(ppcs, q, cr->rate_ratio_qdelta);
-    // Take segment weighted average for bits per mb.
-    int bits_per_mb = (int)((1.0 - weight_segment) *
-                                svt_av1_rc_bits_per_mb(ppcs->frm_hdr.frame_type,
-                                                       q,
-                                                       correction_factor,
-                                                       scs->static_config.encoder_bit_depth,
-                                                       ppcs->sc_class1) +
-                            weight_segment *
-                                svt_av1_rc_bits_per_mb(ppcs->frm_hdr.frame_type,
-                                                       q + deltaq,
-                                                       correction_factor,
-                                                       scs->static_config.encoder_bit_depth,
-                                                       ppcs->sc_class1));
-    return bits_per_mb;
-}
-
 // Calculate rate for the given 'q'.
-static int get_bits_per_mb(PictureParentControlSet* ppcs, int use_cyclic_refresh, double correction_factor, int q) {
-    SequenceControlSet* scs = ppcs->scs;
-    return use_cyclic_refresh
-        ? svt_av1_cyclic_refresh_rc_bits_per_mb(ppcs, correction_factor, q)
-        : svt_av1_rc_bits_per_mb(
-              ppcs->frm_hdr.frame_type, q, correction_factor, scs->static_config.encoder_bit_depth, ppcs->sc_class1);
+static int get_bits_per_mb(PictureParentControlSet* ppcs, double correction_factor, int q) {
+    return svt_av1_rc_bits_per_mb(
+        ppcs->frm_hdr.frame_type, q, correction_factor, ppcs->scs->static_config.encoder_bit_depth, ppcs->sc_class1);
 }
 
 // Similar to find_qindex_by_rate() function in ratectrl.c, but returns the q
@@ -316,14 +286,13 @@ static int get_bits_per_mb(PictureParentControlSet* ppcs, int use_cyclic_refresh
 // Also, respects the selected aq_mode when computing the rate.
 static int find_closest_qindex_by_rate(int desired_bits_per_mb, PictureParentControlSet* ppcs, double correction_factor,
                                        int best_qindex, int worst_qindex) {
-    const int use_cyclic_refresh = 0;
     // Find 'qindex' based on 'desired_bits_per_mb'.
     assert(best_qindex <= worst_qindex);
     int low  = best_qindex;
     int high = worst_qindex;
     while (low < high) {
         int mid             = (low + high) >> 1;
-        int mid_bits_per_mb = get_bits_per_mb(ppcs, use_cyclic_refresh, correction_factor, mid);
+        int mid_bits_per_mb = get_bits_per_mb(ppcs, correction_factor, mid);
         if (mid_bits_per_mb > desired_bits_per_mb) {
             low = mid + 1;
         } else {
@@ -334,7 +303,7 @@ static int find_closest_qindex_by_rate(int desired_bits_per_mb, PictureParentCon
 
     // Calculate rate difference of this q index from the desired rate.
     int curr_q           = low;
-    int curr_bits_per_mb = get_bits_per_mb(ppcs, use_cyclic_refresh, correction_factor, curr_q);
+    int curr_bits_per_mb = get_bits_per_mb(ppcs, correction_factor, curr_q);
     int curr_bit_diff    = (curr_bits_per_mb <= desired_bits_per_mb) ? desired_bits_per_mb - curr_bits_per_mb : INT_MAX;
     assert((curr_bit_diff != INT_MAX && curr_bit_diff >= 0) || curr_q == worst_qindex);
 
@@ -344,7 +313,7 @@ static int find_closest_qindex_by_rate(int desired_bits_per_mb, PictureParentCon
     if (curr_bit_diff == INT_MAX || curr_q == best_qindex) {
         prev_bit_diff = INT_MAX;
     } else {
-        int prev_bits_per_mb = get_bits_per_mb(ppcs, use_cyclic_refresh, correction_factor, prev_q);
+        int prev_bits_per_mb = get_bits_per_mb(ppcs, correction_factor, prev_q);
         assert(prev_bits_per_mb > desired_bits_per_mb);
         prev_bit_diff = prev_bits_per_mb - desired_bits_per_mb;
     }
@@ -974,6 +943,109 @@ static int calc_active_best_quality_no_stats_cbr(PictureControlSet* pcs, int act
     return active_best_quality;
 }
 
+/******************************************************
+ *  cyclic_refresh_init
+ * Initial cyclic refresh parameters
+ ******************************************************/
+static void cyclic_refresh_init(PictureParentControlSet* ppcs) {
+    SequenceControlSet* scs     = ppcs->scs;
+    CyclicRefresh*      cr      = &ppcs->cyclic_refresh;
+    EncodeContext*      enc_ctx = scs->enc_ctx;
+    RATE_CONTROL*       rc      = &enc_ctx->rc;
+
+    // Cases to reset the cyclic refresh adjustment parameters.
+    if (ppcs->slice_type == I_SLICE) {
+        // Reset adaptive elements for intra only frames and scene changes.
+        rc->percent_refresh_adjustment   = 5;
+        rc->rate_ratio_qdelta_adjustment = 0.25;
+    }
+
+    cr->percent_refresh = 20 + rc->percent_refresh_adjustment;
+
+    if (ppcs->sc_class1) {
+        cr->percent_refresh += 5;
+    }
+
+    cr->apply_cyclic_refresh = (ppcs->slice_type != I_SLICE && (scs->use_flat_ipp || ppcs->temporal_layer_index == 0));
+
+    if (scs->super_block_size != 64) {
+        cr->apply_cyclic_refresh = 0;
+    }
+
+    int qp_thresh     = AOMMAX(16, rc->best_quality + 4);
+    int qp_max_thresh = 118 * MAXQ >> 7;
+
+    if (rc->avg_frame_qindex[INTER_FRAME] > qp_max_thresh) {
+        cr->apply_cyclic_refresh = 0;
+    }
+
+    if (rc->avg_frame_qindex[INTER_FRAME] < qp_thresh) {
+        cr->apply_cyclic_refresh = 0;
+    }
+
+    if (rc->avg_frame_low_motion && rc->avg_frame_low_motion < 50) {
+        cr->apply_cyclic_refresh = 0;
+    }
+
+    if (cr->percent_refresh <= 0) {
+        cr->apply_cyclic_refresh = 0;
+    }
+
+    if (!cr->apply_cyclic_refresh) {
+        return;
+    }
+
+    uint16_t sb_cnt    = scs->sb_total_count;
+    cr->sb_start       = enc_ctx->cr_sb_end;
+    cr->sb_end         = AOMMIN(cr->sb_start + sb_cnt * cr->percent_refresh / 100, sb_cnt);
+    enc_ctx->cr_sb_end = cr->sb_end >= sb_cnt ? 0 : cr->sb_end;
+
+    // Use larger delta - qp(increase rate_ratio_qdelta) for first few(~4)
+    // periods of the refresh cycle, after a key frame.
+    cr->max_qdelta_perc = 60;
+
+    // Use larger delta-qp (increase rate_ratio_qdelta) for first few
+    // refresh cycles after a key frame (svc) or scene change (non svc).
+    // For non svc screen content, after a scene change gradually reduce
+    // this boost and suppress it further if either of the previous two
+    // frames overshot.
+    if (!ppcs->sc_class1) {
+        cr->rate_ratio_qdelta = (rc->frames_since_key <
+                                 4 * (1 << scs->static_config.hierarchical_levels) * 100 / cr->percent_refresh)
+            ? 1.50
+            : 1.15;
+        cr->rate_ratio_qdelta += rc->rate_ratio_qdelta_adjustment;
+        cr->rate_boost_fac = 15;
+    } else {
+        double distance_from_sc_factor = AOMMIN(0.75, (rc->frames_since_key / 10) * 0.1);
+        cr->rate_ratio_qdelta          = 2.25 + rc->rate_ratio_qdelta_adjustment - distance_from_sc_factor;
+        if (rc->rc_1_frame < 0 || rc->rc_2_frame < 0) {
+            cr->rate_ratio_qdelta -= 0.25;
+        }
+        cr->rate_boost_fac = 10;
+    }
+}
+
+/******************************************************************************
+* compute_cr_deltaq
+* Compute delta-q based on the q, bitdepth and cyclic refresh parameters
+*******************************************************************************/
+static int compute_cr_deltaq(PictureParentControlSet* ppcs, int q, double rate_ratio_qdelta) {
+    SequenceControlSet* scs       = ppcs->scs;
+    RATE_CONTROL*       rc        = &scs->enc_ctx->rc;
+    int                 bit_depth = scs->static_config.encoder_bit_depth;
+
+    int deltaq = svt_av1_compute_qdelta_by_rate(rc, INTER_FRAME, q, rate_ratio_qdelta, bit_depth, ppcs->sc_class1);
+    return AOMMAX(deltaq, -ppcs->cyclic_refresh.max_qdelta_perc * q / 100);
+}
+
+static void cyclic_refresh_compute_cr_qdeltas(PictureControlSet* pcs, int base_q_idx) {
+    CyclicRefresh* cr   = &pcs->ppcs->cyclic_refresh;
+    cr->qindex_delta[0] = 0;
+    cr->qindex_delta[1] = compute_cr_deltaq(pcs->ppcs, base_q_idx, cr->rate_ratio_qdelta);
+    cr->qindex_delta[2] = compute_cr_deltaq(pcs->ppcs, base_q_idx, cr->rate_ratio_qdelta_seg2);
+}
+
 #define QFACTOR 1.1
 
 static int rc_pick_q_and_bounds_no_stats_cbr(PictureControlSet* pcs) {
@@ -1309,7 +1381,18 @@ void svt_av1_rc_calc_qindex_rate_control(PictureControlSet* pcs, SequenceControl
         }
     }
 
-    ppcs->frm_hdr.quantization_params.base_q_idx = clamp_qindex(scs, new_qindex);
+    new_qindex = clamp_qindex(scs, new_qindex);
+
+    if (scs->enc_ctx->rc_cfg.mode == AOM_CBR) {
+        // CR is not used in qindex derivation, so compute it all here
+        cyclic_refresh_init(ppcs);
+        if (ppcs->cyclic_refresh.apply_cyclic_refresh) {
+            svt_aom_cyclic_refresh_setup(ppcs);
+            cyclic_refresh_compute_cr_qdeltas(pcs, new_qindex);
+        }
+    }
+
+    ppcs->frm_hdr.quantization_params.base_q_idx = new_qindex;
 }
 
 static int av1_estimate_bits_at_q(FrameType frame_type, int q, int mbs, double correction_factor, EbBitDepth bit_depth,

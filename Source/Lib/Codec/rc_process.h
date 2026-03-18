@@ -242,7 +242,7 @@ void svt_av1_generate_b64_me_qindex_map(struct PictureControlSet* pcs);
 int32_t svt_av1_convert_qindex_to_q_fp8(int32_t qindex, EbBitDepth bit_depth);
 int32_t svt_av1_compute_qdelta_fp(int32_t qstart_fp8, int32_t qtarget_fp8, EbBitDepth bit_depth);
 
-void svt_aom_cyclic_refresh_init(struct PictureParentControlSet* ppcs);
+void svt_aom_cyclic_refresh_setup(struct PictureParentControlSet* ppcs);
 
 // CQP/CRF
 void svt_av1_rc_calc_qindex_crf_cqp(struct PictureControlSet* pcs, struct SequenceControlSet* scs);
@@ -263,7 +263,6 @@ void    svt_av1_rc_init(struct SequenceControlSet* scs);
 int32_t svt_av1_compute_qdelta(double qstart, double qtarget, EbBitDepth bit_depth);
 double  svt_av1_convert_qindex_to_q(int32_t qindex, EbBitDepth bit_depth);
 int     svt_av1_calculate_boost_bits(int frame_count, int boost, int64_t total_group_bits);
-int     svt_av1_compute_deltaq(struct PictureParentControlSet* ppcs, int q, double rate_ratio_qdelta);
 
 int svt_aom_frame_is_kf_gf_arf(struct PictureParentControlSet* ppcs);
 

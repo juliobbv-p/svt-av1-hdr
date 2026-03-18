@@ -649,6 +649,10 @@ typedef struct CyclicRefresh {
      */
     double rate_ratio_qdelta;
     /*!
+     * Same for segment 2, computed internally.
+     */
+    double rate_ratio_qdelta_seg2;
+    /*!
      * Enable/disable refresh.
      */
     int apply_cyclic_refresh;

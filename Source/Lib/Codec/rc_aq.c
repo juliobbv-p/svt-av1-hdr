@@ -277,44 +277,12 @@ void svt_av1_variance_adjust_qp(PictureControlSet* pcs) {
     }
 }
 
-/******************************************************************************
-* svt_av1_compute_deltaq
-* Compute delta-q based on the q, bitdepth and cyclic refresh parameters
-*******************************************************************************/
-int svt_av1_compute_deltaq(PictureParentControlSet* ppcs, int q, double rate_ratio_qdelta) {
-    SequenceControlSet* scs       = ppcs->scs;
-    RATE_CONTROL*       rc        = &scs->enc_ctx->rc;
-    int                 bit_depth = scs->static_config.encoder_bit_depth;
-
-    rate_factor_level rf_lvl     = svt_av1_rate_factor_levels[ppcs->update_type];
-    FrameType         frame_type = (rf_lvl == KF_STD) ? KEY_FRAME : INTER_FRAME;
-
-    int deltaq = svt_av1_compute_qdelta_by_rate(rc, frame_type, q, rate_ratio_qdelta, bit_depth, ppcs->sc_class1);
-    deltaq     = AOMMAX(deltaq, -ppcs->cyclic_refresh.max_qdelta_perc * q / 100);
-
-    if (scs->enc_ctx->rc_cfg.mode != AOM_CBR) {
-        // RA uses a scale factor of 4 for the deltaQ range. Found it beneficial for low delay to have a larger deltaQ range, so we scale by 8
-        deltaq = AOMMIN(deltaq, 9 * 8 - 1);
-        deltaq = AOMMAX(deltaq, -9 * 8 + 1);
-    }
-    return deltaq;
-}
-
-/******************************************************
- * cyclic_sb_qp_derivation
- * Calculates the QP per SB based on the ME statistics
- * used in one pass encoding
- * only works for sb size  = 64
- ******************************************************/
 #define BOOST_MAX 10
 // Maximum rate target ratio for setting segment delta-qp.
 #define CR_MAX_RATE_TARGET_RATIO 4.0
 
-static void cyclic_sb_qp_derivation(PictureControlSet* pcs) {
-    PictureParentControlSet* ppcs = pcs->ppcs;
-    CyclicRefresh*           cr   = &ppcs->cyclic_refresh;
-
-    ppcs->frm_hdr.delta_q_params.delta_q_present = 1;
+void svt_aom_cyclic_refresh_setup(PictureParentControlSet* ppcs) {
+    CyclicRefresh* cr = &ppcs->cyclic_refresh;
 
     cr->me_distortion[0] = 0;
     cr->me_distortion[1] = 0;
@@ -351,18 +319,27 @@ static void cyclic_sb_qp_derivation(PictureControlSet* pcs) {
         // Quadratic Scaling; boost = BOOST_MAX * (dev/100)^2
         rate_boost_fac += (int)(BOOST_MAX * dev * dev / (100 * 100));
     }
-    int    base_q_idx             = ppcs->frm_hdr.quantization_params.base_q_idx;
-    double seg2_rate_ratio_qdelta = AOMMIN(CR_MAX_RATE_TARGET_RATIO, 0.1 * rate_boost_fac * cr->rate_ratio_qdelta);
+    cr->rate_ratio_qdelta_seg2 = AOMMIN(CR_MAX_RATE_TARGET_RATIO, 0.1 * rate_boost_fac * cr->rate_ratio_qdelta);
+}
 
-    cr->qindex_delta[0] = 0;
-    cr->qindex_delta[1] = svt_av1_compute_deltaq(ppcs, base_q_idx, cr->rate_ratio_qdelta);
-    cr->qindex_delta[2] = svt_av1_compute_deltaq(ppcs, base_q_idx, seg2_rate_ratio_qdelta);
+/******************************************************
+ * cyclic_sb_qp_assignment
+ * Assign the QP per SB based on the ME statistics
+ * used in one pass encoding
+ * only works for sb size  = 64
+ ******************************************************/
+static void cyclic_sb_qp_assignment(PictureControlSet* pcs) {
+    PictureParentControlSet* ppcs = pcs->ppcs;
+    CyclicRefresh*           cr   = &ppcs->cyclic_refresh;
 
+    ppcs->frm_hdr.delta_q_params.delta_q_present = 1;
+
+    int base_q_idx = ppcs->frm_hdr.quantization_params.base_q_idx;
     for (uint32_t b64_idx = 0; b64_idx < ppcs->b64_total_count; ++b64_idx) {
         SuperBlock* sb     = pcs->sb_ptr_array[b64_idx];
         int         offset = 0;
         if (b64_idx >= cr->sb_start && b64_idx < cr->sb_end) {
-            if (ppcs->me_8x8_distortion[b64_idx] < avg_me_dist) {
+            if (ppcs->me_8x8_distortion[b64_idx] < ppcs->norm_me_dist) {
                 offset = cr->qindex_delta[2];
             } else {
                 offset = cr->qindex_delta[1];
@@ -594,101 +571,28 @@ void svt_av1_rc_init_sb_qindex(PictureControlSet* pcs, SequenceControlSet* scs) 
     PictureParentControlSet* ppcs    = pcs->ppcs;
     FrameHeader*             frm_hdr = &ppcs->frm_hdr;
 
-    // set initial SB base_q_idx values
     frm_hdr->delta_q_params.delta_q_present = 0;
-    for (int sb_addr = 0; sb_addr < pcs->sb_total_count; ++sb_addr) {
-        pcs->sb_ptr_array[sb_addr]->qindex = frm_hdr->quantization_params.base_q_idx;
-    }
 
-    // adjust SB qindex based on variance
-    // note: do not enable Variance Boost for CBR rate control mode
-    if (scs->static_config.enable_variance_boost && scs->enc_ctx->rc_cfg.mode != AOM_CBR) {
-        svt_av1_variance_adjust_qp(pcs);
-    }
-    // QPM with tpl_la
-    if (scs->static_config.aq_mode == 2 && ppcs->tpl_ctrls.enable && ppcs->r0 != 0) {
-        svt_aom_sb_qp_derivation_tpl_la(pcs);
-    }
-    if (ppcs->cyclic_refresh.apply_cyclic_refresh) {
-        cyclic_sb_qp_derivation(pcs);
-    }
-}
-
-/******************************************************
- *  svt_aom_cyclic_refresh_init
- * Initial cyclic refresh parameters
- ******************************************************/
-void svt_aom_cyclic_refresh_init(PictureParentControlSet* ppcs) {
-    SequenceControlSet* scs     = ppcs->scs;
-    CyclicRefresh*      cr      = &ppcs->cyclic_refresh;
-    EncodeContext*      enc_ctx = scs->enc_ctx;
-    RATE_CONTROL*       rc      = &enc_ctx->rc;
-
-    // Cases to reset the cyclic refresh adjustment parameters.
-    if (ppcs->slice_type == I_SLICE) {
-        // Reset adaptive elements for intra only frames and scene changes.
-        rc->percent_refresh_adjustment   = 5;
-        rc->rate_ratio_qdelta_adjustment = 0.25;
-    }
-
-    cr->percent_refresh = 20 + rc->percent_refresh_adjustment;
-
-    if (ppcs->sc_class1) {
-        cr->percent_refresh += 5;
-    }
-
-    cr->apply_cyclic_refresh = (ppcs->slice_type != I_SLICE && (scs->use_flat_ipp || ppcs->temporal_layer_index == 0));
-
-    int qp_thresh     = AOMMAX(16, rc->best_quality + 4);
-    int qp_max_thresh = 118 * MAXQ >> 7;
-
-    if (rc->avg_frame_qindex[INTER_FRAME] > qp_max_thresh) {
-        cr->apply_cyclic_refresh = 0;
-    }
-
-    if (rc->avg_frame_qindex[INTER_FRAME] < qp_thresh) {
-        cr->apply_cyclic_refresh = 0;
-    }
-
-    if (rc->avg_frame_low_motion && rc->avg_frame_low_motion < 50) {
-        cr->apply_cyclic_refresh = 0;
-    }
-
-    if (cr->percent_refresh <= 0) {
-        cr->apply_cyclic_refresh = 0;
-    }
-
-    if (!cr->apply_cyclic_refresh) {
-        return;
-    }
-
-    uint16_t sb_cnt    = scs->sb_total_count;
-    cr->sb_start       = enc_ctx->cr_sb_end;
-    cr->sb_end         = AOMMIN(cr->sb_start + sb_cnt * cr->percent_refresh / 100, sb_cnt);
-    enc_ctx->cr_sb_end = cr->sb_end >= sb_cnt ? 0 : cr->sb_end;
-
-    // Use larger delta - qp(increase rate_ratio_qdelta) for first few(~4)
-    // periods of the refresh cycle, after a key frame.
-    cr->max_qdelta_perc = 60;
-
-    // Use larger delta-qp (increase rate_ratio_qdelta) for first few
-    // refresh cycles after a key frame (svc) or scene change (non svc).
-    // For non svc screen content, after a scene change gradually reduce
-    // this boost and suppress it further if either of the previous two
-    // frames overshot.
-    if (!ppcs->sc_class1) {
-        cr->rate_ratio_qdelta = (rc->frames_since_key <
-                                 4 * (1 << scs->static_config.hierarchical_levels) * 100 / cr->percent_refresh)
-            ? 1.50
-            : 1.15;
-        cr->rate_ratio_qdelta += rc->rate_ratio_qdelta_adjustment;
-        cr->rate_boost_fac = 15;
-    } else {
-        double distance_from_sc_factor = AOMMIN(0.75, (rc->frames_since_key / 10) * 0.1);
-        cr->rate_ratio_qdelta          = 2.25 + rc->rate_ratio_qdelta_adjustment - distance_from_sc_factor;
-        if (rc->rc_1_frame < 0 || rc->rc_2_frame < 0) {
-            cr->rate_ratio_qdelta -= 0.25;
+    // cyclic refresh is mutually exclusive with other AQ modes and overrides SB qindexes
+    // as it is attempted always in CBR mode - make it consistent and not mix with other AQ
+    // NOTE: with SB size 128 none of AQ will be used because of this
+    if (scs->enc_ctx->rc_cfg.mode == AOM_CBR) {
+        if (ppcs->cyclic_refresh.apply_cyclic_refresh) {
+            cyclic_sb_qp_assignment(pcs);
         }
-        cr->rate_boost_fac = 10;
+    } else {
+        // set initial SB base_q_idx values
+        for (int sb_addr = 0; sb_addr < pcs->sb_total_count; ++sb_addr) {
+            pcs->sb_ptr_array[sb_addr]->qindex = frm_hdr->quantization_params.base_q_idx;
+        }
+
+        // adjust SB qindex based on variance
+        if (scs->static_config.enable_variance_boost) {
+            svt_av1_variance_adjust_qp(pcs);
+        }
+        // QPM with tpl_la
+        if (scs->static_config.aq_mode == 2 && ppcs->tpl_ctrls.enable && ppcs->r0 != 0) {
+            svt_aom_sb_qp_derivation_tpl_la(pcs);
+        }
     }
 }

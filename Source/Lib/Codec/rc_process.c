@@ -835,11 +835,6 @@ void* svt_aom_rate_control_kernel(void* input_ptr) {
                 } else if (use_rtc_cbr_path(scs)) {
                     svt_av1_rc_calc_qindex_rtc_cbr(pcs);
                 } else {
-                    if (scs->static_config.aq_mode && scs->super_block_size == 64 &&
-                        scs->enc_ctx->rc_cfg.mode == AOM_CBR) {
-                        svt_aom_cyclic_refresh_init(ppcs);
-                    }
-
                     if (!is_superres_recode_task) {
                         svt_av1_rc_process_rate_allocation(pcs, scs);
                     }

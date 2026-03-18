@@ -42,6 +42,26 @@ static int av1_estimate_bits_at_qindex(PictureControlSet* pcs, int qindex, doubl
     return (int)(rcf * base_scale * ref_scale / quantizer);
 }
 
+/******************************************************************************
+* compute_cr_deltaq
+* Compute delta-q based on the q, bitdepth and cyclic refresh parameters
+*******************************************************************************/
+static int compute_cr_deltaq(PictureParentControlSet* ppcs, int q, double rate_ratio_qdelta) {
+    SequenceControlSet* scs       = ppcs->scs;
+    RATE_CONTROL*       rc        = &scs->enc_ctx->rc;
+    int                 bit_depth = scs->static_config.encoder_bit_depth;
+
+    int deltaq = svt_av1_compute_qdelta_by_rate(rc, INTER_FRAME, q, rate_ratio_qdelta, bit_depth, ppcs->sc_class1);
+    return AOMMAX(deltaq, -ppcs->cyclic_refresh.max_qdelta_perc * q / 100);
+}
+
+static void cyclic_refresh_compute_cr_qdeltas(PictureControlSet* pcs, int base_q_idx) {
+    CyclicRefresh* cr   = &pcs->ppcs->cyclic_refresh;
+    cr->qindex_delta[0] = 0;
+    cr->qindex_delta[1] = compute_cr_deltaq(pcs->ppcs, base_q_idx, cr->rate_ratio_qdelta);
+    cr->qindex_delta[2] = compute_cr_deltaq(pcs->ppcs, base_q_idx, cr->rate_ratio_qdelta_seg2);
+}
+
 static int av1_estimate_frame_size(PictureControlSet* pcs, int qindex, double rcf, bool calc_sb_qindex) {
     CyclicRefresh* cr = &pcs->ppcs->cyclic_refresh;
     RATE_CONTROL*  rc = &pcs->scs->enc_ctx->rc;
@@ -49,9 +69,7 @@ static int av1_estimate_frame_size(PictureControlSet* pcs, int qindex, double rc
     int estimated_size;
     if (cr->apply_cyclic_refresh) {
         if (calc_sb_qindex) {
-            // need to set `base_q_idx` here as SB indices depend on it
-            pcs->ppcs->frm_hdr.quantization_params.base_q_idx = qindex;
-            svt_av1_rc_init_sb_qindex(pcs, pcs->scs);
+            cyclic_refresh_compute_cr_qdeltas(pcs, qindex);
         }
 
         // Weight for non-base segments
@@ -94,7 +112,7 @@ static int find_closest_qindex_by_size(PictureControlSet* pcs, double rcf, int s
         }
     }
 
-    return curr_qindex;
+    return clamp_qindex(pcs->scs, curr_qindex);
 }
 
 static int calc_pframe_target_size(PictureParentControlSet* ppcs) {
@@ -163,17 +181,18 @@ static int calc_pframe_target_size(PictureParentControlSet* ppcs) {
     return AOMMAX(min_frame_target, target);
 }
 
-static void update_cyclic_refresh_parameters(PictureParentControlSet* ppcs) {
+static void cyclic_refresh_init(PictureParentControlSet* ppcs) {
     SequenceControlSet* scs = ppcs->scs;
     RATE_CONTROL*       rc  = &scs->enc_ctx->rc;
     CyclicRefresh*      cr  = &ppcs->cyclic_refresh;
 
-    cr->apply_cyclic_refresh = ppcs->slice_type != I_SLICE && scs->static_config.aq_mode != 0;
+    cr->apply_cyclic_refresh = ppcs->slice_type != I_SLICE && (scs->use_flat_ipp || ppcs->temporal_layer_index == 0);
 
     if (scs->super_block_size != 64) {
         cr->apply_cyclic_refresh = 0;
     }
 
+    // TODO: this must be adaptive!
     int cr_num_layers = 2;
     if (ppcs->temporal_layer_index >= cr_num_layers) {
         cr->apply_cyclic_refresh = 0;
@@ -297,14 +316,16 @@ static double calculate_qindex(PictureControlSet* pcs, SequenceControlSet* scs) 
         }
     }
     ppcs->base_frame_target = AOMMIN(ppcs->base_frame_target, max_size);
+    ppcs->this_frame_target = ppcs->base_frame_target;
 
-    update_cyclic_refresh_parameters(ppcs);
+    cyclic_refresh_init(ppcs);
+    svt_aom_cyclic_refresh_setup(ppcs);
 
     int width  = ppcs->av1_cm->frm_size.frame_width;
     int height = ppcs->av1_cm->frm_size.frame_height;
 
     double rcf = get_rate_correction_factor(ppcs, width, height);
-    return find_closest_qindex_by_size(pcs, rcf, ppcs->base_frame_target, min_qindex, max_qindex);
+    return find_closest_qindex_by_size(pcs, rcf, ppcs->this_frame_target, min_qindex, max_qindex);
 }
 
 void svt_av1_rc_calc_qindex_rtc_cbr(PictureControlSet* pcs) {
@@ -345,9 +366,12 @@ void svt_av1_rc_calc_qindex_rtc_cbr(PictureControlSet* pcs) {
 
     int qindex = calculate_qindex(pcs, scs);
 
-    ppcs->this_frame_target = ppcs->base_frame_target;
+    if (ppcs->cyclic_refresh.apply_cyclic_refresh) {
+        // compute CR qdeltas with final qindex
+        cyclic_refresh_compute_cr_qdeltas(pcs, qindex);
+    }
 
-    ppcs->frm_hdr.quantization_params.base_q_idx = clamp_qindex(scs, qindex);
+    ppcs->frm_hdr.quantization_params.base_q_idx = qindex;
 }
 
 static void av1_rc_update_rate_correction_factors(PictureParentControlSet* ppcs) {
