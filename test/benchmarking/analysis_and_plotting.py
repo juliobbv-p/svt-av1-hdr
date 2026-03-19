@@ -165,6 +165,7 @@ def add_summary_table_to_pdf(
     summary_avg_bd_rates_df: pd.DataFrame,
     anchor_encoder: str,
     anchor_speed: int,
+    per_image_df: pd.DataFrame | None = None,
 ) -> None:
     """
     Add a summary BD-rate table as a page to the PDF.
@@ -174,23 +175,48 @@ def add_summary_table_to_pdf(
         summary_avg_bd_rates_df: DataFrame with summary BD rates to display as table
         anchor_encoder: Reference encoder name
         anchor_speed: Reference encoder speed
+        per_image_df: Optional per-image DataFrame for adding VBV delay columns
     """
     fig, ax = plt.subplots(figsize=(12, 8))
     ax.axis("tight")
     ax.axis("off")
 
+    # Compute average VBV delays per encoder/speed if available
+    vbv_summary = {}
+    if per_image_df is not None:
+        for vbv_col in ["vbv_delay_p95", "vbv_delay_p50"]:
+            if vbv_col in per_image_df.columns:
+                vbv_avg = (
+                    per_image_df.dropna(subset=[vbv_col])
+                    .groupby(["encoder", "speed"])[vbv_col]
+                    .mean()
+                )
+                vbv_summary[vbv_col] = vbv_avg
+
+    # Add VBV columns to the summary DataFrame
+    display_df = summary_avg_bd_rates_df.copy()
+    for vbv_col, vbv_avg in vbv_summary.items():
+        display_df[vbv_col] = vbv_avg
+
     # Create table from DataFrame
     table_data = []
 
     # Add header row with metric names
-    header = ["Encoder/Speed"] + list(summary_avg_bd_rates_df.columns)
+    header = ["Encoder/Speed"] + list(display_df.columns)
     table_data.append(header)
 
     # Add data rows
-    for idx, row in summary_avg_bd_rates_df.iterrows():
+    for idx, row in display_df.iterrows():
         encoder, speed = idx if isinstance(idx, tuple) else (idx, "")
         row_label = f"{encoder} s{speed}" if speed != "" else str(encoder)
-        row_data = [f"{v:.2f}%" if pd.notna(v) else "N/A" for v in row.values]
+        row_data = []
+        for col, v in zip(display_df.columns, row.values):
+            if pd.isna(v):
+                row_data.append("N/A")
+            elif col.startswith("vbv_delay"):
+                row_data.append(f"{v:.1f}ms")
+            else:
+                row_data.append(f"{v:.2f}%")
         table_data.append([row_label] + row_data)
 
     # Create matplotlib table
@@ -298,6 +324,66 @@ def add_perf_table_to_pdf(
     plt.close(fig)
 
 
+def add_vbv_delay_chart(
+    pdf: PdfPages,
+    per_image_df: pd.DataFrame,
+    vbv_metric: str,
+    title: str,
+) -> None:
+    """Add a VBV delay vs bitrate chart to the PDF."""
+    if vbv_metric not in per_image_df.columns:
+        return
+    df = per_image_df.dropna(subset=[vbv_metric, "file_size_mb"])
+    if df.empty:
+        return
+
+    fig, ax = plt.subplots(figsize=(12, 8))
+
+    encoders = df["encoder"].unique()
+    for i, encoder in enumerate(encoders):
+        enc_df = df[df["encoder"] == encoder]
+
+        # Average VBV delay across clips at each (encoder, speed, quality) point
+        grouped = (
+            enc_df.groupby(["speed", "quality"])
+            .agg(
+                avg_vbv=(vbv_metric, "mean"),
+                avg_bitrate_mbps=("file_size_mb", "mean"),
+            )
+            .reset_index()
+        )
+
+        for speed in grouped["speed"].unique():
+            speed_df = grouped[grouped["speed"] == speed].sort_values("avg_bitrate_mbps")
+            if speed_df.empty:
+                continue
+
+            color = colors[i % len(colors)]
+            marker = markers[(i // len(colors)) % len(markers)]
+            label = f"{encoder} s{speed}"
+
+            ax.plot(
+                speed_df["avg_bitrate_mbps"],
+                speed_df["avg_vbv"],
+                marker=marker,
+                color=color,
+                linewidth=2,
+                markersize=8,
+                label=label,
+            )
+
+    ax.set_xscale("log")
+    ax.set_xlabel("Bitrate (MB)", fontsize=12)
+    ax.set_ylabel(f"{title} (ms)", fontsize=12)
+    ax.set_title(f"{title} vs Bitrate (averaged across clips)", fontsize=14, fontweight="bold")
+    ax.legend(fontsize=10)
+    ax.grid(True, alpha=0.3, which="both")
+
+    plt.tight_layout()
+    pdf.savefig(fig, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+
+
 def create_bd_rate_plots_pdf(
     metric_results: Dict[str, pd.DataFrame],
     anchor_encoder: str,
@@ -305,6 +391,7 @@ def create_bd_rate_plots_pdf(
     pdf_output_path: str,
     summary_avg_bd_rates_df: pd.DataFrame | None = None,
     summary_avg_perf_df: pd.DataFrame | None = None,
+    per_image_df: pd.DataFrame | None = None,
 ) -> None:
     """
     Create a single multi-page PDF with BD-rate vs encoding time plots for all metrics.
@@ -315,12 +402,14 @@ def create_bd_rate_plots_pdf(
         anchor_speed: Reference encoder speed
         pdf_output_path: Path to save the multi-page PDF
         summary_avg_bd_rates_df: Optional DataFrame with summary BD rates to display as table on first page
+        per_image_df: Optional DataFrame with per-image results (for VBV delay charts)
     """
     with PdfPages(pdf_output_path) as pdf:
         # Add summary table as first page if provided
         if summary_avg_bd_rates_df is not None:
             add_summary_table_to_pdf(
-                pdf, summary_avg_bd_rates_df, anchor_encoder, anchor_speed
+                pdf, summary_avg_bd_rates_df, anchor_encoder, anchor_speed,
+                per_image_df=per_image_df,
             )
         if summary_avg_perf_df is not None:
             add_perf_table_to_pdf(pdf, summary_avg_perf_df)
@@ -466,6 +555,11 @@ def create_bd_rate_plots_pdf(
             except Exception as e:
                 print(f"    ✗ Error creating plot for {metric}: {e}")
                 continue
+
+        # Add VBV delay charts
+        if per_image_df is not None:
+            add_vbv_delay_chart(pdf, per_image_df, "vbv_delay_p95", "VBV Delay P95")
+            add_vbv_delay_chart(pdf, per_image_df, "vbv_delay_p50", "VBV Delay P50")
 
     print(f"✓ BD-rate plots PDF saved to: {pdf_output_path}")
 
@@ -701,6 +795,7 @@ def run_bd_rate_analysis(
             pdf_output_path=pdf_output_path,
             summary_avg_bd_rates_df=summary_bd_rates_df,
             summary_avg_perf_df=summary_perf_df,
+            per_image_df=per_image_df,
         )
     else:
         print("No BD-rate results available for PDF generation")

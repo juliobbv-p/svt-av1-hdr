@@ -74,7 +74,9 @@ class VbvMetric(QualityMetric):
             )
             info = json.loads(result.stdout)
 
-            frame_sizes = [int(packet["size"]) for packet in info["packets"]]
+            # IVF container adds 2 bytes overhead per frame, subtract it
+            overhead = 2
+            frame_sizes = [int(packet["size"]) - overhead for packet in info["packets"]]
             frame_duration = 1.0 / self.frame_rate
 
             vbv_delays = []
