@@ -190,8 +190,11 @@ typedef struct RATE_CONTROL {
     uint32_t prev_avg_base_me_dist;
 
     // RTC CBR
-    double target_size_factors[MAX_TEMPORAL_LAYERS];
+    double target_size_factors[MAX_TEMPORAL_LAYERS + 1];
     double ema_me_dist; // exponentially smoothed average of cur_avg_base_me_dist
+
+    // Kalman filter state for RCF adaptation
+    double rcf_kalman_P[MAX_TEMPORAL_LAYERS + 1]; // estimation variance per layer
 } RATE_CONTROL;
 
 /**************************************

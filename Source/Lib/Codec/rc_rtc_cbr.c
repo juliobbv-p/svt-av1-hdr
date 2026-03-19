@@ -15,6 +15,11 @@
 
 #include "rc_process.h"
 
+// If test videos are concatenated then at concatenation point scene change is
+// abrupt and using low qindex for first frame gives huge quality boost for next frames.
+// Regular CBR mistakenly allows such low qindex due to inability to properly
+// predict frame size and thus benefits from quality propagation.
+// This flag is to make comparison for fair, only for testing purposes.
 #define USE_SCENE_CUT_WORKAROUND 0
 
 // Binary search evaluation function type
@@ -167,45 +172,30 @@ static int calc_pframe_target_size(PictureParentControlSet* ppcs) {
     double              one_pct_bits = 1.0 + rc->optimal_buffer_level / 100.0;
     int                 target       = rc->avg_frame_bandwidth;
 
-    if (rc->ema_me_dist <= 0) {
-        rc->ema_me_dist = rc->cur_avg_base_me_dist; // initialize on first frame
-    }
-    rc->ema_me_dist = AOMMAX(rc->ema_me_dist, 64 * 64 / 16);
-
-    // complexity modulation: scale target based on deviation of
-    // cur_avg_base_me_dist from its exponentially smoothed average
-    // double complexity_weight = 0.0;
-    // const char* env = getenv("SVT_COMPLEXITY_WEIGHT");
-    // if (env) {
-    //     complexity_weight = atof(env);
-    // }
-    // if (rc->cur_avg_base_me_dist > 0 && complexity_weight != 0) {
-    //     double deviation = (rc->cur_avg_base_me_dist - rc->ema_me_dist) / rc->ema_me_dist;
-    //     target = (int)(target * (1.0 + tanh(complexity_weight * deviation)));
-    // }
-
     // employ RCFs weighting to adapt to different encoding complexities automatically
     // TODO: may tune these allocation with pow(rcf, parameter)
     int max_layers = ppcs->scs->static_config.hierarchical_levels + 1;
     if (ppcs->temporal_layer_index == 0 && max_layers > 1) {
         int    n = 0, m = 1; // to produce 1, 1, 2, 4, 8, ...
         double sum_factors = 0.0;
-        for (int k = 0; k < max_layers; k++) {
-            sum_factors += rc->rate_correction_factors[k + 1] * m;
+        for (int k = 1; k < max_layers + 1; k++) {
+            sum_factors += rc->rate_correction_factors[k] * m;
             m += n;
             n = m;
         }
         double avg_factor = sum_factors / m;
-        for (int k = 0; k < max_layers; k++) {
-            rc->target_size_factors[k] = rc->rate_correction_factors[k + 1] / avg_factor;
+        for (int k = 1; k < max_layers + 1; k++) {
+            rc->target_size_factors[k] = rc->rate_correction_factors[k] / avg_factor;
         }
     }
 
     // temporal dependency and mode decision modulation
-    target = (int)(target * rc->target_size_factors[ppcs->temporal_layer_index]);
+    target = (int)(target * rc->target_size_factors[ppcs->temporal_layer_index + 1]);
 
 #if USE_SCENE_CUT_WORKAROUND
-    if (rc->cur_avg_base_me_dist > rc->ema_me_dist * 1.5) {
+    if (rc->ema_me_dist <= 0) {
+        rc->ema_me_dist = rc->cur_avg_base_me_dist;
+    } else if (rc->cur_avg_base_me_dist > rc->ema_me_dist * 1.5) {
         target = (int)(target * rc->cur_avg_base_me_dist / rc->ema_me_dist);
     }
 #endif
@@ -287,47 +277,42 @@ static void cyclic_refresh_init(PictureParentControlSet* ppcs) {
     cr->rate_boost_fac    = rate_boost_fac;
 }
 
-static double get_rate_correction_factor(PictureParentControlSet* ppcs, int width, int height) {
-    RATE_CONTROL* rc       = &ppcs->scs->enc_ctx->rc;
-    FrameSize*    frm_size = &ppcs->av1_cm->frm_size;
+static int get_rcf_index(PictureParentControlSet* ppcs) {
+    return ppcs->frm_hdr.frame_type == KEY_FRAME ? 0 : ppcs->temporal_layer_index + 1;
+}
 
+static double get_rate_correction_factor(PictureParentControlSet* ppcs, int width, int height) {
+    RATE_CONTROL* rc = &ppcs->scs->enc_ctx->rc;
     svt_block_on_mutex(rc->rc_mutex);
-    int    k   = ppcs->frm_hdr.frame_type == KEY_FRAME ? 0 : ppcs->temporal_layer_index + 1;
-    double rcf = rc->rate_correction_factors[k];
+    double rcf = rc->rate_correction_factors[get_rcf_index(ppcs)];
     svt_release_mutex(rc->rc_mutex);
 
-    rcf *= (double)(frm_size->frame_width * frm_size->frame_height) / (width * height);
-    return rcf;
+    // Normalize RCF to account for the size-dependent scaling factor.
+    FrameSize* frm_size  = &ppcs->av1_cm->frm_size;
+    double     res_scale = (double)(frm_size->frame_width * frm_size->frame_height) / (width * height);
+
+    return rcf * res_scale;
 }
 
 static void set_rate_correction_factor(PictureParentControlSet* ppcs, double rcf, int width, int height) {
-    RATE_CONTROL* rc       = &ppcs->scs->enc_ctx->rc;
-    FrameSize*    frm_size = &ppcs->av1_cm->frm_size;
-
-    rcf = fclamp(rcf, MIN_BPB_FACTOR, MAX_BPB_FACTOR);
-
     // Normalize RCF to account for the size-dependent scaling factor.
-    rcf /= (double)(frm_size->frame_width * frm_size->frame_height) / (width * height);
+    FrameSize* frm_size  = &ppcs->av1_cm->frm_size;
+    double     res_scale = (double)(frm_size->frame_width * frm_size->frame_height) / (width * height);
 
+    rcf = fclamp(rcf, MIN_BPB_FACTOR, MAX_BPB_FACTOR) / res_scale;
+
+    RATE_CONTROL* rc = &ppcs->scs->enc_ctx->rc;
     svt_block_on_mutex(rc->rc_mutex);
-    if (ppcs->frm_hdr.frame_type == KEY_FRAME) {
-        rc->rate_correction_factors[0] = rcf;
-    } else {
-        if (rc->frames_since_key < 4) {
-            // Reset all factors at start as initial values could be off
-            int max_layers = ppcs->scs->static_config.hierarchical_levels + 1;
-            for (int i = 1; i < max_layers + 1; ++i) {
-                rc->rate_correction_factors[i] = AOMMAX(rcf, rc->rate_correction_factors[i]);
-            }
-        } else {
-            rc->rate_correction_factors[ppcs->temporal_layer_index + 1] = rcf;
+    rc->rate_correction_factors[get_rcf_index(ppcs)] = rcf;
+    if (rc->frames_since_key < 4) {
+        // Reset all factors pessimistically at start as initial values could be off
+        int max_layers = ppcs->scs->static_config.hierarchical_levels + 1;
+        for (int i = 1; i < max_layers + 1; ++i) {
+            rc->rate_correction_factors[i] = AOMMAX(rcf, rc->rate_correction_factors[i]);
         }
     }
     svt_release_mutex(rc->rc_mutex);
 }
-
-#define DEFAULT_KF_BOOST_RT 2300
-#define DEFAULT_GF_BOOST_RT 2000
 
 static double calculate_qindex(PictureControlSet* pcs, SequenceControlSet* scs) {
     PictureParentControlSet* ppcs   = pcs->ppcs;
@@ -339,11 +324,9 @@ static double calculate_qindex(PictureControlSet* pcs, SequenceControlSet* scs) 
     int max_size   = rc->max_frame_bandwidth;
 
     if (frame_is_intra_only(ppcs)) {
-        rc->kf_boost      = DEFAULT_KF_BOOST_RT;
         rc->frames_to_key = scs->static_config.intra_period_length + 1;
 
-        // just to match existent CBR
-        ppcs->base_frame_target = rc->starting_buffer_level / 2;
+        ppcs->base_frame_target = (int)(rc->avg_frame_bandwidth * rc->target_size_factors[0]);
 
         if (rc_cfg->max_intra_bitrate_pct) {
             int maxi = rc->avg_frame_bandwidth * rc_cfg->max_intra_bitrate_pct / 100;
@@ -409,10 +392,12 @@ void svt_av1_rc_calc_qindex_rtc_cbr(PictureControlSet* pcs) {
         // d) invert current buffer level
         rc->buffer_level = (maximum - starting) * bandwidth / 1000;
 
-        int max_layers = scs->static_config.hierarchical_levels + 1;
-        for (int k = 0; k < max_layers; k++) {
-            rc->target_size_factors[k] = 1;
+        for (int k = 0; k < MAX_TEMPORAL_LAYERS + 1; k++) {
+            rc->target_size_factors[k] = 1.0; // flat at start
+            rc->rcf_kalman_P[k]        = 1.0; // high initial uncertainty for fast convergence
         }
+        // just to match existent CBR
+        rc->target_size_factors[0] = rc->starting_buffer_level / (2.0 * rc->avg_frame_bandwidth);
     }
 
     int qindex = calculate_qindex(pcs, scs);
@@ -459,23 +444,26 @@ static void av1_rc_update_rate_correction_factors(PictureParentControlSet* ppcs)
     correction_factor = AOMMAX(correction_factor, 0.25);
     correction_factor = AOMMIN(correction_factor, 4.0);
 
-    // Decide how heavily to dampen the adjustment
-    // Compute adjustment_limit from correction_factor error and content volatility.
-    double rcf_base    = 0.2;
-    double rcf_damping = 1.0;
+    // Kalman filter update for RCF.
+    // State: log(rcf). Observation: log(rcf * correction_factor) = log(rcf) + log(cf).
+    // Innovation is log(correction_factor) — how much the model was off.
+    //
+    // Process noise Q: how much log(rcf) can change per frame (content variation).
+    // Measurement noise R: how noisy a single frame's correction_factor is.
+    static const double Q = 0.01;
+    static const double R = 0.08;
 
-    double log_error        = fabs(log10(correction_factor));
-    double base_limit       = rcf_base * AOMMIN(1.0, log_error + 0.5);
-    double me_deviation     = fabs(rc->cur_avg_base_me_dist - rc->ema_me_dist) / AOMMAX(rc->ema_me_dist, 1);
-    double adjustment_limit = base_limit / (1.0 + rcf_damping * me_deviation);
+    int k = get_rcf_index(ppcs);
 
-    if (correction_factor > 1) {
-        correction_factor = 1.0 + (correction_factor - 1.0) * adjustment_limit;
-        rcf *= correction_factor;
-    } else {
-        correction_factor = 1.0 + (1.0 / correction_factor - 1.0) * adjustment_limit / 2;
-        rcf /= correction_factor;
-    }
+    // Predict step: P increases by process noise
+    double P = rc->rcf_kalman_P[k] + Q;
+    // Update step: Kalman gain
+    double K = P / (P + R);
+    // Innovation in log domain, innovation = log(correction_factor)
+    // Update state: log(rcf) += K * innovation  →  rcf *= exp(K * innovation)
+    rcf *= exp(K * log(correction_factor));
+    // Update estimation variance
+    rc->rcf_kalman_P[k] = (1.0 - K) * P;
 
     set_rate_correction_factor(ppcs, rcf, width, height);
 }
@@ -509,8 +497,9 @@ void svt_av1_rc_postencode_update_rtc_cbr(PictureParentControlSet* ppcs) {
 
     update_buffer_level(ppcs, ppcs->projected_frame_size);
 
-    double alpha = 0.5; // EMA smoothing factor
-    rc->ema_me_dist += alpha * (rc->cur_avg_base_me_dist - rc->ema_me_dist);
+#if USE_SCENE_CUT_WORKAROUND
+    rc->ema_me_dist += 0.5 * (rc->cur_avg_base_me_dist - rc->ema_me_dist);
+#endif
 
     int qindex = frm_hdr->quantization_params.base_q_idx;
 
