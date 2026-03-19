@@ -278,8 +278,6 @@ void svt_av1_variance_adjust_qp(PictureControlSet* pcs) {
 }
 
 #define BOOST_MAX 10
-// Maximum rate target ratio for setting segment delta-qp.
-#define CR_MAX_RATE_TARGET_RATIO 4.0
 
 void svt_aom_cyclic_refresh_setup(PictureParentControlSet* ppcs) {
     CyclicRefresh* cr = &ppcs->cyclic_refresh;
@@ -319,7 +317,7 @@ void svt_aom_cyclic_refresh_setup(PictureParentControlSet* ppcs) {
         // Quadratic Scaling; boost = BOOST_MAX * (dev/100)^2
         rate_boost_fac += (int)(BOOST_MAX * dev * dev / (100 * 100));
     }
-    cr->rate_ratio_qdelta_seg2 = AOMMIN(CR_MAX_RATE_TARGET_RATIO, 0.1 * rate_boost_fac * cr->rate_ratio_qdelta);
+    cr->rate_ratio_qdelta_seg2 = 0.1 * rate_boost_fac * cr->rate_ratio_qdelta;
 }
 
 /******************************************************

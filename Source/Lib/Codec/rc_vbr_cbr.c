@@ -1039,11 +1039,17 @@ static int compute_cr_deltaq(PictureParentControlSet* ppcs, int q, double rate_r
     return AOMMAX(deltaq, -ppcs->cyclic_refresh.max_qdelta_perc * q / 100);
 }
 
+#define CR_MAX_RATE_TARGET_RATIO 4.0
+
 static void cyclic_refresh_compute_cr_qdeltas(PictureControlSet* pcs, int base_q_idx) {
-    CyclicRefresh* cr   = &pcs->ppcs->cyclic_refresh;
+    CyclicRefresh* cr = &pcs->ppcs->cyclic_refresh;
+
+    double rate_ratio_qdelta      = cr->rate_ratio_qdelta;
+    double rate_ratio_qdelta_seg2 = AOMMIN(CR_MAX_RATE_TARGET_RATIO, cr->rate_ratio_qdelta_seg2);
+
     cr->qindex_delta[0] = 0;
-    cr->qindex_delta[1] = compute_cr_deltaq(pcs->ppcs, base_q_idx, cr->rate_ratio_qdelta);
-    cr->qindex_delta[2] = compute_cr_deltaq(pcs->ppcs, base_q_idx, cr->rate_ratio_qdelta_seg2);
+    cr->qindex_delta[1] = compute_cr_deltaq(pcs->ppcs, base_q_idx, rate_ratio_qdelta);
+    cr->qindex_delta[2] = compute_cr_deltaq(pcs->ppcs, base_q_idx, rate_ratio_qdelta_seg2);
 }
 
 #define QFACTOR 1.1
