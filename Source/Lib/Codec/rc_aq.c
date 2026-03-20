@@ -577,6 +577,10 @@ void svt_av1_rc_init_sb_qindex(PictureControlSet* pcs, SequenceControlSet* scs) 
     if (scs->enc_ctx->rc_cfg.mode == AOM_CBR) {
         if (ppcs->cyclic_refresh.apply_cyclic_refresh) {
             cyclic_sb_qp_assignment(pcs);
+        } else {
+            for (int sb_addr = 0; sb_addr < pcs->sb_total_count; ++sb_addr) {
+                pcs->sb_ptr_array[sb_addr]->qindex = frm_hdr->quantization_params.base_q_idx;
+            }
         }
     } else {
         // set initial SB base_q_idx values

@@ -165,54 +165,57 @@ static double eval_frame_size(void* ctx, int qindex) {
 }
 
 static int calc_pframe_target_size(PictureParentControlSet* ppcs) {
-    SequenceControlSet* scs          = ppcs->scs;
-    RATE_CONTROL*       rc           = &scs->enc_ctx->rc;
-    RateControlCfg*     rc_cfg       = &scs->enc_ctx->rc_cfg;
-    int                 diff         = rc->buffer_level - rc->optimal_buffer_level;
-    double              one_pct_bits = 1.0 + rc->optimal_buffer_level / 100.0;
-    int                 target       = rc->avg_frame_bandwidth;
+    SequenceControlSet* scs    = ppcs->scs;
+    RATE_CONTROL*       rc     = &scs->enc_ctx->rc;
+    RateControlCfg*     rc_cfg = &scs->enc_ctx->rc_cfg;
+
+    double me_dist = rc->cur_avg_base_me_dist;
+    if (rc->ema_me_dist <= 0) {
+        rc->ema_me_dist = me_dist;
+    }
 
     // employ RCFs weighting to adapt to different encoding complexities automatically
     // TODO: may tune these allocation with pow(rcf, parameter)
     int max_layers = ppcs->scs->static_config.hierarchical_levels + 1;
     if (ppcs->temporal_layer_index == 0 && max_layers > 1) {
-        int    n = 0, m = 1; // to produce 1, 1, 2, 4, 8, ...
         double sum_factors = 0.0;
         for (int k = 1; k < max_layers + 1; k++) {
+            int m = 1 << AOMMAX(k - 2, 0);
             sum_factors += rc->rate_correction_factors[k] * m;
-            m += n;
-            n = m;
         }
-        double avg_factor = sum_factors / m;
+        double avg_factor = sum_factors / (1 << (max_layers - 1));
         for (int k = 1; k < max_layers + 1; k++) {
             rc->target_size_factors[k] = rc->rate_correction_factors[k] / avg_factor;
         }
     }
 
+    double frame_target = rc->avg_frame_bandwidth;
+    double buffer_diff  = rc->buffer_level - rc->optimal_buffer_level;
+    double one_pct_bits = 1.0 + rc->optimal_buffer_level / 100.0;
+
     // temporal dependency and mode decision modulation
-    target = (int)(target * rc->target_size_factors[ppcs->temporal_layer_index + 1]);
+    frame_target *= rc->target_size_factors[ppcs->temporal_layer_index + 1];
 
 #if USE_SCENE_CUT_WORKAROUND
-    if (rc->ema_me_dist <= 0) {
-        rc->ema_me_dist = rc->cur_avg_base_me_dist;
-    } else if (rc->cur_avg_base_me_dist > rc->ema_me_dist * 1.5) {
-        target = (int)(target * rc->cur_avg_base_me_dist / rc->ema_me_dist);
+    if (me_dist > rc->ema_me_dist * 1.5) {
+        frame_target *= me_dist / rc->ema_me_dist;
     }
 #endif
 
-    // buffer adjustment
-    if (diff > 0) {
+    // buffer adjustment, estimate buffer level after this frame
+    buffer_diff += frame_target - rc->avg_frame_bandwidth;
+    if (buffer_diff > 0) {
         // Lower the target for this frame.
-        double pct = AOMMIN(diff / one_pct_bits, rc_cfg->over_shoot_pct);
-        target -= (int)(target * pct / 200);
-    } else if (rc->buffer_level < rc->avg_frame_bandwidth) {
+        double pct = AOMMIN(buffer_diff / one_pct_bits, rc_cfg->over_shoot_pct);
+        frame_target *= 1.0 - pct / 200;
+    } else if (rc->buffer_level < rc->avg_frame_bandwidth / 4) {
         // Increase the target for this frame, less aggresively
-        double pct = AOMMIN(-diff / one_pct_bits, rc_cfg->under_shoot_pct);
-        target += (int)(target * pct / 400);
+        double pct = AOMMIN(-buffer_diff / one_pct_bits, rc_cfg->under_shoot_pct);
+        frame_target *= 1.0 + pct / 400;
     }
 
-    int min_frame_target = AOMMAX(rc->avg_frame_bandwidth >> 4, FRAME_OVERHEAD_BITS);
-    return AOMMAX(min_frame_target, target);
+    double min_frame_target = AOMMAX(rc->avg_frame_bandwidth >> 4, FRAME_OVERHEAD_BITS);
+    return AOMMAX(min_frame_target, frame_target);
 }
 
 static void cyclic_refresh_init(PictureParentControlSet* ppcs) {
@@ -497,9 +500,7 @@ void svt_av1_rc_postencode_update_rtc_cbr(PictureParentControlSet* ppcs) {
 
     update_buffer_level(ppcs, ppcs->projected_frame_size);
 
-#if USE_SCENE_CUT_WORKAROUND
     rc->ema_me_dist += 0.5 * (rc->cur_avg_base_me_dist - rc->ema_me_dist);
-#endif
 
     int qindex = frm_hdr->quantization_params.base_q_idx;
 
