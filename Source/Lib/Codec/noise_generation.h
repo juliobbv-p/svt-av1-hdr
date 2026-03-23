@@ -9,12 +9,12 @@
 * PATENTS file, you can obtain it at https://www.aomedia.org/license/patent-license.
 */
 
-#ifndef EbPhotonNoiseTable_h
-#define EbPhotonNoiseTable_h
+#ifndef EbNoiseGeneration_h
+#define EbNoiseGeneration_h
 
 #include "definitions.h"
 #include "EbSvtAv1Enc.h"
 
-EbErrorType svt_av1_generate_photon_noise_table(EbSvtAv1EncConfiguration *config);
+EbErrorType svt_av1_generate_noise_table(EbSvtAv1EncConfiguration *config);
 
-#endif // EbPhotonNoiseTable_h
+#endif // EbNoiseGeneration_h

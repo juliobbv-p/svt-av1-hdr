@@ -56,7 +56,7 @@
 #include "rc_results.h"
 #include "definitions.h"
 #include "metadata_handle.h"
-#include "photon_noise.h"
+#include "noise_generation.h"
 
 #include "pack_unpack_c.h"
 #include "enc_mode_config.h"
@@ -3838,25 +3838,29 @@ static void set_param_based_on_input(SequenceControlSet *scs)
         scs->static_config.hierarchical_levels = 4;
         SVT_WARN("Fwd key frame is only supported for hierarchical levels 4 at this point. Hierarchical levels are set to 4\n");
     }
-    if (scs->static_config.photon_noise_iso > 0) {
+    if (scs->static_config.noise_strength > 0) {
         // Check if film-grain-denoise is also enabled (should be disabled if fgs_table is present)
         if (scs->static_config.film_grain_denoise_strength > 0) {
-            SVT_WARN("Both film-grain-denoise and photon-noise were specified; film-grain-denoise will be disabled\n");
+            SVT_WARN("Both film-grain-denoise and noise strength were specified; film-grain-denoise will be disabled\n");
             scs->static_config.film_grain_denoise_strength = 0;
         }
         // Check if fgs_table is present
         if (scs->static_config.fgs_table) {
-            SVT_WARN("Both photon-noise and fgs-table were specified; photon-noise will be disabled\n");
-            scs->static_config.photon_noise_iso = 0;
+            SVT_WARN("Both noise strength and fgs-table were specified; build-in noise table generation will be disabled\n");
+            scs->static_config.noise_strength = 0;
+            scs->static_config.noise_strength_chroma = -1;
+            scs->static_config.noise_size = -1;
         } else {
-            if (scs->static_config.transfer_characteristics == EB_CICP_TC_UNSPECIFIED) {
-                SVT_WARN("Transfer characteristics is not specified, photon noise will be defaulting to BT.709\n");
-            }
-            svt_av1_generate_photon_noise_table(&scs->static_config);
+            svt_av1_generate_noise_table(&scs->static_config);
         }
     } else {
-        if (scs->static_config.enable_photon_noise_chroma == 1) {
-            SVT_WARN("Photon noise chroma signal is going to be ignored when photon noise level is 0.\n");
+        if (scs->static_config.noise_strength_chroma != -1) {
+            SVT_WARN("Chroma noise strength signal is going to be ignored when noise strength level is 0.\n");
+            scs->static_config.noise_strength_chroma = -1;
+        }
+        if (scs->static_config.noise_size != -1) {
+            SVT_WARN("Noise size signal is going to be ignored when noise strength level is 0.\n");
+            scs->static_config.noise_size = -1;
         }
     }
     bool disallow_nsq = true;
@@ -4173,8 +4177,9 @@ static void copy_api_from_app(SequenceControlSet *scs, EbSvtAv1EncConfiguration 
     }
     scs->seq_header.film_grain_params_present = (uint8_t)(scs->static_config.film_grain_denoise_strength>0);
     scs->static_config.fgs_table = config_struct->fgs_table;
-    scs->static_config.photon_noise_iso = config_struct->photon_noise_iso;
-    scs->static_config.enable_photon_noise_chroma = config_struct->enable_photon_noise_chroma;
+    scs->static_config.noise_strength = config_struct->noise_strength;
+    scs->static_config.noise_strength_chroma = config_struct->noise_strength_chroma;
+    scs->static_config.noise_size = config_struct->noise_size;
 
     // MD Parameters
     scs->enable_hbd_mode_decision = config_struct->encoder_bit_depth > 8 ? DEFAULT : 0;
