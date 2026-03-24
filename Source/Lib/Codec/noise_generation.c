@@ -27,6 +27,10 @@ typedef struct {
     int32_t cCr[25];
 } NoiseCoeffTable;
 
+/* AR coefficients extracted from a grain‑table file generated from a sample noise
+ * clip encoded with SVT‑AV1 and film‑grain enabled. Each table corresponds to a
+ * grain‑size value; higher indices produce larger‑looking grain.
+ */
 static const NoiseCoeffTable coeffs[] = {
     {0, 6, {0}, {0}, {0}},
     {3,
@@ -106,12 +110,12 @@ static const NoiseCoeffTable coeffs[] = {
 };
 
 typedef struct {
-    uint32_t         width;
-    uint32_t         height;
-    uint32_t         str_luma;
-    int32_t          str_chroma;
-    int8_t           grain_size;
-    EbColorRange     color_range;
+    uint32_t     width;
+    uint32_t     height;
+    uint32_t     str_luma;
+    int32_t      str_chroma;
+    int8_t       grain_size;
+    EbColorRange color_range;
 } NoiseArgs;
 
 static EbColorRange find_color_range(EbSvtAv1EncConfiguration *config) {
@@ -134,9 +138,9 @@ static void set_scaling_points_y(AomFilmGrain *film_grain, const NoiseArgs *nois
     const int32_t range         = range_max - range_min;
     const int32_t noise_setting = noise_args->str_luma;
     // at larger grain size AR coeffs amplify strength look, so with size increase up to 13 we scale noise strength down to ~43%
-    const double  noise         = (23 - grain_size) * noise_setting / 50.0;
-    const double  range_ratio   = range / 255.0;
-    const int32_t half_noise    = noise / 2;
+    const double  noise       = (23 - grain_size) * noise_setting / 50.0;
+    const double  range_ratio = range / 255.0;
+    const int32_t half_noise  = noise / 2;
 
     film_grain->num_y_points = num_points;
 

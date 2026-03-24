@@ -1226,14 +1226,15 @@ void svt_av1_print_lib_params(SequenceControlSet *scs) {
         }
         if (config->noise_strength > 0) {
             if (config->noise_strength_chroma > -1) {
-                SVT_INFO("SVT [config]: noise table gen / luma level / chroma level / size \t\t: %d / %d / %d / %s%.0d\n",
-                         1,
-                         config->noise_strength,
-                         config->noise_strength_chroma,
-                         ((config->noise_size == -1)      ? "auto"
-                              : (config->noise_size == 0) ? "0"
-                                                          : ""),
-                         (config->noise_size > 0 ? config->noise_size : 0));
+                SVT_INFO(
+                    "SVT [config]: noise table gen / luma level / chroma level / size \t\t: %d / %d / %d / %s%.0d\n",
+                    1,
+                    config->noise_strength,
+                    config->noise_strength_chroma,
+                    ((config->noise_size == -1)      ? "auto"
+                         : (config->noise_size == 0) ? "0"
+                                                     : ""),
+                    (config->noise_size > 0 ? config->noise_size : 0));
             } else {
                 SVT_INFO("SVT [config]: noise table gen / level / chroma / size \t\t\t: %d / %d / %s / %s%.0d\n",
                          1,

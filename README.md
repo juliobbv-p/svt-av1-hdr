@@ -59,6 +59,7 @@ Controls how 'strongly' the CDEF (Constrained Directional Enhancement Filter) is
 Generates and adds noise table with specified strength value to be used as fgs-table during the encode. 50 is roughly equivalent to `--film-grain 50`.
 
 - `--noise-chroma` *-2 to 100*
+
 Adds chroma noise with strength based on `--noise` setting (-1) or sets a strength value independently (0-100), default is -1 (chroma strength based on `--noise`). -2 is a legacy option that enables chroma scaling from luma, which results in chroma noise that depends on the underlying frame's luma value instead of chroma.
 
 - `--noise-size` *-1 to 13*

@@ -915,12 +915,12 @@ ConfigDescription config_entry_specific[] = {
 
     {FGS_TABLE_TOKEN, "Set the film grain model table path"},
 
-    {NOISE_TOKEN, "Generate noise table for film grain, default is 0 [0: off, 1-100: strength value]"},
+    {NOISE_TOKEN, "Generate noise table for film grain. 50 is roughly equivalent to `--film-grain 50`, default is 0 [0: off, 1-100: strength value]"},
 
     {NOISE_CHROMA_TOKEN,
      "Add chroma noise with strength based on noise setting (-1) or set a strength value independently (0-100), default is -1 [-2: (legacy) scale from luma, -1: on, 0: off, 1-100: strength value]"},
 
-    {NOISE_SIZE_TOKEN, "Set size of noise grain, default is -1 [-1: auto, 0-15: set grain size]"},
+    {NOISE_SIZE_TOKEN, "Set size of noise grain. Higher value results in a larger-looking noise, default is -1 [-1: auto, 0-15: set grain size]"},
 
 #endif
     // --- start: SUPER-RESOLUTION SUPPORT
