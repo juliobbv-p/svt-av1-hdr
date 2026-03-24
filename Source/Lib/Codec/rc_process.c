@@ -99,11 +99,13 @@ static void get_ref_skip_percentage(PictureControlSet* pcs, uint8_t* skip_area) 
         return;
     }
 
+    uint8_t skip_perc = 0;
+
     EbReferenceObject* ref_obj_l0 = get_ref_obj(pcs, REF_LIST_0, 0);
-    uint8_t            skip_perc  = ref_obj_l0->skip_coded_area;
+    skip_perc += (ref_obj_l0->slice_type == I_SLICE) ? 0 : ref_obj_l0->skip_coded_area;
     if (pcs->slice_type == B_SLICE && pcs->ppcs->ref_list1_count_try) {
         EbReferenceObject* ref_obj_l1 = get_ref_obj(pcs, REF_LIST_1, 0);
-        skip_perc += ref_obj_l1->skip_coded_area;
+        skip_perc += (ref_obj_l1->slice_type == I_SLICE) ? 0 : ref_obj_l1->skip_coded_area;
 
         // if have two frames, divide the skip_perc by 2 to get the avg skip area
         skip_perc >>= 1;
