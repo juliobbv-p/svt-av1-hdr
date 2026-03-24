@@ -1141,26 +1141,38 @@ typedef struct EbSvtAv1EncConfiguration {
     uint8_t cdef_scaling;
 
     /**
-     * @brief Photon noise ISO value
+     * @brief Noise strength
      *
+     * 0: off
+     * 1-100: noise strength
      * Default is 0.
      */
-    uint32_t photon_noise_iso;
+    uint8_t noise_strength;
 
     /**
-     * @brief Enable chroma noise, which will is scaled based on luma values for generated film grain table.
+     * @brief Control whether chroma noise is scaled from luma or as a separate strength value
      *
-     * 0: disable chroma scaling
-     * 1: enable chroma scaling
-     *
-     * Default is 0.
+     * -2: enable chroma scaling from luma flag in the noise table (legacy)
+     * -1: chroma strength value is derived from noise strength value
+     *  0: disable chroma noise
+     *  1-100: chroma noise strength
+     * Default is -1.
      */
-    uint8_t enable_photon_noise_chroma;
+    int8_t noise_strength_chroma;
 
     /**
      * @brief Check if color range is provided by the user
      */
     bool color_range_provided;
+
+    /**
+     * @brief Control the grain size of noise
+     *
+     * -1: auto adjustment based on resolution
+     *  0-13: adjust grain size
+     * Default is -1.
+     */
+    int8_t noise_size;
 
     // clang-format off
     /* Add 128 Byte Padding to Struct to avoid changing the size of the public configuration struct */
@@ -1182,9 +1194,10 @@ typedef struct EbSvtAv1EncConfiguration {
         - sizeof(uint8_t) // complex_hvs
         - sizeof(uint8_t) // noise_adaptive_filtering
         - sizeof(uint8_t) // cdef_scaling
-        - sizeof(uint32_t) // photon_noise_iso
-        - sizeof(uint8_t) // enable_photon_noise_chroma
+        - sizeof(uint8_t) // noise_strength
+        - sizeof(int8_t) // noise_strength_chroma
         - sizeof(bool) // color_range_provided
+        - sizeof(int8_t) // noise_size
     ];
     // clang-format on
 } EbSvtAv1EncConfiguration;
