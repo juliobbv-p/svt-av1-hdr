@@ -1944,6 +1944,7 @@ void(*error_handler)(
 
 //***Prediction Structure***
 #define MAX_TEMPORAL_LAYERS                         6
+#define MAX_MINIGOP_SIZE                            (1 << (MAX_TEMPORAL_LAYERS - 1))
 #define MAX_NUM_OF_REF_PIC_LIST                     2
 #define MAX_REF_IDX                                 4
 #define MAX_ELAPSED_IDR_COUNT                       1024

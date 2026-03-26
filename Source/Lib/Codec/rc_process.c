@@ -536,7 +536,6 @@ void svt_av1_rc_init(SequenceControlSet* scs) {
     rc->cur_avg_base_me_dist  = 0;
     rc->prev_avg_base_me_dist = 0;
     rc->avg_frame_low_motion  = 0;
-    rc->ema_me_dist           = 0.0;
 }
 
 /*********************************************************************************************

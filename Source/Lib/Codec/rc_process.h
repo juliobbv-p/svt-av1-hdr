@@ -190,11 +190,16 @@ typedef struct RATE_CONTROL {
     uint32_t prev_avg_base_me_dist;
 
     // RTC CBR
-    double target_size_factors[MAX_TEMPORAL_LAYERS + 1];
     double ema_me_dist; // exponentially smoothed average of cur_avg_base_me_dist
+    int    mini_qop_size;
+    int    min_ref_base_q_idx;
+    double target_size_factors[1 + MAX_TEMPORAL_LAYERS];
 
-    // Kalman filter state for RCF adaptation
-    double rcf_kalman_P[MAX_TEMPORAL_LAYERS + 1]; // estimation variance per layer
+    // Rate correction factors for RTC CBR are tracked per pred_struct_index
+    // because besides layer index the position in minigop affect compression too
+    double rcf_values[1 + MAX_MINIGOP_SIZE]; // RCF per frame in mini-gop
+    double rcf_kalman_P[1 + MAX_MINIGOP_SIZE]; // estimation variance per layer
+    double rcf_kalman_R[1 + MAX_MINIGOP_SIZE]; // adaptive measurement noise per layer
 } RATE_CONTROL;
 
 /**************************************

@@ -31,17 +31,31 @@ static uint8_t NOINLINE clamp_qindex(SequenceControlSet* scs, int qindex) {
     return (uint8_t)CLIP3(qmin, qmax, qindex);
 }
 
+static EbReferenceObject* get_ref_obj(PictureControlSet* pcs, RefList ref_list, int idx) {
+    return pcs->ref_pic_ptr_array[ref_list][idx]->object_ptr;
+}
+
+static int NOINLINE get_min_ref_base_q_idx(PictureControlSet* pcs) {
+    assert(pcs->ppcs->ref_list0_count_try > 0);
+    int q_idx = pcs->ref_base_q_idx[REF_LIST_0][0]; // LAST
+    if (pcs->ppcs->ref_list1_count_try > 0) {
+        q_idx = AOMMIN(q_idx, pcs->ref_base_q_idx[REF_LIST_1][0]); // BWD
+    }
+    return q_idx;
+}
+
 // These are unscaled bits. To map into frame size see av1_estimate_frame_size()
 static double av1_estimate_bits_at_qindex(PictureControlSet* pcs, int qindex, double rcf, uint64_t me_dist) {
     EbBitDepth bit_depth = pcs->scs->encoder_bit_depth;
 
-    // , ppcs->sc_class1
     double  quantizer  = svt_av1_convert_qindex_to_q(qindex, bit_depth);
     double  ref_scale  = 1.0;
     int64_t complexity = 5600;
 
     if (pcs->ppcs->frm_hdr.frame_type != KEY_FRAME) {
-        double ref_q = svt_av1_convert_qindex_to_q(pcs->ref_base_q_idx[REF_LIST_0][0], bit_depth);
+        RATE_CONTROL* rc = &pcs->scs->enc_ctx->rc;
+
+        double ref_q = svt_av1_convert_qindex_to_q(rc->min_ref_base_q_idx, bit_depth);
         ref_scale    = sqrt(ref_q) / quantizer;
         complexity   = AOMMAX(me_dist, 64 * 64 / 4);
     }
@@ -164,29 +178,84 @@ static double eval_frame_size(void* ctx, int qindex) {
     return av1_estimate_frame_size(c->pcs, qindex, c->rcf, true);
 }
 
+static void normalize_factors(double* dst, double* src, int i_start, int i_end) {
+    double sum = 0.0;
+    for (int k = i_start; k < i_end; k++) {
+        sum += src[k] * (1 << AOMMAX(k - i_start - 1, 0));
+    }
+    double avg_factor = sum / (1 << AOMMAX(i_end - i_start - 1, 0));
+    for (int k = i_start; k < i_end; k++) {
+        dst[k] = src[k] / avg_factor;
+    }
+}
+
+static int index2tl(int index, int levels) {
+    return index ? levels - get_msb(index ^ (index - 1)) : 0;
+}
+
 static int calc_pframe_target_size(PictureParentControlSet* ppcs) {
     SequenceControlSet* scs    = ppcs->scs;
     RATE_CONTROL*       rc     = &scs->enc_ctx->rc;
     RateControlCfg*     rc_cfg = &scs->enc_ctx->rc_cfg;
 
+#if USE_SCENE_CUT_WORKAROUND
     double me_dist = rc->cur_avg_base_me_dist;
     if (rc->ema_me_dist <= 0) {
         rc->ema_me_dist = me_dist;
     }
+#endif
 
-    // employ RCFs weighting to adapt to different encoding complexities automatically
-    // TODO: may tune these allocation with pow(rcf, parameter)
-    int max_layers = ppcs->scs->static_config.hierarchical_levels + 1;
-    if (ppcs->temporal_layer_index == 0 && max_layers > 1) {
-        double sum_factors = 0.0;
-        for (int k = 1; k < max_layers + 1; k++) {
-            int m = 1 << AOMMAX(k - 2, 0);
-            sum_factors += rc->rate_correction_factors[k] * m;
+    if (ppcs->temporal_layer_index == 0 && rc->mini_qop_size > 1) {
+        double weights[1 + MAX_TEMPORAL_LAYERS] = {0};
+        double rcf_tlx[1 + MAX_TEMPORAL_LAYERS] = {0};
+
+        // prepare weighted RCFs - core components of layer weights
+        int num_layers = scs->static_config.hierarchical_levels + 1;
+        svt_block_on_mutex(rc->rc_mutex);
+        for (int k = 1; k < rc->mini_qop_size + 1; k++) {
+            int k_tl = index2tl(k - 1, num_layers - 1);
+            rcf_tlx[k_tl + 1] += rc->rcf_values[k] / (1 << AOMMAX(k_tl - 1, 0));
         }
-        double avg_factor = sum_factors / (1 << (max_layers - 1));
-        for (int k = 1; k < max_layers + 1; k++) {
-            rc->target_size_factors[k] = rc->rate_correction_factors[k] / avg_factor;
+        svt_release_mutex(rc->rc_mutex);
+
+        if (scs->use_flat_ipp) {
+            for (int k = 1; k < num_layers + 1; k++) {
+                weights[k] = rcf_tlx[k];
+            }
+        } else {
+            normalize_factors(rcf_tlx, rcf_tlx, 1, num_layers + 1);
+
+            // Adaptive rcf_last + avg_frame_qindex + avg_zeromv model:
+            double rcf_last   = rcf_tlx[1 + num_layers - 1];
+            double avg_qindex = rc->avg_frame_qindex[INTER_FRAME];
+            double avg_zeromv = rc->avg_frame_low_motion;
+
+            // Base layer weight is derived from encoding properties:
+            double w0 = -9.32 * rcf_last + 0.023 * avg_qindex + 0.034 * avg_zeromv + 8.14;
+
+            // Saturating intermediate weights:
+            // W_k = 1 + amplitude * (1 - exp(-rate * (W0 - 1)))
+            // Generalizes to N layers: k=1 is base, k=num_layers is top (weight=1.0)
+            double amplitude = 0.81;
+            double rate      = 0.83;
+
+            // adjustment for bidiriectional prediction efficiency
+            double scale = (scs->static_config.pred_structure == RANDOM_ACCESS) ? 0.5 : 1.0;
+
+            weights[1] = w0;
+            for (int k = 2; k < num_layers + 1; k++) {
+                double amp = amplitude * (num_layers - k) / (num_layers - 1);
+                double w_k = 1.0 + amp * (1.0 - exp(-rate * (AOMMAX(w0, 1.0) - 1.0)));
+                weights[k] = w_k * scale;
+            }
         }
+
+        // Enforce w0 >= w1 >= ... >= wN (monotonically non-increasing)
+        for (int k = num_layers; k >= 2; k--) {
+            weights[k - 1] = AOMMAX(weights[k - 1], weights[k]);
+        }
+
+        normalize_factors(rc->target_size_factors, weights, 1, num_layers + 1);
     }
 
     double frame_target = rc->avg_frame_bandwidth;
@@ -197,7 +266,7 @@ static int calc_pframe_target_size(PictureParentControlSet* ppcs) {
     frame_target *= rc->target_size_factors[ppcs->temporal_layer_index + 1];
 
 #if USE_SCENE_CUT_WORKAROUND
-    if (me_dist > rc->ema_me_dist * 1.5) {
+    if (me_dist > rc->ema_me_dist * 1.5 && scs->use_flat_ipp) {
         frame_target *= me_dist / rc->ema_me_dist;
     }
 #endif
@@ -223,7 +292,11 @@ static void cyclic_refresh_init(PictureParentControlSet* ppcs) {
     RATE_CONTROL*       rc  = &scs->enc_ctx->rc;
     CyclicRefresh*      cr  = &ppcs->cyclic_refresh;
 
-    cr->apply_cyclic_refresh = ppcs->slice_type != I_SLICE && (scs->use_flat_ipp || ppcs->temporal_layer_index == 0);
+    bool is_inter_base_layer = ppcs->slice_type != I_SLICE && (scs->use_flat_ipp || ppcs->temporal_layer_index == 0);
+    // Technically it could be used in VBR too, but difference in goals for between CBR and VBR is unclear.
+    // Right now VBR forces enormous buffer, which essentially makes it unbounded to set bitrate,
+    // while CBR follows set buffer limitation and follows bitrate closely.
+    cr->apply_cyclic_refresh = scs->enc_ctx->rc_cfg.mode == AOM_CBR && is_inter_base_layer;
 
     if (scs->super_block_size != 64) {
         cr->apply_cyclic_refresh = 0;
@@ -281,13 +354,13 @@ static void cyclic_refresh_init(PictureParentControlSet* ppcs) {
 }
 
 static int get_rcf_index(PictureParentControlSet* ppcs) {
-    return ppcs->frm_hdr.frame_type == KEY_FRAME ? 0 : ppcs->temporal_layer_index + 1;
+    return ppcs->frm_hdr.frame_type == KEY_FRAME ? 0 : ppcs->pred_struct_index + 1;
 }
 
 static double get_rate_correction_factor(PictureParentControlSet* ppcs, int width, int height) {
     RATE_CONTROL* rc = &ppcs->scs->enc_ctx->rc;
     svt_block_on_mutex(rc->rc_mutex);
-    double rcf = rc->rate_correction_factors[get_rcf_index(ppcs)];
+    double rcf = rc->rcf_values[get_rcf_index(ppcs)];
     svt_release_mutex(rc->rc_mutex);
 
     // Normalize RCF to account for the size-dependent scaling factor.
@@ -306,12 +379,11 @@ static void set_rate_correction_factor(PictureParentControlSet* ppcs, double rcf
 
     RATE_CONTROL* rc = &ppcs->scs->enc_ctx->rc;
     svt_block_on_mutex(rc->rc_mutex);
-    rc->rate_correction_factors[get_rcf_index(ppcs)] = rcf;
-    if (rc->frames_since_key < 4) {
+    rc->rcf_values[get_rcf_index(ppcs)] = rcf;
+    if (rc->frames_since_key < rc->mini_qop_size) {
         // Reset all factors pessimistically at start as initial values could be off
-        int max_layers = ppcs->scs->static_config.hierarchical_levels + 1;
-        for (int i = 1; i < max_layers + 1; ++i) {
-            rc->rate_correction_factors[i] = AOMMAX(rcf, rc->rate_correction_factors[i]);
+        for (int i = 1; i < rc->mini_qop_size + 1; ++i) {
+            rc->rcf_values[i] = AOMMAX(rcf, rc->rcf_values[i]);
         }
     }
     svt_release_mutex(rc->rc_mutex);
@@ -331,20 +403,26 @@ static double calculate_qindex(PictureControlSet* pcs, SequenceControlSet* scs) 
 
         ppcs->base_frame_target = (int)(rc->avg_frame_bandwidth * rc->target_size_factors[0]);
 
-        if (rc_cfg->max_intra_bitrate_pct) {
+        if (rc_cfg->max_intra_bitrate_pct && scs->enc_ctx->rc_cfg.mode == AOM_CBR) {
             int maxi = rc->avg_frame_bandwidth * rc_cfg->max_intra_bitrate_pct / 100;
             max_size = AOMMIN(max_size, maxi);
         }
     } else {
+        rc->min_ref_base_q_idx = get_min_ref_base_q_idx(pcs);
+
         if (pcs->ref_slice_type[REF_LIST_0][0] == I_SLICE) {
-            min_qindex = MAX(min_qindex, pcs->ref_base_q_idx[REF_LIST_0][0] - 1 * 4);
+            min_qindex = MAX(min_qindex, rc->min_ref_base_q_idx - 1 * 4);
         } else {
-            min_qindex = MAX(min_qindex, pcs->ref_base_q_idx[REF_LIST_0][0] - 4 * 4);
-            max_qindex = MIN(max_qindex, pcs->ref_base_q_idx[REF_LIST_0][0] + 16 * 4);
+            EbReferenceObject* ref_obj = get_ref_obj(pcs, REF_LIST_0, 0);
+            bool is_higher_layer       = ref_obj->tmp_layer_idx < pcs->temporal_layer_index && !scs->use_flat_ipp;
+            int  min_limit             = is_higher_layer ? 0 : 4;
+            int  max_limit             = is_higher_layer ? 32 : 16;
+            min_qindex                 = MAX(min_qindex, rc->min_ref_base_q_idx - min_limit * 4);
+            max_qindex                 = MIN(max_qindex, rc->min_ref_base_q_idx + max_limit * 4);
         }
         ppcs->base_frame_target = calc_pframe_target_size(ppcs);
 
-        if (rc_cfg->max_inter_bitrate_pct) {
+        if (rc_cfg->max_inter_bitrate_pct && scs->enc_ctx->rc_cfg.mode == AOM_CBR) {
             int maxp = rc->avg_frame_bandwidth * rc_cfg->max_inter_bitrate_pct / 100;
             max_size = AOMMIN(max_size, maxp);
         }
@@ -395,12 +473,27 @@ void svt_av1_rc_calc_qindex_rtc_cbr(PictureControlSet* pcs) {
         // d) invert current buffer level
         rc->buffer_level = (maximum - starting) * bandwidth / 1000;
 
-        for (int k = 0; k < MAX_TEMPORAL_LAYERS + 1; k++) {
+        int num_layers = scs->static_config.hierarchical_levels + 1;
+        for (int k = 0; k < num_layers + 1; k++) {
             rc->target_size_factors[k] = 1.0; // flat at start
-            rc->rcf_kalman_P[k]        = 1.0; // high initial uncertainty for fast convergence
         }
-        // just to match existent CBR
-        rc->target_size_factors[0] = rc->starting_buffer_level / (2.0 * rc->avg_frame_bandwidth);
+        rc->mini_qop_size = 1 << (num_layers - 1);
+        for (int k = 0; k < rc->mini_qop_size + 1; k++) {
+            rc->rcf_values[k]   = 0.7;
+            rc->rcf_kalman_P[k] = 1.0; // high initial uncertainty for fast convergence
+            rc->rcf_kalman_R[k] = 0.08;
+        }
+        if (scs->enc_ctx->rc_cfg.mode == AOM_CBR) {
+            // just to match existent CBR
+            rc->target_size_factors[0] = rc->starting_buffer_level / (2.0 * rc->avg_frame_bandwidth);
+        } else {
+            // TODO: VBR
+            rc->target_size_factors[0] = 10;
+        }
+
+#if USE_SCENE_CUT_WORKAROUND
+        rc->ema_me_dist = 0;
+#endif
     }
 
     int qindex = calculate_qindex(pcs, scs);
@@ -452,19 +545,25 @@ static void av1_rc_update_rate_correction_factors(PictureParentControlSet* ppcs)
     // Innovation is log(correction_factor) — how much the model was off.
     //
     // Process noise Q: how much log(rcf) can change per frame (content variation).
-    // Measurement noise R: how noisy a single frame's correction_factor is.
-    static const double Q = 0.01;
-    static const double R = 0.08;
+    // Measurement noise R: adaptive, estimated from observed innovation variance.
+    static const double Q     = 0.04;
+    static const double R_MIN = 0.04; // floor to prevent over-reaction
 
     int k = get_rcf_index(ppcs);
+
+    // Innovation in log domain
+    double innovation = log(correction_factor);
+
+    // Adaptive R: track EMA of squared innovations as measurement noise estimate
+    rc->rcf_kalman_R[k] += 0.05 * (innovation * innovation - rc->rcf_kalman_R[k]);
+    double R = AOMMAX(R_MIN, rc->rcf_kalman_R[k]);
 
     // Predict step: P increases by process noise
     double P = rc->rcf_kalman_P[k] + Q;
     // Update step: Kalman gain
     double K = P / (P + R);
-    // Innovation in log domain, innovation = log(correction_factor)
     // Update state: log(rcf) += K * innovation  →  rcf *= exp(K * innovation)
-    rcf *= exp(K * log(correction_factor));
+    rcf *= exp(K * innovation);
     // Update estimation variance
     rc->rcf_kalman_P[k] = (1.0 - K) * P;
 
@@ -500,7 +599,9 @@ void svt_av1_rc_postencode_update_rtc_cbr(PictureParentControlSet* ppcs) {
 
     update_buffer_level(ppcs, ppcs->projected_frame_size);
 
+#if USE_SCENE_CUT_WORKAROUND
     rc->ema_me_dist += 0.5 * (rc->cur_avg_base_me_dist - rc->ema_me_dist);
+#endif
 
     int qindex = frm_hdr->quantization_params.base_q_idx;
 
