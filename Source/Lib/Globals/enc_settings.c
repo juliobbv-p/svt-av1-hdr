@@ -976,6 +976,10 @@ EbErrorType svt_av1_verify_settings(SequenceControlSet* scs) {
         return_error = EB_ErrorBadParameter;
     }
 
+    SVT_WARN("-------------------------------------------\n");
+    SVT_WARN("This version of SVT-AV1-HDR hasn't been tested extensively, and output quality is unknown. Use with caution!\n");
+    SVT_WARN("-------------------------------------------\n");
+
     return return_error;
 }
 
