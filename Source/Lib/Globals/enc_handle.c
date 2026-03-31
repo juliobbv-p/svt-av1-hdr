@@ -3915,23 +3915,33 @@ static void set_param_based_on_input(SequenceControlSet* scs) {
         // Check if film-grain-denoise is also enabled (should be disabled if fgs_table is present)
         if (scs->static_config.film_grain_denoise_strength > 0) {
             SVT_WARN(
-                "Both film-grain-denoise and noise strength were specified; film-grain-denoise will be disabled\n");
+                "Both film-grain-denoise and noise strength were specified; film-grain-denoise will be disabled.\n");
             scs->static_config.film_grain_denoise_strength = 0;
         }
         // Check if fgs_table is present
         if (scs->static_config.fgs_table) {
             SVT_WARN(
-                "Both noise strength and fgs-table were specified; build-in noise table generation will be disabled\n");
-            scs->static_config.noise_strength        = 0;
-            scs->static_config.noise_strength_chroma = -1;
-            scs->static_config.noise_size            = -1;
+                "Both noise strength and fgs-table were specified; build-in noise table generation will be "
+                "disabled.\n");
+            scs->static_config.noise_strength         = 0;
+            scs->static_config.noise_strength_chroma  = -1;
+            scs->static_config.noise_chroma_from_luma = 0;
+            scs->static_config.noise_size             = -1;
         } else {
+            if (scs->static_config.noise_strength_chroma == 0 && scs->static_config.noise_chroma_from_luma == 1) {
+                SVT_WARN("Noise chroma from luma setting has no effect when chroma noise strength is set to 0.\n");
+                scs->static_config.noise_chroma_from_luma = 0;
+            }
             svt_av1_generate_noise_table(&scs->static_config);
         }
     } else {
         if (scs->static_config.noise_strength_chroma != -1) {
             SVT_WARN("Chroma noise strength signal is going to be ignored when noise strength level is 0.\n");
             scs->static_config.noise_strength_chroma = -1;
+        }
+        if (scs->static_config.noise_chroma_from_luma == 1) {
+            SVT_WARN("Noise chroma from luma signal is going to be ignored when noise strength level is 0.\n");
+            scs->static_config.noise_chroma_from_luma = 0;
         }
         if (scs->static_config.noise_size != -1) {
             SVT_WARN("Noise size signal is going to be ignored when noise strength level is 0.\n");
@@ -4248,6 +4258,7 @@ static void copy_api_from_app(SequenceControlSet* scs, EbSvtAv1EncConfiguration*
     scs->static_config.fgs_table              = config_struct->fgs_table;
     scs->static_config.noise_strength         = config_struct->noise_strength;
     scs->static_config.noise_strength_chroma  = config_struct->noise_strength_chroma;
+    scs->static_config.noise_chroma_from_luma = config_struct->noise_chroma_from_luma;
     scs->static_config.noise_size             = config_struct->noise_size;
 
     // MD Parameters
