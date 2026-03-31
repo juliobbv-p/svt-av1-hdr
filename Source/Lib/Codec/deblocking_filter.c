@@ -687,21 +687,17 @@ void svt_av1_loop_filter_frame(EbPictureBufferDesc* frame_buffer, PictureControl
     uint32_t            picture_height_in_sb = (pcs->ppcs->aligned_height + scs->sb_size - 1) / scs->sb_size;
 
     svt_av1_loop_filter_frame_init(&pcs->ppcs->frm_hdr, &pcs->ppcs->lf_info, plane_start, plane_end);
-    if ((pcs->ppcs->cdef_search_ctrls.enabled && !pcs->ppcs->cdef_search_ctrls.use_qp_strength &&
-         !pcs->ppcs->cdef_search_ctrls.use_reference_cdef_fs) ||
-        pcs->ppcs->enable_restoration || pcs->ppcs->is_ref || scs->static_config.recon_enabled) {
-        uint8_t sb_size_log2 = (uint8_t)svt_log2f(scs->sb_size);
-        bool    end_of_row_flag;
-        for (uint32_t y_sb_index = 0; y_sb_index < picture_height_in_sb; ++y_sb_index) {
-            for (uint32_t x_sb_index = 0; x_sb_index < pic_width_in_sb; ++x_sb_index) {
-                uint32_t sb_origin_x = x_sb_index << sb_size_log2;
-                uint32_t sb_origin_y = y_sb_index << sb_size_log2;
+    uint8_t sb_size_log2 = (uint8_t)svt_log2f(scs->sb_size);
+    bool    end_of_row_flag;
+    for (uint32_t y_sb_index = 0; y_sb_index < picture_height_in_sb; ++y_sb_index) {
+        for (uint32_t x_sb_index = 0; x_sb_index < pic_width_in_sb; ++x_sb_index) {
+            uint32_t sb_origin_x = x_sb_index << sb_size_log2;
+            uint32_t sb_origin_y = y_sb_index << sb_size_log2;
 
-                end_of_row_flag = (x_sb_index == pic_width_in_sb - 1) ? true : false;
+            end_of_row_flag = (x_sb_index == pic_width_in_sb - 1) ? true : false;
 
-                svt_aom_loop_filter_sb(
-                    frame_buffer, pcs, sb_origin_y >> 2, sb_origin_x >> 2, plane_start, plane_end, end_of_row_flag);
-            }
+            svt_aom_loop_filter_sb(
+                frame_buffer, pcs, sb_origin_y >> 2, sb_origin_x >> 2, plane_start, plane_end, end_of_row_flag);
         }
     }
 }
