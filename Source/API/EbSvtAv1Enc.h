@@ -1055,10 +1055,10 @@ typedef struct EbSvtAv1EncConfiguration {
      uint8_t cdef_scaling;
 
     /**
-     * @brief Noise strength
+     * @brief Enables static noise table generation
      *
      * 0: off
-     * 1-100: noise strength
+     * 1-200: noise strength
      * Default is 0.
      */
     uint8_t noise_strength;
@@ -1066,13 +1066,21 @@ typedef struct EbSvtAv1EncConfiguration {
     /**
      * @brief Control whether chroma noise is scaled from luma or as a separate strength value
      *
-     * -2: enable chroma scaling from luma flag in the noise table (legacy)
-     * -1: chroma strength value is derived from noise strength value
+     * -1: chroma noise strength is ~60% of noise_strength value
      *  0: disable chroma noise
-     *  1-100: chroma noise strength
+     *  1-200: chroma noise strength
      * Default is -1.
      */
-    int8_t noise_strength_chroma;
+    int32_t noise_strength_chroma;
+
+    /*
+     * @brief Enable noise on chroma planes based on luma plane
+     *
+     * 0: off, chroma noise is applied based on chroma planes
+     * 1: on, chroma noise application is based on luma plane
+     * Default is 0.
+     */
+    uint8_t noise_chroma_from_luma;
 
     /**
      * @brief Control the grain size of noise
@@ -1091,10 +1099,11 @@ typedef struct EbSvtAv1EncConfiguration {
     /*Add 128 Byte Padding to Struct to avoid changing the size of the public configuration struct*/
     uint8_t padding[128
         /* SVT-AV1-HDR additions */
-        - (sizeof(uint8_t) * 9)
+        - (sizeof(uint8_t) * 10)
         - (sizeof(bool) * 3)
         - (sizeof(double) * 1)
-        - (sizeof(int8_t) * 2)
+        - (sizeof(int8_t) * 1)
+        - (sizeof(int32_t) * 1)
     ];
     // clang-format on
 } EbSvtAv1EncConfiguration;
