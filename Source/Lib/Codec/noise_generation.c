@@ -114,6 +114,7 @@ typedef struct {
     uint32_t     height;
     uint32_t     str_luma;
     int32_t      str_chroma;
+    int8_t       chroma_from_luma;
     int8_t       grain_size;
     EbColorRange color_range;
 } NoiseArgs;
@@ -138,57 +139,102 @@ static void set_scaling_points_y(AomFilmGrain* film_grain, const NoiseArgs* nois
     const int32_t range         = range_max - range_min;
     const int32_t noise_setting = noise_args->str_luma;
     // at larger grain size AR coeffs amplify strength look, so with size increase up to 13 we scale noise strength down to ~43%
-    const double  noise       = (23 - grain_size) * noise_setting / 50.0;
-    const double  range_ratio = range / 255.0;
-    const int32_t half_noise  = noise / 2;
+    const double noise       = (23 - grain_size) * noise_setting / 50.0;
+    const double range_ratio = range / 255.0;
+    const double ramp_size   = 100 * range_ratio;
 
     film_grain->num_y_points = num_points;
 
+    // min range point
     film_grain->scaling_points_y[0][0] = range_min;
-    film_grain->scaling_points_y[0][1] = clamp(half_noise, 0, 2);
+    film_grain->scaling_points_y[0][1] = 0;
 
-    film_grain->scaling_points_y[num_points - 1][0] = range_max;
-    film_grain->scaling_points_y[num_points - 1][1] = clamp(half_noise, 0, 2);
+    // lower mid ramp point
+    film_grain->scaling_points_y[1][0] = range_min + 6;
+    film_grain->scaling_points_y[1][1] = get_output_noise(noise_setting, noise / 4, 1);
 
-    film_grain->scaling_points_y[1][0]              = range_min + 12 * range_ratio;
-    film_grain->scaling_points_y[1][1]              = get_output_noise(noise_setting, half_noise, 2);
-    film_grain->scaling_points_y[num_points - 2][0] = range_max - 12 * range_ratio;
-    film_grain->scaling_points_y[num_points - 2][1] = get_output_noise(noise_setting, half_noise, 2);
+    // noise scaling points
+    film_grain->scaling_points_y[2][0] = range_min + ramp_size * range_ratio;
+    film_grain->scaling_points_y[2][1] = get_output_noise(noise_setting, noise, 0);
+    film_grain->scaling_points_y[3][0] = range_max - ramp_size * range_ratio;
+    film_grain->scaling_points_y[3][1] = get_output_noise(noise_setting, noise, 0);
 
-    film_grain->scaling_points_y[2][0]              = range_min + 24 * range_ratio;
-    film_grain->scaling_points_y[2][1]              = get_output_noise(noise_setting, noise, 0);
-    film_grain->scaling_points_y[num_points - 3][0] = range_max - 24 * range_ratio;
-    film_grain->scaling_points_y[num_points - 3][1] = get_output_noise(noise_setting, noise, 0);
+    // upper mid ramp point
+    film_grain->scaling_points_y[4][0] = range_max - 6;
+    film_grain->scaling_points_y[4][1] = get_output_noise(noise_setting, noise / 4, 1);
+
+    // max range point
+    film_grain->scaling_points_y[5][0] = range_max;
+    film_grain->scaling_points_y[5][1] = 0;
 }
 
 static void set_scaling_points_uv(AomFilmGrain* film_grain, const NoiseArgs* noise_args, const uint8_t grain_size) {
-    const int32_t num_points    = 5;
-    const int32_t range_min     = (noise_args->color_range == EB_CR_STUDIO_RANGE) ? 16 : 0;
-    const int32_t range_max     = (noise_args->color_range == EB_CR_STUDIO_RANGE) ? 240 : 255;
-    const int32_t range         = range_max - range_min;
-    const int32_t mid_point     = range / 2 + range_min;
-    const int32_t noise_setting = (noise_args->str_chroma == -1) ? noise_args->str_luma * 0.75 : noise_args->str_chroma;
+    const int32_t noise_setting = (noise_args->str_chroma == -1) ? noise_args->str_luma * 0.6 : noise_args->str_chroma;
     const double  noise         = (23 - grain_size) * noise_setting / 50.0;
-    const int32_t half_noise    = noise / 2;
+    const int32_t range_min     = (noise_args->color_range == EB_CR_STUDIO_RANGE) ? 16 : 0;
 
-    film_grain->num_cr_points = film_grain->num_cb_points = num_points;
-    // mid point clamp
-    film_grain->scaling_points_cr[num_points / 2][0] = film_grain->scaling_points_cb[num_points / 2][0] = mid_point;
-    film_grain->scaling_points_cr[num_points / 2][1] = film_grain->scaling_points_cb[num_points / 2][1] = clamp(
-        half_noise, 0, 1);
-    // mid ramp
-    for (int32_t i = -1; i < 2; i += 2) {
-        film_grain->scaling_points_cb[i + 2][0] = film_grain->scaling_points_cr[i + 2][0] = mid_point + i * 2;
-        // if requested noise value is > 1, then mid ramp should always have some noise
-        film_grain->scaling_points_cb[i + 2][1] = film_grain->scaling_points_cr[i + 2][1] = get_output_noise(
-            noise_setting, half_noise, 2);
-    }
-    // noise scaling
-    for (int32_t i = -2; i < 3; i += 4) {
-        film_grain->scaling_points_cb[i + 2][0] = film_grain->scaling_points_cr[i + 2][0] = mid_point + i * 3;
-        // if requested noise value is > 0, then there should always be at least some noise
-        film_grain->scaling_points_cb[i + 2][1] = film_grain->scaling_points_cr[i + 2][1] = get_output_noise(
+    if (noise_args->chroma_from_luma == 0) {
+        const int32_t num_points = 4;
+        const int32_t midpoint_l = 127;
+        const int32_t midpoint_u = 129;
+        const int32_t ramp_size  = 4;
+
+        // set multipliers to enable scaling from chroma only
+        film_grain->cr_mult = film_grain->cb_mult = 192;
+        film_grain->cr_luma_mult = film_grain->cb_luma_mult = 128;
+        film_grain->cr_offset = film_grain->cb_offset = 256;
+
+        film_grain->num_cr_points = film_grain->num_cb_points = num_points;
+
+        // lower noise scaling point
+        film_grain->scaling_points_cr[0][0] = film_grain->scaling_points_cb[0][0] = midpoint_l - ramp_size;
+        film_grain->scaling_points_cr[0][1] = film_grain->scaling_points_cb[0][1] = get_output_noise(
             noise_setting, noise, 0);
+        // lower midpoint
+        film_grain->scaling_points_cr[1][0] = film_grain->scaling_points_cb[1][0] = midpoint_l;
+        film_grain->scaling_points_cr[1][1] = film_grain->scaling_points_cb[1][1] = 0;
+        // upper midpoint
+        film_grain->scaling_points_cr[2][0] = film_grain->scaling_points_cb[2][0] = midpoint_u;
+        film_grain->scaling_points_cr[2][1] = film_grain->scaling_points_cb[2][1] = 0;
+        // upper noise scaling point
+        film_grain->scaling_points_cr[3][0] = film_grain->scaling_points_cb[3][0] = midpoint_u + ramp_size;
+        film_grain->scaling_points_cr[3][1] = film_grain->scaling_points_cb[3][1] = get_output_noise(
+            noise_setting, noise, 0);
+    } else {
+        const int32_t num_points  = 6;
+        const int32_t range_max   = (noise_args->color_range == EB_CR_STUDIO_RANGE) ? 235 : 255;
+        const int32_t range       = range_max - range_min;
+        const double  range_ratio = range / 255.0;
+        const double  ramp_size   = 100 * range_ratio;
+
+        // set multipliers to enable scaling from luma only
+        film_grain->cr_mult = film_grain->cb_mult = 128;
+        film_grain->cr_luma_mult = film_grain->cb_luma_mult = 192;
+        film_grain->cr_offset = film_grain->cb_offset = 256;
+
+        film_grain->num_cr_points = film_grain->num_cb_points = num_points;
+
+        // min range point
+        film_grain->scaling_points_cr[0][0] = film_grain->scaling_points_cb[0][0] = range_min;
+        film_grain->scaling_points_cr[0][1] = film_grain->scaling_points_cb[0][1] = 0;
+        // lower mid ramp point
+        film_grain->scaling_points_cr[1][0] = film_grain->scaling_points_cb[1][0] = range_min + 6;
+        film_grain->scaling_points_cr[1][1] = film_grain->scaling_points_cr[1][1] = get_output_noise(
+            noise_setting, noise / 4, 1);
+        // noise scaling points
+        film_grain->scaling_points_cr[2][0] = film_grain->scaling_points_cb[2][0] = range_min + ramp_size;
+        film_grain->scaling_points_cr[2][1] = film_grain->scaling_points_cb[2][1] = get_output_noise(
+            noise_setting, noise, 0);
+        film_grain->scaling_points_cr[3][0] = film_grain->scaling_points_cb[3][0] = range_max - ramp_size;
+        film_grain->scaling_points_cr[3][1] = film_grain->scaling_points_cb[3][1] = get_output_noise(
+            noise_setting, noise, 0);
+        // upper mid ramp point
+        film_grain->scaling_points_cr[4][0] = film_grain->scaling_points_cb[4][0] = range_max - 6;
+        film_grain->scaling_points_cr[4][1] = film_grain->scaling_points_cb[4][1] = get_output_noise(
+            noise_setting, noise / 4, 1);
+        // max range point
+        film_grain->scaling_points_cr[5][0] = film_grain->scaling_points_cb[5][0] = range_max;
+        film_grain->scaling_points_cr[5][1] = film_grain->scaling_points_cb[5][1] = 0;
     }
 }
 
@@ -199,10 +245,19 @@ static uint8_t get_grain_size(const NoiseArgs* noise_args) {
     const int32_t width      = noise_args->width;
     const int32_t height     = noise_args->height;
     const int32_t large_side = (width > height) ? width : height;
+
+    if (large_side <= 1280) {
+        return 0;
+    }
+    if (large_side >= 3840) {
+        return 13;
+    }
+
     // arbitrary function that calculates the grain size based on input's largest side,
-    // where ~720p and lower gives 0, ~1080p gives 6, and ~2160p and above gives 13
-    const int32_t grain_size = (14.93 * (1 - exp(-0.514 * (large_side / 640.0 - 2)))) + 0.5;
-    return clamp(grain_size, 0, 13);
+    // where ~720p and lower gives 0, ~1080p gives 2, and ~2160p and above gives 13
+    const double p          = log(13.0 / 2.0) / log(4.0);
+    double       normalized = (large_side - 1280.0) / 640.0;
+    return (int32_t)(2.0 * pow(normalized, p));
 }
 
 static void svt_av1_generate_noise(const NoiseArgs* noise_args, EbSvtAv1EncConfiguration* cfg) {
@@ -211,13 +266,12 @@ static void svt_av1_generate_noise(const NoiseArgs* noise_args, EbSvtAv1EncConfi
     const int32_t noise_chroma = noise_args->str_chroma;
     const int32_t grain_size   = get_grain_size(noise_args);
     set_scaling_points_y(film_grain, noise_args, grain_size);
-    if (noise_chroma == 0 || noise_chroma == -2) {
+    if (noise_chroma == 0) {
         film_grain->num_cr_points = film_grain->num_cb_points = 0;
         film_grain->cr_mult = film_grain->cb_mult = 0;
+        film_grain->cr_luma_mult = film_grain->cb_luma_mult = 0;
     } else {
         set_scaling_points_uv(film_grain, noise_args, grain_size);
-        // found from testing that this value allows to control chroma noise scaling points relative to midpoint value
-        film_grain->cr_mult = film_grain->cb_mult = 64;
     }
     film_grain->apply_grain       = 1;
     film_grain->ignore_ref        = 0;
@@ -228,24 +282,21 @@ static void svt_av1_generate_noise(const NoiseArgs* noise_args, EbSvtAv1EncConfi
     memcpy(film_grain->ar_coeffs_cb, coeffs[grain_size].cCb, sizeof(film_grain->ar_coeffs_cb));
     memcpy(film_grain->ar_coeffs_cr, coeffs[grain_size].cCr, sizeof(film_grain->ar_coeffs_cr));
     film_grain->ar_coeff_shift           = coeffs[grain_size].shift;
-    film_grain->cb_luma_mult             = 0;
-    film_grain->cb_offset                = 0;
-    film_grain->cr_luma_mult             = 0;
-    film_grain->cr_offset                = 0;
     film_grain->overlap_flag             = 1;
     film_grain->grain_scale_shift        = 0;
-    film_grain->chroma_scaling_from_luma = (noise_chroma == -2) ? 1 : 0;
+    film_grain->chroma_scaling_from_luma = 0;
     film_grain->clip_to_restricted_range = (noise_args->color_range == EB_CR_STUDIO_RANGE) ? 1 : 0;
     cfg->fgs_table                       = film_grain;
 }
 
 EbErrorType svt_av1_generate_noise_table(EbSvtAv1EncConfiguration* config) {
-    const NoiseArgs args = {.width       = config->source_width,
-                            .height      = config->source_height,
-                            .str_luma    = config->noise_strength,
-                            .str_chroma  = config->noise_strength_chroma,
-                            .grain_size  = config->noise_size,
-                            .color_range = find_color_range(config)};
+    const NoiseArgs args = {.width            = config->source_width,
+                            .height           = config->source_height,
+                            .str_luma         = config->noise_strength,
+                            .str_chroma       = config->noise_strength_chroma,
+                            .chroma_from_luma = config->noise_chroma_from_luma,
+                            .grain_size       = config->noise_size,
+                            .color_range      = find_color_range(config)};
 
     svt_av1_generate_noise(&args, config);
 
