@@ -54,13 +54,17 @@ Tune 5 is equivalent to setting these parameters: `--tune 0 --enable-tf 0 --enab
 
 Controls how 'strongly' the CDEF (Constrained Directional Enhancement Filter) is applied to the output. Lower values make output sharper, at the expense of ringing artifacts. Higher values make output smoother, with fewer ringing artifacts. Values of 10-12 have been reported to be useful by multiple people.
 
-- `--noise` *0 to 100*
+- `--noise` *0 to 200*
 
 Generates and adds noise table with specified strength value to be used as fgs-table during the encode. 50 is roughly equivalent to `--film-grain 50`.
 
-- `--noise-chroma` *-2 to 100*
+- `--noise-chroma` *-1 to 200*
 
-Adds chroma noise with strength based on `--noise` setting (-1) or sets a strength value independently (0-100), default is -1 (chroma strength based on `--noise`). -2 is a legacy option that enables chroma scaling from luma, which results in chroma noise that depends on the underlying frame's luma value instead of chroma.
+Adds chroma noise with strength based on `--noise` setting (-1) or sets a strength value independently (0-100), default is -1 (chroma strength is ~60% of `--noise`).
+
+- `--noise-chroma-from-luma` *0 and 1*
+
+Apply noise to chroma planes based on the luma plane. When enabled, chroma noise will appear on grayscale content, default is 0.
 
 - `--noise-size` *-1 to 13*
 
