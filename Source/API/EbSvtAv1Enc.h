@@ -1091,9 +1091,7 @@ typedef struct EbSvtAv1EncConfiguration {
      */
     int8_t noise_size;
 
-    /**
-     * @brief Check if color range is provided by the user
-     */
+    /* @brief Check if color range is provided by the user */
     bool color_range_provided;
 
     /*Add 128 Byte Padding to Struct to avoid changing the size of the public configuration struct*/
@@ -1102,7 +1100,7 @@ typedef struct EbSvtAv1EncConfiguration {
         - (sizeof(uint8_t) * 10)
         - (sizeof(bool) * 3)
         - (sizeof(double) * 1)
-        - (sizeof(int8_t) * 2)
+        - (sizeof(int8_t) * 1)
         - (sizeof(int32_t) * 1)
     ];
     // clang-format on
