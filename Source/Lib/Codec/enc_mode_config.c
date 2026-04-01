@@ -2168,7 +2168,9 @@ void svt_aom_sig_deriv_multi_processes_default(SequenceControlSet* scs, PictureP
     // 1                                     ON
     pcs->frame_end_cdf_update_mode = 1;
 
-    if (pcs->scs->static_config.hbd_mds > 0) {
+    //Making hbd-mds>0 only work with high bit depth inputs
+    //This is to make it mergeable in mainline svt-av1
+    if (pcs->scs->static_config.hbd_mds > 0 && scs->encoder_bit_depth > 8) {
         pcs->hbd_md = pcs->scs->static_config.hbd_mds;
     } else if (scs->enable_hbd_mode_decision == DEFAULT) {
         // In svt-av1-hdr, high bit depth mode decisions are enabled by default
