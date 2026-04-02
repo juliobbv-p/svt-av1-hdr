@@ -2168,8 +2168,8 @@ void svt_aom_sig_deriv_multi_processes_default(SequenceControlSet* scs, PictureP
     // 1                                     ON
     pcs->frame_end_cdf_update_mode = 1;
 
-    //Making hbd-mds>0 only work with high bit depth inputs
-    //This is to make it mergeable in mainline svt-av1
+    // Making hbd-mds>0 only work with high bit depth inputs
+    // This is to make it mergeable in mainline svt-av1
     if (pcs->scs->static_config.hbd_mds > 0 && scs->encoder_bit_depth > 8) {
         pcs->hbd_md = pcs->scs->static_config.hbd_mds;
     } else if (scs->enable_hbd_mode_decision == DEFAULT) {
@@ -2346,7 +2346,9 @@ void svt_aom_sig_deriv_multi_processes_rtc(SequenceControlSet* scs, PictureParen
     // 1                                     ON
     pcs->frame_end_cdf_update_mode = 1;
 
-    if (scs->enable_hbd_mode_decision == DEFAULT) {
+    if (pcs->scs->static_config.hbd_mds > 0 && scs->encoder_bit_depth > 8) {
+        pcs->hbd_md = pcs->scs->static_config.hbd_mds;
+    } else if (scs->enable_hbd_mode_decision == DEFAULT) {
         if (enc_mode <= ENC_MR) {
             pcs->hbd_md = 1;
         } else if (enc_mode <= ENC_M5) {
@@ -2489,7 +2491,12 @@ void svt_aom_sig_deriv_multi_processes_allintra(SequenceControlSet* scs, Picture
     // 0                                     OFF
     // 1                                     ON
     pcs->frame_end_cdf_update_mode = 1;
-    pcs->max_can_count             = svt_aom_get_max_can_count(enc_mode);
+
+    if (pcs->scs->static_config.hbd_mds > 0 && scs->encoder_bit_depth > 8) {
+        pcs->hbd_md = pcs->scs->static_config.hbd_mds;
+    }
+
+    pcs->max_can_count = svt_aom_get_max_can_count(enc_mode);
 }
 
 /******************************************************
