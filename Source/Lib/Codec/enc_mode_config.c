@@ -2183,7 +2183,7 @@ void svt_aom_sig_deriv_multi_processes_default(SequenceControlSet* scs, PictureP
 
     //User accessible setting for forcing different levels of
     //high bit depth mode decision; also has a check to make sure
-    //encoder bith depth>8 to work in full hbd-md
+    //encoder bit depth>8 to work in full hbd-md
     if (SVT_EFFECTIVE_BIT_DEPTH(scs->encoder_bit_depth) == EB_EIGHT_BIT) {
         pcs->hbd_md = 0;
     } else if (pcs->scs->static_config.hbd_mds != DEFAULT) {
@@ -2379,7 +2379,11 @@ void svt_aom_sig_deriv_multi_processes_rtc(SequenceControlSet* scs, PictureParen
     // 1                                     ON
     pcs->frame_end_cdf_update_mode = 1;
 
-    if (scs->enable_hbd_mode_decision == DEFAULT) {
+    if (SVT_EFFECTIVE_BIT_DEPTH(scs->encoder_bit_depth) == EB_EIGHT_BIT) {
+        pcs->hbd_md = 0;
+    } else if (scs->static_config.hbd_mds != DEFAULT) {
+        pcs->hbd_md = scs->static_config.hbd_mds;
+    } else if (scs->enable_hbd_mode_decision == DEFAULT) {
         pcs->hbd_md = is_islice ? 2 : 0;
     } else {
         pcs->hbd_md = scs->enable_hbd_mode_decision;
@@ -2528,7 +2532,11 @@ void svt_aom_sig_deriv_multi_processes_allintra(SequenceControlSet* scs, Picture
     // 0                                     OFF
     // 1                                     ON
     pcs->frame_end_cdf_update_mode = 1;
-    if (scs->enable_hbd_mode_decision == DEFAULT) {
+    if (SVT_EFFECTIVE_BIT_DEPTH(scs->encoder_bit_depth) == EB_EIGHT_BIT) {
+        pcs->hbd_md = 0;
+    } else if (scs->static_config.hbd_mds != DEFAULT) {
+        pcs->hbd_md = scs->static_config.hbd_mds;
+    } else if (scs->enable_hbd_mode_decision == DEFAULT) {
         if (enc_mode <= ENC_MR) {
             pcs->hbd_md = 1;
         } else {
