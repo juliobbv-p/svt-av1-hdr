@@ -14,12 +14,6 @@
 
 #include <stdio.h>
 #include <stdbool.h>
-#ifdef LIBDOVI_FOUND
-#include <libdovi/rpu_parser.h>
-#endif
-#ifdef LIBHDR10PLUS_RS_FOUND
-#include <libhdr10plus-rs/hdr10plus.h>
-#endif
 
 #include "EbSvtAv1Enc.h"
 
@@ -193,14 +187,6 @@ typedef struct EbConfig {
 
     FILE         *roi_map_file;
     SvtAv1RoiMap *roi_map;
-#ifdef LIBDOVI_FOUND
-    const DoviRpuOpaqueList *dovi_rpus;
-#endif
-#ifdef LIBHDR10PLUS_RS_FOUND
-    Hdr10PlusRsJsonOpaque *hdr10plus_json;
-#endif
-
-    char *fgs_table_path;
 
     bool color;
 } EbConfig;

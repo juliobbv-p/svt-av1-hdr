@@ -1092,6 +1092,9 @@ EbErrorType svt_av1_set_default_params(EbSvtAv1EncConfiguration *config_ptr) {
     config_ptr->complex_hvs                       = 0;
     config_ptr->noise_adaptive_filtering          = 2;
     config_ptr->cdef_scaling                      = 15;
+    config_ptr->dovi_rpu_file                     = NULL;
+    config_ptr->hdr10plus_json_file               = NULL;
+    config_ptr->fgs_table_file                    = NULL;
     return return_error;
 }
 
@@ -2365,6 +2368,45 @@ EB_API EbErrorType svt_av1_enc_parse_parameter(EbSvtAv1EncConfiguration *config_
             return str_to_bool(value, bool_opts[i].out);
         }
     }
+
+#ifdef LIBDOVI_FOUND
+    if (!strcmp(name, "dovi")) {
+        if (config_struct->dovi_rpu_file) {
+            free(config_struct->dovi_rpu_file);
+        }
+        config_struct->dovi_rpu_file = (char *)malloc(strlen(value) + 1);
+        if (config_struct->dovi_rpu_file) {
+            strcpy(config_struct->dovi_rpu_file, value);
+        }
+        return EB_ErrorNone;
+    }
+#endif
+
+#ifdef LIBHDR10PLUS_RS_FOUND
+    if (!strcmp(name, "hdr10plus-json")) {
+        if (config_struct->hdr10plus_json_file) {
+            free(config_struct->hdr10plus_json_file);
+        }
+        config_struct->hdr10plus_json_file = (char *)malloc(strlen(value) + 1);
+        if (config_struct->hdr10plus_json_file) {
+            strcpy(config_struct->hdr10plus_json_file, value);
+        }
+        return EB_ErrorNone;
+    }
+#endif
+
+#if CONFIG_ENABLE_FILM_GRAIN
+    if (!strcmp(name, "fgs-table")) {
+        if (config_struct->fgs_table_file) {
+            free(config_struct->fgs_table_file);
+        }
+        config_struct->fgs_table_file = (char *)malloc(strlen(value) + 1);
+        if (config_struct->fgs_table_file) {
+            strcpy(config_struct->fgs_table_file, value);
+        }
+        return EB_ErrorNone;
+    }
+#endif
 
     return return_error;
 }
