@@ -1096,6 +1096,21 @@ typedef struct EbSvtAv1EncConfiguration {
      */
     bool color_range_provided;
 
+    /**
+     * @brief Path to Dolby Vision RPU file.
+     */
+    char *dovi_rpu_file;
+    
+    /**
+     * @brief Path to HDR10+ metadata JSON file.
+     */
+    char *hdr10plus_json_file;
+
+    /**
+     * @brief Path to film grain table file.
+     */
+    char *fgs_table_file;
+
     /*Add 128 Byte Padding to Struct to avoid changing the size of the public configuration struct*/
     uint8_t padding[128
         /* SVT-AV1-HDR additions */
@@ -1104,6 +1119,7 @@ typedef struct EbSvtAv1EncConfiguration {
         - (sizeof(double) * 1)
         - (sizeof(int8_t) * 1)
         - (sizeof(int32_t) * 1)
+        - (sizeof(char *) * 3)
     ];
     // clang-format on
 } EbSvtAv1EncConfiguration;

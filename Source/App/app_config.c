@@ -428,43 +428,21 @@ static EbErrorType set_cfg_roi_map_file(EbConfig *cfg, const char *token, const 
 }
 #if CONFIG_ENABLE_FILM_GRAIN
 static EbErrorType set_cfg_fgs_table_path(EbConfig *cfg, const char *token, const char *value) {
-    EbErrorType ret  = EB_ErrorBadParameter;
-    FILE       *file = NULL;
-    if ((ret = open_file(&file, token, value, "r")) < 0)
-        return ret;
-    fclose(file);
-
-    return str_to_str(value, &cfg->fgs_table_path, token);
+    (void)token;
+    return svt_av1_enc_parse_parameter(&cfg->config, "fgs-table", value);
 }
 #endif
 #ifdef LIBDOVI_FOUND
 static EbErrorType set_cfg_dovi_rpu(EbConfig *cfg, const char *token, const char *value) {
-    printf("Svt[info]: Parsing Dolby Vision RPU file...\n");
-    const DoviRpuOpaqueList *rpus = dovi_parse_rpu_bin_file(value);
-    if (rpus->error) {
-        fprintf(stderr, "%s\n", rpus->error);
-        dovi_rpu_list_free(rpus);
-        return validate_error(EB_ErrorBadParameter, token, value);
-    }
-    printf("Svt[info]: Loaded %zu DoVi RPUs\n", rpus->len);
-    cfg->dovi_rpus = rpus;
-    return EB_ErrorNone;
+    (void)token;
+    return svt_av1_enc_parse_parameter(&cfg->config, "dovi", value);
 }
 #endif
 
 #ifdef LIBHDR10PLUS_RS_FOUND
 static EbErrorType set_cfg_hdr10plus_json(EbConfig *cfg, const char *token, const char *value) {
-    printf("Svt[info]: Parsing HDR10+ JSON file...\n");
-    Hdr10PlusRsJsonOpaque *hdr10plus_json = hdr10plus_rs_parse_json(value);
-    const char            *error          = hdr10plus_rs_json_get_error(hdr10plus_json);
-    if (error) {
-        fprintf(stderr, "%s\n", error);
-        hdr10plus_rs_json_free(hdr10plus_json);
-        return validate_error(EB_ErrorBadParameter, token, value);
-    }
-    printf("Svt[info]: Loaded HDR10+ JSON file\n");
-    cfg->hdr10plus_json = hdr10plus_json;
-    return EB_ErrorNone;
+    (void)token;
+    return svt_av1_enc_parse_parameter(&cfg->config, "hdr10plus-json", value);
 }
 #endif
 
@@ -999,10 +977,10 @@ ConfigDescription config_entry_color_description[] = {
      "Set content light level in the format of \"max_cll,max_fall\", refer to the user guide Appendix A.2"},
 // Dolby Vision RPU
 #ifdef LIBDOVI_FOUND
-    {DOLBY_VISION_RPU_TOKEN, "Set the Dolby Vision RPU path"},
+    {DOLBY_VISION_RPU_TOKEN, "Path to Dolby Vision RPU file"},
 #endif
 #ifdef LIBHDR10PLUS_RS_FOUND
-    {HDR10PLUS_JSON_TOKEN, "Set the HDR10+ JSON file path"},
+    {HDR10PLUS_JSON_TOKEN, "Path to HDR10+ metadata JSON file"},
 #endif
     // Termination
     {NULL, NULL}};
@@ -1310,14 +1288,7 @@ EbConfig *svt_config_ctor(bool color) {
     app_cfg->progress            = 1;
     app_cfg->injector_frame_rate = 60;
     app_cfg->roi_map_file        = NULL;
-    app_cfg->fgs_table_path      = NULL;
     app_cfg->mmap.allow          = true;
-#ifdef LIBDOVI_FOUND
-    app_cfg->dovi_rpus = NULL;
-#endif
-#ifdef LIBHDR10PLUS_RS_FOUND
-    app_cfg->hdr10plus_json = NULL;
-#endif
     app_cfg->color = color;
 
     return app_cfg;
@@ -1371,24 +1342,6 @@ void svt_config_dtor(EbConfig *app_cfg) {
     if (app_cfg->roi_map_file) {
         fclose(app_cfg->roi_map_file);
         app_cfg->roi_map_file = NULL;
-    }
-
-#ifdef LIBDOVI_FOUND
-    if (app_cfg->dovi_rpus) {
-        dovi_rpu_list_free(app_cfg->dovi_rpus);
-        app_cfg->dovi_rpus = NULL;
-    }
-#endif
-#ifdef LIBHDR10PLUS_RS_FOUND
-    if (app_cfg->hdr10plus_json) {
-        hdr10plus_rs_json_free(app_cfg->hdr10plus_json);
-        app_cfg->hdr10plus_json = NULL;
-    }
-#endif
-
-    if (app_cfg->fgs_table_path) {
-        free(app_cfg->fgs_table_path);
-        app_cfg->fgs_table_path = NULL;
     }
 
     for (size_t i = 0; i < app_cfg->forced_keyframes.count; ++i) free(app_cfg->forced_keyframes.specifiers[i]);
@@ -2250,150 +2203,6 @@ static bool warn_legacy_token(const char *const token) {
     return false;
 }
 
-#if CONFIG_ENABLE_FILM_GRAIN
-static EbErrorType read_fgs_table(EbConfig *cfg) {
-    EbErrorType   ret = EB_ErrorBadParameter;
-    AomFilmGrain *film_grain;
-    FILE         *file;
-    FOPEN(file, cfg->fgs_table_path, "r");
-
-    if (!file)
-        return EB_ErrorBadParameter;
-
-    // Read in one extra character as there should be a newline
-    char magic[9];
-    if (!fread(magic, 9, 1, file) || strncmp(magic, "filmgrn1", 8)) {
-        fprintf(stderr, "invalid grain table magic %s\n", cfg->fgs_table_path);
-        fclose(file);
-        return ret;
-    }
-
-    film_grain = (AomFilmGrain *)calloc(1, sizeof(AomFilmGrain));
-
-    while (!feof(file)) {
-        int num_read = fscanf(file,
-                              "E %*d %*d %d %hu %d\n",
-                              &film_grain->apply_grain,
-                              &film_grain->random_seed,
-                              &film_grain->update_parameters);
-
-        if (num_read == 0 && feof(file)) {
-            fprintf(stderr, "invalid grain table %s\n", cfg->fgs_table_path);
-            goto fail;
-        }
-        if (num_read != 3) {
-            fprintf(stderr, "Unable to read entry header. Read %d != 3\n", num_read);
-            goto fail;
-        }
-
-        if (film_grain->update_parameters) {
-            num_read = fscanf(file,
-                              "p %d %d %d %d %d %d %d %d %d %d %d %d\n",
-                              &film_grain->ar_coeff_lag,
-                              &film_grain->ar_coeff_shift,
-                              &film_grain->grain_scale_shift,
-                              &film_grain->scaling_shift,
-                              &film_grain->chroma_scaling_from_luma,
-                              &film_grain->overlap_flag,
-                              &film_grain->cb_mult,
-                              &film_grain->cb_luma_mult,
-                              &film_grain->cb_offset,
-                              &film_grain->cr_mult,
-                              &film_grain->cr_luma_mult,
-                              &film_grain->cr_offset);
-            if (num_read != 12) {
-                fprintf(stderr, "Unable to read entry header. Read %d != 12\n", num_read);
-                goto fail;
-            }
-            if (!fscanf(file, "\tsY %d ", &film_grain->num_y_points)) {
-                fprintf(stderr, "Unable to read num y points\n");
-                goto fail;
-            }
-            for (int i = 0; i < film_grain->num_y_points; ++i) {
-                if (2 !=
-                    fscanf(file, "%d %d", &film_grain->scaling_points_y[i][0], &film_grain->scaling_points_y[i][1])) {
-                    fprintf(stderr, "Unable to read y scaling points\n");
-                    goto fail;
-                }
-            }
-            if (!fscanf(file, "\n\tsCb %d", &film_grain->num_cb_points)) {
-                fprintf(stderr, "Unable to read num cb points\n");
-                goto fail;
-            }
-            for (int i = 0; i < film_grain->num_cb_points; ++i) {
-                if (2 !=
-                    fscanf(file, "%d %d", &film_grain->scaling_points_cb[i][0], &film_grain->scaling_points_cb[i][1])) {
-                    fprintf(stderr, "Unable to read cb scaling points\n");
-                    goto fail;
-                }
-            }
-            if (!fscanf(file, "\n\tsCr %d", &film_grain->num_cr_points)) {
-                fprintf(stderr, "Unable to read num cr points\n");
-                goto fail;
-            }
-            for (int i = 0; i < film_grain->num_cr_points; ++i) {
-                if (2 !=
-                    fscanf(file, "%d %d", &film_grain->scaling_points_cr[i][0], &film_grain->scaling_points_cr[i][1])) {
-                    fprintf(stderr, "Unable to read cr scaling points\n");
-                    goto fail;
-                }
-            }
-
-            if (fscanf(file, "\n\tcY")) {
-                fprintf(stderr, "Unable to read Y coeffs header (cY)\n");
-                goto fail;
-            }
-            const int n = 2 * film_grain->ar_coeff_lag * (film_grain->ar_coeff_lag + 1);
-            for (int i = 0; i < n; ++i) {
-                if (1 != fscanf(file, "%d", &film_grain->ar_coeffs_y[i])) {
-                    fprintf(stderr, "Unable to read Y coeffs\n");
-                    goto fail;
-                }
-            }
-            if (fscanf(file, "\n\tcCb")) {
-                fprintf(stderr, "Unable to read Cb coeffs header (cCb)\n");
-                goto fail;
-            }
-            for (int i = 0; i <= n; ++i) {
-                if (1 != fscanf(file, "%d", &film_grain->ar_coeffs_cb[i])) {
-                    fprintf(stderr, "Unable to read Cb coeffs\n");
-                    goto fail;
-                }
-            }
-            if (fscanf(file, "\n\tcCr")) {
-                fprintf(stderr, "Unable read to Cr coeffs header (cCr)\n");
-                goto fail;
-            }
-            for (int i = 0; i <= n; ++i) {
-                if (1 != fscanf(file, "%d", &film_grain->ar_coeffs_cr[i])) {
-                    fprintf(stderr, "Unable to read Cr coeffs\n");
-                    goto fail;
-                }
-            }
-            if (fscanf(file, "\n")) {
-                // optional newline at end of file,
-            }
-        }
-
-        // TODO Add functionality to read multiple grain table entries
-        break;
-    }
-
-    fclose(file);
-
-    film_grain->apply_grain = 1;
-    film_grain->ignore_ref  = 1;
-    cfg->config.fgs_table   = film_grain;
-
-    return EB_ErrorNone;
-fail:
-    free(film_grain);
-
-    fclose(file);
-    return ret;
-}
-#endif
-
 /******************************************
 * Read Command Line
 ******************************************/
@@ -2506,19 +2315,6 @@ EbErrorType read_command_line(int32_t argc, char *const argv[], EncChannel *chan
         }
     }
 
-#if CONFIG_ENABLE_FILM_GRAIN
-    EbConfig *cfg = channel->app_cfg;
-    if (cfg->fgs_table_path) {
-        if (cfg->config.film_grain_denoise_strength > 0) {
-            fprintf(stderr,
-                    "Warning: Both film-grain-denoise and fgs-table were specified\nfilm-grain-denoise will be "
-                    "disabled\n");
-            cfg->config.film_grain_denoise_strength = 0;
-        }
-        channel->return_error = read_fgs_table(cfg);
-        return_error          = (EbErrorType)(return_error & channel->return_error);
-    }
-#endif
     /***************************************************************************************************/
     /**************************************   Verify configuration parameters   ************************/
     /***************************************************************************************************/
