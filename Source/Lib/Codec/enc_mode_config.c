@@ -6775,61 +6775,8 @@ void svt_aom_sig_deriv_enc_dec_light_pd1(PictureControlSet *pcs, ModeDecisionCon
         else
             ctx->lpd1_tx_ctrls.chroma_detector_level = 0;
     }
-
-    /* In modes below M10, only skip non-NEAREST_NEAREST TX b/c skipping all inter TX will cause blocking artifacts
-    in certain clips.  This signal is separated from the general lpd1_tx_ctrls (above) to avoid
-    accidentally turning this on for modes below M13.
-
-    Do not test this signal in M9 and below during preset tuning.  This signal should be kept as an enc_mode check
-    instead of and LPD1_LEVEL check to ensure that M9 and below do not use it.
-    */
-    if (rtc_tune) {
-        if (pcs->enc_mode <= ENC_M8)
-            ctx->lpd1_skip_inter_tx_level = 0;
-        else if (pcs->enc_mode <= ENC_M10) {
-            if (lpd1_level <= LPD1_LVL_2) {
-                ctx->lpd1_skip_inter_tx_level = 0;
-            } else {
-                ctx->lpd1_skip_inter_tx_level = 1;
-                if (((l0_was_skip && l1_was_skip && ref_skip_perc > 35) && me_8x8_cost_variance < (800 * picture_qp) &&
-                     me_64x64_distortion < (800 * picture_qp)) ||
-                    (me_8x8_cost_variance < (100 * picture_qp) && me_64x64_distortion < (100 * picture_qp))) {
-                    ctx->lpd1_skip_inter_tx_level = 2;
-                }
-            }
-        } else {
-            assert(pcs->enc_mode >= ENC_M8 && "Only enable this feature for M10+ in RA or M8+ for low delay");
-            if (lpd1_level <= LPD1_LVL_2) {
-                ctx->lpd1_skip_inter_tx_level = 0;
-            } else if (lpd1_level <= LPD1_LVL_4) {
-                ctx->lpd1_skip_inter_tx_level = 1;
-            } else {
-                ctx->lpd1_skip_inter_tx_level = 1;
-                if (((l0_was_skip && l1_was_skip && ref_skip_perc > 35) && me_8x8_cost_variance < (800 * picture_qp) &&
-                     me_64x64_distortion < (800 * picture_qp)) ||
-                    (me_8x8_cost_variance < (100 * picture_qp) && me_64x64_distortion < (100 * picture_qp))) {
-                    ctx->lpd1_skip_inter_tx_level = 2;
-                }
-            }
-        }
-    } else {
-        if (pcs->enc_mode <= ENC_M9)
-            ctx->lpd1_skip_inter_tx_level = 0;
-        else {
-            assert(pcs->enc_mode >= ENC_M10 && "Only enable this feature for M10+ in RA or M8+ for low delay");
-            if (lpd1_level <= LPD1_LVL_2) {
-                ctx->lpd1_skip_inter_tx_level = 0;
-            } else {
-                ctx->lpd1_skip_inter_tx_level = 1;
-                if (((l0_was_skip && l1_was_skip && ref_skip_perc > 35) && me_8x8_cost_variance < (800 * picture_qp) &&
-                     me_64x64_distortion < (800 * picture_qp)) ||
-                    (me_8x8_cost_variance < (100 * picture_qp) && me_64x64_distortion < (100 * picture_qp))) {
-                    ctx->lpd1_skip_inter_tx_level = 2;
-                }
-            }
-        }
-    }
-    ctx->lpd1_bypass_tx_th = 0;
+    ctx->lpd1_skip_inter_tx_level = 0;
+    ctx->lpd1_bypass_tx_th        = 0;
     if (rtc_tune) {
         if (lpd1_level <= LPD1_LVL_0)
             ctx->lpd1_bypass_tx_th = 100;
