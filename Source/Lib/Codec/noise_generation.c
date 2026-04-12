@@ -169,9 +169,9 @@ static void set_scaling_points_y(AomFilmGrain* film_grain, const NoiseArgs* nois
 }
 
 static void set_scaling_points_uv(AomFilmGrain* film_grain, const NoiseArgs* noise_args, const uint8_t grain_size) {
-    const int32_t noise_setting = (noise_args->str_chroma == -1) ? noise_args->str_luma * 0.6 : noise_args->str_chroma;
+    const int32_t noise_setting = (noise_args->str_chroma == -1) ? pow(noise_args->str_luma, 0.75)
+                                                                 : noise_args->str_chroma;
     const double  noise         = (23 - grain_size) * noise_setting / 50.0;
-    const int32_t range_min     = (noise_args->color_range == EB_CR_STUDIO_RANGE) ? 16 : 0;
 
     if (noise_args->chroma_from_luma == 0) {
         const int32_t num_points = 4;
@@ -202,6 +202,7 @@ static void set_scaling_points_uv(AomFilmGrain* film_grain, const NoiseArgs* noi
             noise_setting, noise, 0);
     } else {
         const int32_t num_points  = 6;
+        const int32_t range_min   = (noise_args->color_range == EB_CR_STUDIO_RANGE) ? 16 : 0;
         const int32_t range_max   = (noise_args->color_range == EB_CR_STUDIO_RANGE) ? 235 : 255;
         const int32_t range       = range_max - range_min;
         const double  range_ratio = range / 255.0;
