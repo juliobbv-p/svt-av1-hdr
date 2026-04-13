@@ -58,6 +58,13 @@
 #include "metadata_handle.h"
 #include "noise_generation.h"
 
+#ifdef LIBDOVI_FOUND
+#include <libdovi/rpu_parser.h>
+#endif
+#ifdef LIBHDR10PLUS_RS_FOUND
+#include <libhdr10plus-rs/hdr10plus.h>
+#endif
+
 #include "pack_unpack_c.h"
 #include "enc_mode_config.h"
 
@@ -1240,6 +1247,149 @@ static ONCE_ROUTINE(init_global_tables) {
 }
 DEFINE_ONCE(global_tables_once);
 
+#if CONFIG_ENABLE_FILM_GRAIN
+static EbErrorType read_fgs_table(EbSvtAv1EncConfiguration *config) {
+    EbErrorType   ret = EB_ErrorBadParameter;
+    AomFilmGrain *film_grain;
+    FILE         *file;
+    FOPEN(file, config->fgs_table_file, "r");
+
+    if (!file)
+        return EB_ErrorBadParameter;
+
+    // Read in one extra character as there should be a newline
+    char magic[9];
+    if (!fread(magic, 9, 1, file) || strncmp(magic, "filmgrn1", 8)) {
+        SVT_ERROR("invalid grain table magic %s\n", config->fgs_table_file);
+        fclose(file);
+        return ret;
+    }
+
+    film_grain = (AomFilmGrain *)calloc(1, sizeof(AomFilmGrain));
+
+    while (!feof(file)) {
+        int num_read = fscanf(file,
+                              "E %*d %*d %d %hu %d\n",
+                              &film_grain->apply_grain,
+                              &film_grain->random_seed,
+                              &film_grain->update_parameters);
+
+        if (num_read == 0 && feof(file)) {
+            SVT_ERROR("invalid grain table %s\n", config->fgs_table_file);
+            goto fail;
+        }
+        if (num_read != 3) {
+            SVT_ERROR("Unable to read entry header. Read %d != 3\n", num_read);
+            goto fail;
+        }
+
+        if (film_grain->update_parameters) {
+            num_read = fscanf(file,
+                              "p %d %d %d %d %d %d %d %d %d %d %d %d\n",
+                              &film_grain->ar_coeff_lag,
+                              &film_grain->ar_coeff_shift,
+                              &film_grain->grain_scale_shift,
+                              &film_grain->scaling_shift,
+                              &film_grain->chroma_scaling_from_luma,
+                              &film_grain->overlap_flag,
+                              &film_grain->cb_mult,
+                              &film_grain->cb_luma_mult,
+                              &film_grain->cb_offset,
+                              &film_grain->cr_mult,
+                              &film_grain->cr_luma_mult,
+                              &film_grain->cr_offset);
+            if (num_read != 12) {
+                SVT_ERROR("Unable to read entry header. Read %d != 12\n", num_read);
+                goto fail;
+            }
+            if (!fscanf(file, "\tsY %d ", &film_grain->num_y_points)) {
+                SVT_ERROR("Unable to read num y points\n");
+                goto fail;
+            }
+            for (int i = 0; i < film_grain->num_y_points; ++i) {
+                if (2 !=
+                    fscanf(file, "%d %d", &film_grain->scaling_points_y[i][0], &film_grain->scaling_points_y[i][1])) {
+                    SVT_ERROR("Unable to read y scaling points\n");
+                    goto fail;
+                }
+            }
+            if (!fscanf(file, "\n\tsCb %d", &film_grain->num_cb_points)) {
+                SVT_ERROR("Unable to read num cb points\n");
+                goto fail;
+            }
+            for (int i = 0; i < film_grain->num_cb_points; ++i) {
+                if (2 !=
+                    fscanf(file, "%d %d", &film_grain->scaling_points_cb[i][0], &film_grain->scaling_points_cb[i][1])) {
+                    SVT_ERROR("Unable to read cb scaling points\n");
+                    goto fail;
+                }
+            }
+            if (!fscanf(file, "\n\tsCr %d", &film_grain->num_cr_points)) {
+                SVT_ERROR("Unable to read num cr points\n");
+                goto fail;
+            }
+            for (int i = 0; i < film_grain->num_cr_points; ++i) {
+                if (2 !=
+                    fscanf(file, "%d %d", &film_grain->scaling_points_cr[i][0], &film_grain->scaling_points_cr[i][1])) {
+                    SVT_ERROR("Unable to read cr scaling points\n");
+                    goto fail;
+                }
+            }
+
+            if (fscanf(file, "\n\tcY")) {
+                SVT_ERROR("Unable to read Y coeffs header (cY)\n");
+                goto fail;
+            }
+            const int n = 2 * film_grain->ar_coeff_lag * (film_grain->ar_coeff_lag + 1);
+            for (int i = 0; i < n; ++i) {
+                if (1 != fscanf(file, "%d", (int *)&film_grain->ar_coeffs_y[i])) {
+                    SVT_ERROR("Unable to read Y coeffs\n");
+                    goto fail;
+                }
+            }
+            if (fscanf(file, "\n\tcCb")) {
+                SVT_ERROR("Unable to read Cb coeffs header (cCb)\n");
+                goto fail;
+            }
+            for (int i = 0; i <= n; ++i) {
+                if (1 != fscanf(file, "%d", (int *)&film_grain->ar_coeffs_cb[i])) {
+                    SVT_ERROR("Unable to read Cb coeffs\n");
+                    goto fail;
+                }
+            }
+            if (fscanf(file, "\n\tcCr")) {
+                SVT_ERROR("Unable read to Cr coeffs header (cCr)\n");
+                goto fail;
+            }
+            for (int i = 0; i <= n; ++i) {
+                if (1 != fscanf(file, "%d", (int *)&film_grain->ar_coeffs_cr[i])) {
+                    SVT_ERROR("Unable to read Cr coeffs\n");
+                    goto fail;
+                }
+            }
+            if (fscanf(file, "\n")) {
+                // optional newline at end of file,
+            }
+        }
+        // TODO Add functionality to read multiple grain table entries
+        break;
+    }
+
+    fclose(file);
+
+    film_grain->apply_grain = 1;
+    film_grain->ignore_ref  = 1;
+    config->fgs_table       = film_grain;
+
+    return EB_ErrorNone;
+fail:
+    free(film_grain);
+
+    fclose(file);
+    return ret;
+}
+#endif
+
 /**********************************
 * Initialize Encoder Library
 **********************************/
@@ -1255,6 +1405,55 @@ EB_API EbErrorType svt_av1_enc_init(EbComponentType *svt_enc_component)
     svt_aom_setup_common_rtcd_internal(scs->static_config.use_cpu_flags);
     svt_aom_setup_rtcd_internal(scs->static_config.use_cpu_flags);
     svt_run_once(&global_tables_once, init_global_tables);
+
+#ifdef LIBDOVI_FOUND
+    if (scs->static_config.dovi_rpu_file != NULL) {
+        SVT_INFO("Svt[info]: Parsing Dolby Vision RPU file: %s\n", scs->static_config.dovi_rpu_file);
+        const DoviRpuOpaqueList *rpus = dovi_parse_rpu_bin_file(scs->static_config.dovi_rpu_file);
+        if (rpus == NULL) {
+            SVT_ERROR("Failed to parse Dolby Vision RPU file: %s\n", scs->static_config.dovi_rpu_file);
+            return EB_ErrorBadParameter;
+        }
+        if (rpus->error) {
+            SVT_ERROR("Svt[error]: %s\n", rpus->error);
+            dovi_rpu_list_free(rpus);
+            return EB_ErrorBadParameter;
+        }
+        SVT_INFO("Svt[info]: Loaded %zu DoVi RPUs\n", rpus->len);
+        scs->dovi_rpus = rpus;
+    } else {
+        scs->dovi_rpus = NULL;
+    }
+#endif
+#ifdef LIBHDR10PLUS_RS_FOUND
+    if (scs->static_config.hdr10plus_json_file != NULL) {
+        SVT_INFO("Svt[info]: Parsing HDR10+ JSON file: %s\n", scs->static_config.hdr10plus_json_file);
+        Hdr10PlusRsJsonOpaque *hdr10plus_json = hdr10plus_rs_parse_json(scs->static_config.hdr10plus_json_file);
+        const char            *error = hdr10plus_rs_json_get_error(hdr10plus_json);
+        if (error) {
+            SVT_ERROR("Svt[error]: %s\n", error);
+            hdr10plus_rs_json_free(hdr10plus_json);
+            return EB_ErrorBadParameter;
+        }
+        SVT_INFO("Svt[info]: Loaded HDR10+ JSON file\n");
+        scs->hdr10plus_json = hdr10plus_json;
+    } else {
+        scs->hdr10plus_json = NULL;
+    }
+#endif
+
+#if CONFIG_ENABLE_FILM_GRAIN
+    if (scs->static_config.fgs_table_file != NULL) {
+        if (scs->static_config.film_grain_denoise_strength > 0) {
+            SVT_WARN("Both film-grain-denoise and fgs-table were specified; film-grain-denoise will be disabled.\n");
+            scs->static_config.film_grain_denoise_strength = 0;
+        }
+        SVT_INFO("Svt[info]: Parsing film grain table file: %s\n", scs->static_config.fgs_table_file);
+        EbErrorType ret = read_fgs_table(&scs->static_config);
+        if (ret != EB_ErrorNone)
+            return ret;
+    }
+#endif
 
     // Per-instance block geometry table allocation
     EB_MALLOC_ARRAY(scs->blk_geom_mds, scs->max_block_cnt);
@@ -2094,6 +2293,25 @@ EB_API EbErrorType svt_av1_enc_deinit(EbComponentType *svt_enc_component) {
     if (handle->scs_instance && handle->scs_instance->scs && handle->scs_instance->scs->blk_geom_mds != NULL) {
         EB_FREE_ARRAY(handle->scs_instance->scs->blk_geom_mds);
     }
+
+#ifdef LIBDOVI_FOUND
+    if (handle->scs_instance && handle->scs_instance->scs && handle->scs_instance->scs->dovi_rpus != NULL) {
+        dovi_rpu_list_free(handle->scs_instance->scs->dovi_rpus);
+        handle->scs_instance->scs->dovi_rpus = NULL;
+    }
+#endif
+#ifdef LIBHDR10PLUS_RS_FOUND
+    if (handle->scs_instance && handle->scs_instance->scs && handle->scs_instance->scs->hdr10plus_json != NULL) {
+        hdr10plus_rs_json_free(handle->scs_instance->scs->hdr10plus_json);
+        handle->scs_instance->scs->hdr10plus_json = NULL;
+    }
+#endif
+#if CONFIG_ENABLE_FILM_GRAIN
+    if (handle->scs_instance && handle->scs_instance->scs && handle->scs_instance->scs->static_config.fgs_table != NULL) {
+        free(handle->scs_instance->scs->static_config.fgs_table);
+        handle->scs_instance->scs->static_config.fgs_table = NULL;
+    }
+#endif
 
     svt_shutdown_process(handle->input_buffer_resource_ptr);
     svt_shutdown_process(handle->input_cmd_resource_ptr);
@@ -4516,6 +4734,9 @@ static void copy_api_from_app(SequenceControlSet *scs, EbSvtAv1EncConfiguration 
 
     // CDEF scaling
     scs->static_config.cdef_scaling = config_struct->cdef_scaling;
+    scs->static_config.dovi_rpu_file = config_struct->dovi_rpu_file;
+    scs->static_config.hdr10plus_json_file = config_struct->hdr10plus_json_file;
+    scs->static_config.fgs_table_file = config_struct->fgs_table_file;
 
     // Override settings for Still IQ tune
     if (scs->static_config.tune == TUNE_IQ) {
@@ -5294,6 +5515,47 @@ static EbErrorType validate_on_the_fly_settings(EbBufferHeaderType *input_ptr, S
     }
     return EB_ErrorNone;
 }
+
+#ifdef LIBDOVI_FOUND
+static EbErrorType retrieve_dovi_rpu_for_frame(const DoviRpuOpaqueList *rpus, uint64_t pic_num,
+                                               EbBufferHeaderType *header_ptr) {
+    if (rpus == NULL) {
+        return EB_ErrorNone;
+    }
+    if (pic_num > rpus->len - 1) {
+        return EB_ErrorNone;
+    }
+    DoviRpuOpaque  *rpu         = rpus->list[pic_num];
+    const DoviData *rpu_payload = dovi_write_av1_rpu_metadata_obu_t35_complete(rpu);
+    if (svt_add_metadata(header_ptr, EB_AV1_METADATA_TYPE_ITUT_T35, rpu_payload->data, rpu_payload->len)) {
+        dovi_data_free(rpu_payload);
+        return EB_ErrorInsufficientResources;
+    }
+    dovi_data_free(rpu_payload);
+    return EB_ErrorNone;
+}
+#endif
+#ifdef LIBHDR10PLUS_RS_FOUND
+static EbErrorType retrieve_hdr10plus_payload_for_frame(Hdr10PlusRsJsonOpaque *hdr10plus_json, uint64_t pic_num,
+                                                        EbBufferHeaderType *header_ptr) {
+    if (hdr10plus_json == NULL) {
+        return EB_ErrorNone;
+    }
+
+    const Hdr10PlusRsData *payload = hdr10plus_rs_write_av1_metadata_obu_t35_complete(hdr10plus_json, pic_num);
+    if (!payload) {
+        return EB_ErrorNone;
+    }
+
+    if (svt_add_metadata(header_ptr, EB_AV1_METADATA_TYPE_ITUT_T35, payload->data, payload->len)) {
+        hdr10plus_rs_data_free(payload);
+        return EB_ErrorInsufficientResources;
+    }
+    hdr10plus_rs_data_free(payload);
+    return EB_ErrorNone;
+}
+#endif
+
 /**********************************
 * Empty This Buffer
 **********************************/
@@ -5395,6 +5657,12 @@ EB_API EbErrorType svt_av1_enc_send_picture(
             0);
     }
 
+#ifdef LIBDOVI_FOUND
+    retrieve_dovi_rpu_for_frame(scs->dovi_rpus, app_hdr->pts, lib_reg_hdr);
+#endif
+#ifdef LIBHDR10PLUS_RS_FOUND
+    retrieve_hdr10plus_payload_for_frame(scs->hdr10plus_json, app_hdr->pts, lib_reg_hdr);
+#endif
 
     //Take a new App-RessCoord command
     EbObjectWrapper *input_cmd_wrp;
