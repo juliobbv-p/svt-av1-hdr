@@ -10,6 +10,7 @@
 # https://www.aomedia.org/license/patent-license.
 
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -32,6 +33,8 @@ BINARIES = config_manager.get_binaries()
 ENCODER_SETTINGS = config_manager.get_encoder_settings()
 COMMON_SETTINGS = config_manager.get_common_settings()
 SETTINGS = config_manager.get_settings()
+PROFILER = config_manager.get_profiler()
+PROFILE_DIR: str = PATHS.get("profile_dir", "")
 
 DRY_RUN_MODE = SETTINGS.get("dry_run", False)
 MAX_PROC = SETTINGS.get("max_processes", 1)
@@ -66,6 +69,44 @@ class EncodeResult:
     encode_time: float
     input_size: int
     output_size: int
+    # Optional Nsight Systems columns; default to empty / 0 when profiler disabled.
+    nsys_report_path: str = ""
+    cpu_sampling_top1_func: str = ""
+    osrt_total_ms: float = 0.0
+
+
+_profiler_warned = False
+
+
+def build_profiler_prefix(task: "EncodeTask") -> Tuple[str, str]:
+    """Build the nsys-profile shell prefix to inject in front of the encoder
+    binary, plus the resulting .nsys-rep path. Returns ("", "") when profiling
+    does not apply (disabled, codec not in apply_to, nsys missing, etc.) so the
+    caller can format the command line uniformly."""
+    global _profiler_warned
+
+    if not PROFILER.get("enabled"):
+        return "", ""
+    if task.encoder_name not in PROFILER.get("apply_to", []):
+        return "", ""
+    if not PROFILE_DIR:
+        return "", ""
+    if not shutil.which("nsys"):
+        if not _profiler_warned:
+            enc_logger.warning(
+                "profiler.enabled=true but `nsys` not on PATH; skipping profile capture for this run"
+            )
+            _profiler_warned = True
+        return "", ""
+
+    os.makedirs(PROFILE_DIR, exist_ok=True)
+    stem = os.path.splitext(task.input_file)[0]
+    profile_path = os.path.join(
+        PROFILE_DIR,
+        f"{task.encoder_name}_s{task.speed}_q{task.quality}_t{task.threads}_{stem}",
+    )
+    prefix = PROFILER["command"].format(profile_path=profile_path)
+    return prefix, profile_path + ".nsys-rep"
 
 
 def encode_file(task: EncodeTask, output_dir: str) -> EncodeResult:
@@ -94,6 +135,8 @@ def encode_file(task: EncodeTask, output_dir: str) -> EncodeResult:
     encoder_bin_name: str = enc_settings["encoder"]
     cfg_path: str = enc_settings.get("cfg_path", "")
 
+    profiler_prefix, profile_report_path = build_profiler_prefix(task)
+
     command: str = enc_settings["command"].format(
         binary_dir=BINARIES[encoder_bin_name],
         q=task.quality,
@@ -106,6 +149,7 @@ def encode_file(task: EncodeTask, output_dir: str) -> EncodeResult:
         fps=fps,
         cfg_path=cfg_path,
         output_path=encoded_path,
+        profiler_prefix=profiler_prefix,
     )
 
     # Get input file size
@@ -126,12 +170,18 @@ def encode_file(task: EncodeTask, output_dir: str) -> EncodeResult:
         # Get output file size
         output_size = os.path.getsize(encoded_path)
 
-        return EncodeResult(
+        result = EncodeResult(
             encoded_path=encoded_path,
             encode_time=encode_time,
             output_size=output_size,
             input_size=input_size,
+            nsys_report_path=profile_report_path,
         )
+        if profile_report_path and os.path.exists(profile_report_path):
+            stats = utils.collect_nsys_stats(profile_report_path)
+            result.cpu_sampling_top1_func = stats.get("cpu_sampling_top1_func", "")
+            result.osrt_total_ms = stats.get("osrt_total_ms", 0.0)
+        return result
     except subprocess.CalledProcessError as e:
         if "Signals.SIGINT" in str(e):
             raise KeyboardInterrupt

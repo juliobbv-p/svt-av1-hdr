@@ -101,7 +101,13 @@ class ConfigManager:
         bins = self.config["binaries"]
         if platform.system() == "Darwin":
             return bins.get("mac_arm64", bins)
+        if platform.machine() in ("aarch64", "arm64"):
+            return bins.get("linux_aarch64", bins.get("linux_x86_64", bins))
         return bins.get("linux_x86_64", bins)
+
+    def get_profiler(self) -> Dict[str, Any]:
+        # Optional; absent in legacy configs. Default disabled.
+        return self.config.get("profiler", {"enabled": False})
 
     def get_common_settings(self) -> Dict[str, Dict[str, Any]]:
         return self.config["common_settings"]

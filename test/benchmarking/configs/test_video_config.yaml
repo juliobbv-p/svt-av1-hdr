@@ -27,6 +27,17 @@ settings:
   max_processes: 0  # 0 for auto scaling based on host configuration
   remove_decoded_files: true
 
+# Optional Nsight Systems profiling. When enabled: true and the codec is in
+# apply_to, the encoder is wrapped with `nsys profile ...` so each run produces
+# a .nsys-rep with CPU sampling, OS runtime trace, NVTX ranges, and (on NVIDIA
+# Grace) Neoverse V2 PMU events. Default disabled — keeps existing behavior.
+profiler:
+  enabled: false
+  tool: "nsys"
+  command: "nsys profile -t osrt,nvtx -s cpu --cpuctxsw=process-tree --sample=process-tree --cpu-core-events=cycles,instructions,cache-misses,branch-misses --output={profile_path} --force-overwrite=true "
+  apply_to: ["svtav1", "svtav1_rtc"]
+  post_reports: ["cpu_sampling", "osrt_sum"]
+
 
 ###############################################################################
 #
@@ -50,6 +61,8 @@ paths:
   qm_log_path: "{out_dir}/quality/{tag}.log"
 
   metrics_dir: "{out_dir}/summary/{tag}"
+
+  profile_dir: "{out_dir}/profiles/{tag}"
 
 binaries:
   linux_x86_64:
@@ -92,6 +105,26 @@ binaries:
     # quality metrics
     ssimulacra2: "{root_dir}/bin/mac_arm64/ssimulacra2"
     vmaf: "{root_dir}/bin/mac_arm64/vmaf"
+  linux_aarch64:
+    # encoder binaries (NVIDIA Grace and other aarch64 Linux hosts)
+    jpegli_enc: "{root_dir}/bin/linux_aarch64/cjpegli"
+    jpegxl_enc: "{root_dir}/bin/linux_aarch64/cjxl"
+    libaom_enc: "{root_dir}/bin/linux_aarch64/aomenc"
+    libaom_rtc_enc: "{root_dir}/bin/linux_aarch64/aomenc_rtc"
+    svtav1_enc: "{root_dir}/bin/linux_aarch64/SvtAv1EncApp"
+    av2_enc: ""
+    # decoder binaries
+    djpeg: "{root_dir}/bin/linux_aarch64/djpeg-static"
+    jpegli_dec: "{root_dir}/bin/linux_aarch64/djpegli"
+    jpegxl_dec: "{root_dir}/bin/linux_aarch64/djxl"
+    dav1d: "{root_dir}/bin/linux_aarch64/dav1d"
+    av2_dec: ""
+    # format conversion
+    ffmpeg: "ffmpeg"
+    ffprobe: "ffprobe"
+    # quality metrics
+    ssimulacra2: "{root_dir}/bin/linux_aarch64/ssimulacra2"
+    vmaf: "{root_dir}/bin/linux_aarch64/vmaf"
 
 common_settings:
   av1:
@@ -144,11 +177,11 @@ encoder_settings:
       nthreads: [1]
     svtav1:
       encoder: "svtav1_enc"
-      command: "{binary_dir} --allow-mmap-file 0 --preset {speed} --hierarchical-levels 0 --rtc 0 --width {width} --height {height} --fps-num {fps} --fps-denom 1 --tbr {kbps} --rc 2 --keyint 3000 --pred-struct 1 -i {input_path} -b {output_path} --lp {nthreads}"
+      command: "{profiler_prefix}{binary_dir} --allow-mmap-file 0 --preset {speed} --hierarchical-levels 0 --rtc 0 --width {width} --height {height} --fps-num {fps} --fps-denom 1 --tbr {kbps} --rc 2 --keyint 3000 --pred-struct 1 -i {input_path} -b {output_path} --lp {nthreads}"
       nthreads: [1]
     svtav1_rtc:
       encoder: "svtav1_enc"
-      command: "{binary_dir} --allow-mmap-file 0 --preset {speed} --hierarchical-levels 0 --rtc 1 --width {width} --height {height} --fps-num {fps} --fps-denom 1 --tbr {kbps} --rc 2 --keyint 3000 --pred-struct 1 -i {input_path} -b {output_path} --lp {nthreads}"
+      command: "{profiler_prefix}{binary_dir} --allow-mmap-file 0 --preset {speed} --hierarchical-levels 0 --rtc 1 --width {width} --height {height} --fps-num {fps} --fps-denom 1 --tbr {kbps} --rc 2 --keyint 3000 --pred-struct 1 -i {input_path} -b {output_path} --lp {nthreads}"
       nthreads: [1]
 
 decoder_settings:

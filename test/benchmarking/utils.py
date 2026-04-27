@@ -160,3 +160,80 @@ def get_cmd_times(cmd, passes=1):
         return total_time / actual_passes
 
     return wallclock_time / actual_passes
+
+
+def collect_nsys_stats(report_path):
+    """Run `nsys stats` against an .nsys-rep and pull a small set of parity
+    metrics for the per-job CSV row. Never raises — always returns a dict
+    with safe defaults so callers can merge the results unconditionally."""
+    out = {
+        "cpu_sampling_top1_func": "",
+        "osrt_total_ms": 0.0,
+    }
+    if not shutil.which("nsys") or not os.path.exists(report_path):
+        return out
+
+    try:
+        # Top sampled function across all threads — the closest equivalent of
+        # `perf record -g | head` for the parity matrix.
+        cs = subprocess.run(
+            [
+                "nsys",
+                "stats",
+                "--report",
+                "cpu_sampling",
+                "--format",
+                "csv",
+                "--output",
+                "-",
+                "--force-export=true",
+                report_path,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=120,
+        )
+        for line in cs.stdout.splitlines():
+            cols = [c.strip() for c in line.split(",")]
+            # First numeric data row; nsys csv puts the symbol/function as the last column.
+            if len(cols) >= 2 and cols[0].replace(".", "", 1).isdigit():
+                out["cpu_sampling_top1_func"] = cols[-1]
+                break
+    except Exception:
+        # Profiler post-processing is best-effort; never fail the encode job.
+        pass
+
+    try:
+        # Total OS runtime time (sem_wait, futex, mutex, …) — the `perf trace -s`
+        # equivalent rolled up into one number.
+        os_rt = subprocess.run(
+            [
+                "nsys",
+                "stats",
+                "--report",
+                "osrt_sum",
+                "--format",
+                "csv",
+                "--output",
+                "-",
+                report_path,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=120,
+        )
+        total_ns = 0
+        for line in os_rt.stdout.splitlines():
+            cols = [c.strip() for c in line.split(",")]
+            if len(cols) >= 2 and cols[0].replace(".", "", 1).isdigit():
+                try:
+                    total_ns += int(float(cols[1]))
+                except ValueError:
+                    pass
+        out["osrt_total_ms"] = total_ns / 1e6
+    except Exception:
+        pass
+
+    return out

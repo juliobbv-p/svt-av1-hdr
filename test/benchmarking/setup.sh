@@ -148,12 +148,24 @@ conda init
 conda activate codec_eval
 pip install -r requirements.txt
 
+# Optional: detect Nsight Systems for profiler.enabled in YAML configs.
+# Not auto-installed (license/repo gating); harness gracefully disables
+# profiling at runtime when nsys is missing.
+if command -v nsys > /dev/null 2>&1; then
+    echo "Found Nsight Systems: $(nsys --version 2>&1 | head -1)"
+else
+    echo "Note: 'nsys' not found on PATH. To enable profiler.enabled: true"
+    echo "      in benchmark configs, install Nsight Systems or NVIDIA HPC SDK"
+    echo "      (it ships nsys under /opt/nvidia/hpc_sdk/.../bin)."
+fi
+
 DEF_DIR=~/benchmark
 DST_DIR=${1:-${DEF_DIR}}
 
 # create directory structure
 mkdir -p "${DST_DIR}"/bin/mac_arm64
 mkdir -p "${DST_DIR}"/bin/linux_x64
+mkdir -p "${DST_DIR}"/bin/linux_aarch64
 mkdir -p "${DST_DIR}"/configs
 mkdir -p "${DST_DIR}"/DataSet
 
@@ -171,7 +183,12 @@ rsync -a scripts "${DST_DIR}"/bin
 if [[ $OS_TYPE == "Darwin" ]]; then
     BIN_DIR="${DST_DIR}"/bin/mac_arm64
 elif [[ $OS_TYPE == "Linux" ]]; then
-    BIN_DIR="${DST_DIR}"/bin/linux_x64
+    HOST_ARCH=$(uname -m)
+    if [[ $HOST_ARCH == "aarch64" || $HOST_ARCH == "arm64" ]]; then
+        BIN_DIR="${DST_DIR}"/bin/linux_aarch64
+    else
+        BIN_DIR="${DST_DIR}"/bin/linux_x64
+    fi
 else
     echo "Unsupported OS: $OS_TYPE"
     exit 1
