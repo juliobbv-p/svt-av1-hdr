@@ -89,7 +89,7 @@ static void* svt_thread_trampoline(void* p) {
     SvtThreadStart* payload = (SvtThreadStart*)p;
     void* (*fn)(void*)      = payload->fn;
     void* arg               = payload->arg;
-    char name[16];
+    char  name[16];
     memcpy(name, payload->name, sizeof(name));
     free(payload);
 
