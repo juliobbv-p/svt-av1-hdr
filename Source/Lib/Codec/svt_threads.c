@@ -121,10 +121,11 @@ end:
 /****************************************
  * svt_create_thread
  ****************************************/
-EbHandle svt_create_thread(void* thread_function(void*), void* thread_context) {
+EbHandle svt_create_thread(void* thread_function(void*), void* thread_context, const char* name) {
     EbHandle thread_handle = NULL;
 
 #ifdef _WIN32
+    (void)name;
 
     thread_handle = (EbHandle)CreateThread(
         NULL, // default security attributes
@@ -175,6 +176,13 @@ EbHandle svt_create_thread(void* thread_function(void*), void* thread_context) {
     }
 
     pthread_attr_destroy(&attr);
+
+#ifdef __linux__
+    if (name && *name)
+        (void)pthread_setname_np(*th, name);
+#else
+    (void)name; // pthread_setname_np on macOS only names the calling thread; skip
+#endif
 
     thread_handle = th;
 #endif // _WIN32

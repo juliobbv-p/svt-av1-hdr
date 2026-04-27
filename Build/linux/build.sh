@@ -283,6 +283,7 @@ parse_options() {
             avx512) CMAKE_EXTRA_FLAGS="$CMAKE_EXTRA_FLAGS -DENABLE_AVX512=OFF" ;;
             lto) CMAKE_EXTRA_FLAGS="$CMAKE_EXTRA_FLAGS -DSVT_AV1_LTO=OFF" ;;
             native) CMAKE_EXTRA_FLAGS="$CMAKE_EXTRA_FLAGS -DNATIVE=OFF" ;;
+            nvtx) CMAKE_EXTRA_FLAGS="$CMAKE_EXTRA_FLAGS -DSVT_AV1_NVTX=OFF" ;;
             pgo) CMAKE_EXTRA_FLAGS="$CMAKE_EXTRA_FLAGS -DSVT_AV1_PGO=OFF" PGO_COMPILE_STAGE=none ;;
             *) print_message "Unknown option: $1" ;;
             esac
@@ -293,6 +294,7 @@ parse_options() {
             avx512) CMAKE_EXTRA_FLAGS="$CMAKE_EXTRA_FLAGS -DENABLE_AVX512=ON" ;;
             lto) CMAKE_EXTRA_FLAGS="$CMAKE_EXTRA_FLAGS -DSVT_AV1_LTO=ON" ;;
             native) CMAKE_EXTRA_FLAGS="$CMAKE_EXTRA_FLAGS -DNATIVE=ON" ;;
+            nvtx) CMAKE_EXTRA_FLAGS="$CMAKE_EXTRA_FLAGS -DSVT_AV1_NVTX=ON" ;;
             pgo)
                 CMAKE_EXTRA_FLAGS="$CMAKE_EXTRA_FLAGS -DSVT_AV1_PGO=ON"
                 case $PGO_COMPILE_STAGE in

@@ -14,6 +14,8 @@
 
 #include "definitions.h"
 
+#include <stdio.h>
+
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -28,7 +30,7 @@ extern "C" {
 /**************************************
      * Threads
      **************************************/
-EbHandle svt_create_thread(void* thread_function(void*), void* thread_context);
+EbHandle svt_create_thread(void* thread_function(void*), void* thread_context, const char* name);
 
 EbErrorType svt_destroy_thread(EbHandle thread_handle);
 
@@ -60,10 +62,10 @@ EbErrorType svt_destroy_mutex(EbHandle mutex_handle);
 #include <sched.h>
 #include <pthread.h>
 #endif
-#define EB_CREATE_THREAD(pointer, thread_function, thread_context)    \
-    do {                                                              \
-        pointer = svt_create_thread(thread_function, thread_context); \
-        EB_ADD_MEM(pointer, 1, EB_THREAD);                            \
+#define EB_CREATE_THREAD(pointer, thread_function, thread_context, name)    \
+    do {                                                                    \
+        pointer = svt_create_thread(thread_function, thread_context, name); \
+        EB_ADD_MEM(pointer, 1, EB_THREAD);                                  \
     } while (0)
 #define EB_DESTROY_THREAD(pointer)                   \
     do {                                             \
@@ -74,11 +76,14 @@ EbErrorType svt_destroy_mutex(EbHandle mutex_handle);
         }                                            \
     } while (0);
 
-#define EB_CREATE_THREAD_ARRAY(pa, count, thread_function, thread_contexts) \
-    do {                                                                    \
-        EB_ALLOC_PTR_ARRAY(pa, count);                                      \
-        for (uint32_t i = 0; i < count; i++)                                \
-            EB_CREATE_THREAD(pa[i], thread_function, thread_contexts[i]);   \
+#define EB_CREATE_THREAD_ARRAY(pa, count, thread_function, thread_contexts, name_prefix) \
+    do {                                                                                  \
+        EB_ALLOC_PTR_ARRAY(pa, count);                                                    \
+        for (uint32_t i = 0; i < count; i++) {                                            \
+            char _svt_thr_name[16];                                                       \
+            snprintf(_svt_thr_name, sizeof(_svt_thr_name), "%s%u", name_prefix, i);       \
+            EB_CREATE_THREAD(pa[i], thread_function, thread_contexts[i], _svt_thr_name);  \
+        }                                                                                 \
     } while (0)
 
 #define EB_DESTROY_THREAD_ARRAY(pa, count)       \

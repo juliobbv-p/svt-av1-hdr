@@ -18,6 +18,11 @@
 //  -Calls the encoder via the API
 //  -Destructs the resources
 
+// Expose pthread_setname_np for thread naming in Nsight Systems on Linux.
+#if defined(__linux__) && !defined(_GNU_SOURCE)
+#define _GNU_SOURCE
+#endif
+
 /***************************************
  * Includes
  ***************************************/
@@ -434,6 +439,9 @@ int main(int argc, char* argv[]) {
 #ifdef _WIN32
     _setmode(_fileno(stdin), _O_BINARY);
     _setmode(_fileno(stdout), _O_BINARY);
+#endif
+#ifdef __linux__
+    (void)pthread_setname_np(pthread_self(), "svt-app-main");
 #endif
     // GLOBAL VARIABLES
     EbErrorType return_error = EB_ErrorNone; // Error Handling

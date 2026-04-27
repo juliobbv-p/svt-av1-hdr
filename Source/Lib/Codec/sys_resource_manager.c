@@ -15,6 +15,7 @@
 #include "sys_resource_manager.h"
 #include "definitions.h"
 #include "svt_threads.h"
+#include "svt_nvtx.h"
 #if SRM_REPORT
 #include "svt_log.h"
 #endif
@@ -723,6 +724,11 @@ EbErrorType svt_get_empty_object(EbFifo* empty_fifo_ptr, EbObjectWrapper** wrapp
 EbErrorType svt_get_full_object(EbFifo* full_fifo_ptr, EbObjectWrapper** wrapper_dbl_ptr) {
     EbErrorType return_error = EB_ErrorNone;
 
+    // NVTX "wait" range covers semaphore + mutex wait. The gap between
+    // consecutive "wait" ranges on a stage thread reads as "busy" on the
+    // Nsight Systems timeline.
+    SVT_NVTX_RANGE_PUSH("wait");
+
     // Queue the Fifo requesting the full fifo
     svt_release_process(full_fifo_ptr);
 
@@ -741,6 +747,8 @@ EbErrorType svt_get_full_object(EbFifo* full_fifo_ptr, EbObjectWrapper** wrapper
 
     // Release Mutex
     svt_release_mutex(full_fifo_ptr->lockout_mutex);
+
+    SVT_NVTX_RANGE_POP();
 
     return return_error;
 }
