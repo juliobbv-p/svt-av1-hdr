@@ -45,6 +45,8 @@ Note - a Dockerfile is provided to build the encoder into a tiny Alpine Linux Do
   - for an LTO build, run `./build.sh <release | debug> --enable-lto`
   - for a PGO build, run `./build.sh <release | debug> --enable-pgo`
     (LTO and PGO can be combined, for maximum gains)
+  - for an NVIDIA Nsight Systems profiling build, run `./build.sh <release | debug> --enable-nvtx`
+    (opt-in NVTX ranges + named pipeline threads; default OFF, see [Appendix-Profiling.md](Appendix-Profiling.md))
 
 - __Sample Binaries location__
   - Binaries can be found under `Bin/Release` and/or `Bin/Debug`
