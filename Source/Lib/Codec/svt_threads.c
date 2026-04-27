@@ -31,8 +31,13 @@
  ****************************************/
 #include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
 #include "svt_threads.h"
 #include "svt_log.h"
+#include "svt_nvtx.h"
+#if defined(__linux__)
+#include <sys/syscall.h>
+#endif
 /****************************************
   * Win32 Includes
   ****************************************/
@@ -66,6 +71,36 @@ void printfTime(const char* fmt, ...) {
 static void* dummy_func(void* arg) {
     (void)arg;
     return NULL;
+}
+
+/*
+ * Self-naming trampoline. nsys snapshots the thread name early (often before a
+ * spawner-side pthread_setname_np lands), so we let the new thread rename
+ * itself before it enters user_fn. This makes svt-* names visible in Nsight
+ * timelines, /proc/<tid>/comm, and ps/top.
+ */
+typedef struct SvtThreadStart {
+    void* (*fn)(void*);
+    void* arg;
+    char  name[16];
+} SvtThreadStart;
+
+static void* svt_thread_trampoline(void* p) {
+    SvtThreadStart* payload = (SvtThreadStart*)p;
+    void* (*fn)(void*)      = payload->fn;
+    void* arg               = payload->arg;
+    char name[16];
+    memcpy(name, payload->name, sizeof(name));
+    free(payload);
+
+    if (name[0]) {
+        (void)pthread_setname_np(pthread_self(), name);
+#if defined(SVT_AV1_NVTX) && SVT_AV1_NVTX
+        SVT_NVTX_NAME_OS_THREAD((unsigned long)syscall(SYS_gettid), name);
+#endif
+    }
+
+    return fn(arg);
 }
 
 // These can stay with pthread_once_t since this is specific to pthreads implementation
@@ -167,23 +202,32 @@ EbHandle svt_create_thread(void* thread_function(void*), void* thread_context, c
         return NULL;
     }
 
+    SvtThreadStart* payload = malloc(sizeof(*payload));
+    if (payload == NULL) {
+        SVT_ERROR("Failed to allocate thread start payload\n");
+        free(th);
+        pthread_attr_destroy(&attr);
+        return NULL;
+    }
+    payload->fn  = thread_function;
+    payload->arg = thread_context;
+    if (name && *name) {
+        strncpy(payload->name, name, sizeof(payload->name) - 1);
+        payload->name[sizeof(payload->name) - 1] = '\0';
+    } else {
+        payload->name[0] = '\0';
+    }
+
     int ret;
-    if ((ret = pthread_create(th, &attr, thread_function, thread_context))) {
+    if ((ret = pthread_create(th, &attr, svt_thread_trampoline, payload))) {
         SVT_ERROR("Failed to create thread: %s\n", strerror(ret));
+        free(payload);
         free(th);
         pthread_attr_destroy(&attr);
         return NULL;
     }
 
     pthread_attr_destroy(&attr);
-
-#ifdef __linux__
-    if (name && *name) {
-        (void)pthread_setname_np(*th, name);
-    }
-#else
-    (void)name; // pthread_setname_np on macOS only names the calling thread; skip
-#endif
 
     thread_handle = th;
 #endif // _WIN32

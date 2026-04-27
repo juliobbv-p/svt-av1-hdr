@@ -28,9 +28,13 @@
 #include <nvtx3/nvToolsExt.h>
 #define SVT_NVTX_RANGE_PUSH(name) (void)nvtxRangePushA(name)
 #define SVT_NVTX_RANGE_POP() (void)nvtxRangePop()
+// Register an OS thread name with the NVTX domain so Nsight Systems labels
+// the thread on the timeline. tid is the kernel TID (Linux gettid()).
+#define SVT_NVTX_NAME_OS_THREAD(tid, name) (void)nvtxNameOsThreadA((uint32_t)(tid), (name))
 #else
 #define SVT_NVTX_RANGE_PUSH(name) ((void)0)
 #define SVT_NVTX_RANGE_POP() ((void)0)
+#define SVT_NVTX_NAME_OS_THREAD(tid, name) ((void)0)
 #endif
 
 #endif // Svt_Nvtx_h
