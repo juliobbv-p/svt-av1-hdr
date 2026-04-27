@@ -163,9 +163,19 @@ def get_cmd_times(cmd, passes=1):
 
 
 def collect_nsys_stats(report_path):
-    """Run `nsys stats` against an .nsys-rep and pull a small set of parity
-    metrics for the per-job CSV row. Never raises — always returns a dict
-    with safe defaults so callers can merge the results unconditionally."""
+    """Read parity metrics out of an Nsight Systems .nsys-rep capture for the
+    per-job CSV row.
+
+    Strategy: export to SQLite once, then query directly. This is more robust
+    across nsys versions than parsing the CLI's `nsys stats` text output (the
+    set of built-in reports has churned between releases — for instance the
+    `cpu_sampling` stats report present in nsys < 2025 was removed in 2026).
+
+    Returns a dict with safe defaults; never raises so the caller can merge
+    the results unconditionally even when nsys is missing or the capture
+    contains no data for a given metric."""
+    import sqlite3
+
     out = {
         "cpu_sampling_top1_func": "",
         "osrt_total_ms": 0.0,
@@ -173,67 +183,58 @@ def collect_nsys_stats(report_path):
     if not shutil.which("nsys") or not os.path.exists(report_path):
         return out
 
+    sqlite_path = os.path.splitext(report_path)[0] + ".sqlite"
     try:
-        # Top sampled function across all threads — the closest equivalent of
-        # `perf record -g | head` for the parity matrix.
-        cs = subprocess.run(
-            [
-                "nsys",
-                "stats",
-                "--report",
-                "cpu_sampling",
-                "--format",
-                "csv",
-                "--output",
-                "-",
-                "--force-export=true",
-                report_path,
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=120,
+        subprocess.run(
+            ["nsys", "export", "-t", "sqlite", "-f", "true",
+             "-o", sqlite_path, report_path],
+            capture_output=True, text=True, check=False, timeout=180,
         )
-        for line in cs.stdout.splitlines():
-            cols = [c.strip() for c in line.split(",")]
-            # First numeric data row; nsys csv puts the symbol/function as the last column.
-            if len(cols) >= 2 and cols[0].replace(".", "", 1).isdigit():
-                out["cpu_sampling_top1_func"] = cols[-1]
-                break
     except Exception:
-        # Profiler post-processing is best-effort; never fail the encode job.
-        pass
+        return out
+
+    if not os.path.exists(sqlite_path):
+        return out
 
     try:
-        # Total OS runtime time (sem_wait, futex, mutex, …) — the `perf trace -s`
-        # equivalent rolled up into one number.
-        os_rt = subprocess.run(
-            [
-                "nsys",
-                "stats",
-                "--report",
-                "osrt_sum",
-                "--format",
-                "csv",
-                "--output",
-                "-",
-                report_path,
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=120,
-        )
-        total_ns = 0
-        for line in os_rt.stdout.splitlines():
-            cols = [c.strip() for c in line.split(",")]
-            if len(cols) >= 2 and cols[0].replace(".", "", 1).isdigit():
-                try:
-                    total_ns += int(float(cols[1]))
-                except ValueError:
-                    pass
-        out["osrt_total_ms"] = total_ns / 1e6
+        db = sqlite3.connect(sqlite_path)
+        cur = db.cursor()
+
+        # Total OS runtime time (sem_wait, futex, pthread mutex/cond, syscalls).
+        # OSRT_API columns: start, end, eventClass, globalTid, correlationId, nameId, ...
+        try:
+            row = cur.execute(
+                "SELECT SUM(end - start) FROM OSRT_API"
+            ).fetchone()
+            if row and row[0] is not None:
+                out["osrt_total_ms"] = float(row[0]) / 1e6
+        except sqlite3.OperationalError:
+            pass
+
+        # Top sampled function across all threads — perf record -g equivalent.
+        # SAMPLE/SAMPLING_CALLCHAINS materialize only when the capture window
+        # is long enough to accumulate samples (default 1 kHz). For very short
+        # runs the table may be absent or empty; leave the column empty in
+        # that case rather than fabricating data.
+        try:
+            row = cur.execute("""
+                SELECT s.value, COUNT(*) AS n
+                FROM SAMPLING_CALLCHAINS scc
+                JOIN StringIds s ON s.id = scc.symbol
+                WHERE scc.stackDepth = 0
+                GROUP BY scc.symbol
+                ORDER BY n DESC
+                LIMIT 1
+            """).fetchone()
+            if row:
+                out["cpu_sampling_top1_func"] = row[0]
+        except sqlite3.OperationalError:
+            # SAMPLING_CALLCHAINS missing — short capture or sampling disabled.
+            pass
+
+        db.close()
     except Exception:
+        # Best-effort; never block the encode job because of profiler parsing.
         pass
 
     return out
