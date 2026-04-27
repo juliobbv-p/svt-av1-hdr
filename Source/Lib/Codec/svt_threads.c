@@ -178,8 +178,9 @@ EbHandle svt_create_thread(void* thread_function(void*), void* thread_context, c
     pthread_attr_destroy(&attr);
 
 #ifdef __linux__
-    if (name && *name)
+    if (name && *name) {
         (void)pthread_setname_np(*th, name);
+    }
 #else
     (void)name; // pthread_setname_np on macOS only names the calling thread; skip
 #endif

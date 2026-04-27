@@ -77,13 +77,13 @@ EbErrorType svt_destroy_mutex(EbHandle mutex_handle);
     } while (0);
 
 #define EB_CREATE_THREAD_ARRAY(pa, count, thread_function, thread_contexts, name_prefix) \
-    do {                                                                                  \
-        EB_ALLOC_PTR_ARRAY(pa, count);                                                    \
-        for (uint32_t i = 0; i < count; i++) {                                            \
-            char _svt_thr_name[16];                                                       \
-            snprintf(_svt_thr_name, sizeof(_svt_thr_name), "%s%u", name_prefix, i);       \
-            EB_CREATE_THREAD(pa[i], thread_function, thread_contexts[i], _svt_thr_name);  \
-        }                                                                                 \
+    do {                                                                                 \
+        EB_ALLOC_PTR_ARRAY(pa, count);                                                   \
+        for (uint32_t i = 0; i < count; i++) {                                           \
+            char _svt_thr_name[16];                                                      \
+            snprintf(_svt_thr_name, sizeof(_svt_thr_name), "%s%u", name_prefix, i);      \
+            EB_CREATE_THREAD(pa[i], thread_function, thread_contexts[i], _svt_thr_name); \
+        }                                                                                \
     } while (0)
 
 #define EB_DESTROY_THREAD_ARRAY(pa, count)       \
