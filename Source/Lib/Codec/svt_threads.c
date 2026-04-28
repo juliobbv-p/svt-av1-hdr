@@ -74,6 +74,21 @@ static void* dummy_func(void* arg) {
 }
 
 /*
+ * pthread_setname_np has different signatures across platforms; the trampoline
+ * always invokes this from inside the new thread, so Apple's self-only form is
+ * naturally compatible.
+ */
+static inline void svt_thread_self_setname(const char* name) {
+#if defined(__APPLE__)
+    (void)pthread_setname_np(name);
+#elif defined(__linux__) || defined(__GLIBC__) || defined(__ANDROID__)
+    (void)pthread_setname_np(pthread_self(), name);
+#else
+    (void)name;
+#endif
+}
+
+/*
  * Self-naming trampoline. nsys snapshots the thread name early (often before a
  * spawner-side pthread_setname_np lands), so we let the new thread rename
  * itself before it enters user_fn. This makes svt-* names visible in Nsight
@@ -94,7 +109,7 @@ static void* svt_thread_trampoline(void* p) {
     free(payload);
 
     if (name[0]) {
-        (void)pthread_setname_np(pthread_self(), name);
+        svt_thread_self_setname(name);
 #if defined(SVT_AV1_NVTX) && SVT_AV1_NVTX
         SVT_NVTX_NAME_OS_THREAD((unsigned long)syscall(SYS_gettid), name);
 #endif
