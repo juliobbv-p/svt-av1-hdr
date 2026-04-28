@@ -105,7 +105,7 @@ static void* svt_thread_trampoline(void* p) {
     void* (*fn)(void*)      = payload->fn;
     void* arg               = payload->arg;
     char  name[16];
-    memcpy(name, payload->name, sizeof(name));
+    strncpy(name, payload->name, sizeof(name) - 1);
     name[sizeof(name) - 1] = '\0';
     free(payload);
 
