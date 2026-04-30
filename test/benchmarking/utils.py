@@ -184,6 +184,10 @@ def collect_nsys_stats(report_path):
         return out
 
     sqlite_path = os.path.splitext(report_path)[0] + ".sqlite"
+    # Cap export at 3 minutes — typical .nsys-rep exports finish in seconds,
+    # but multi-GB captures from long preset-2 runs can stretch toward a
+    # minute on slow IO. The cap is a safety net against an `nsys` regression
+    # hanging the whole sweep, not a target latency.
     try:
         subprocess.run(
             ["nsys", "export", "-t", "sqlite", "-f", "true",

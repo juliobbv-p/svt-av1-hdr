@@ -90,6 +90,11 @@ def build_profiler_prefix(task: "EncodeTask") -> Tuple[str, str]:
     if task.encoder_name not in PROFILER.get("apply_to", []):
         return "", ""
     if not PROFILE_DIR:
+        if not _profiler_warned:
+            enc_logger.warning(
+                "profiler.enabled=true but `paths.profile_dir` is unset; skipping profile capture"
+            )
+            _profiler_warned = True
         return "", ""
     if not shutil.which("nsys"):
         if not _profiler_warned:
