@@ -301,11 +301,15 @@ set(all_files
 add_library(CODEC OBJECT ${all_files})
 
 if(SVT_AV1_NVTX)
+    # HPC SDK installs CUDA under a versioned subdir (e.g. 25.3/cuda/include);
+    # find_path HINTS does not expand `*` itself, so glob the candidates first.
+    file(GLOB SVT_NVTX_HPC_HINTS
+        "/opt/nvidia/hpc_sdk/Linux_aarch64/*/cuda/include"
+        "/opt/nvidia/hpc_sdk/Linux_x86_64/*/cuda/include")
     find_path(NVTX3_INCLUDE_DIR nvtx3/nvToolsExt.h
         HINTS $ENV{CUDA_HOME}/include
               $ENV{NVHPC_ROOT}/cuda/include
-              /opt/nvidia/hpc_sdk/Linux_aarch64/*/cuda/include
-              /opt/nvidia/hpc_sdk/Linux_x86_64/*/cuda/include
+              ${SVT_NVTX_HPC_HINTS}
               /usr/local/cuda/include
               /usr/include)
     if(NOT NVTX3_INCLUDE_DIR)

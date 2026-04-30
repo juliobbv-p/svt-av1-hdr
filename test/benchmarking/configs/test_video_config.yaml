@@ -33,10 +33,8 @@ settings:
 # Grace) Neoverse V2 PMU events. Default disabled — keeps existing behavior.
 profiler:
   enabled: false
-  tool: "nsys"
   command: "nsys profile -t osrt,nvtx -s cpu --cpuctxsw=process-tree --sample=process-tree --cpu-core-events=cycles,instructions,cache-misses,branch-misses --output={profile_path} --force-overwrite=true "
   apply_to: ["svtav1", "svtav1_rtc"]
-  post_reports: ["cpu_sampling", "osrt_sum"]
 
 
 ###############################################################################

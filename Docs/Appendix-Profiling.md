@@ -107,10 +107,8 @@ In your config (e.g. `test/benchmarking/configs/test_video_config.yaml`):
 ```yaml
 profiler:
   enabled: true                 # default false; existing configs unaffected
-  tool: "nsys"
-  command: "nsys profile -t osrt,nvtx --cpuctxsw=process-tree --sample=process-tree --output={profile_path} --force-overwrite=true "
+  command: "nsys profile -t osrt,nvtx -s cpu --cpuctxsw=process-tree --sample=process-tree --cpu-core-events=cycles,instructions,cache-misses,branch-misses --output={profile_path} --force-overwrite=true "
   apply_to: ["svtav1", "svtav1_rtc"]
-  post_reports: ["nvtx_sum", "osrt_sum"]
 
 paths:
   profile_dir: "{out_dir}/profiles/{tag}"
