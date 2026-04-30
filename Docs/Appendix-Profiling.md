@@ -53,10 +53,27 @@ nm -D Bin/Release/libSvtAv1Enc.so | grep -E " U dlopen| U dlsym"   # expect: pre
 ```
 
 `SvtAv1EncApp` and every pipeline thread it spawns are named via
-`pthread_setname_np` regardless of the build flag — `svt-app-main`, `svt-rsrc`,
+`pthread_setname_np` regardless of the build flag. Worker arrays use the form
 `svt-me0`...`svt-meN`, `svt-md0`...`svt-mdN`, `svt-cdef0`...`svt-cdefN`, etc.
-The names are visible in `top`, `htop`, `ps -L -o pid,tid,comm`,
-`/proc/<pid>/task/*/comm`, and the Nsight Systems timeline lane labels.
+Singleton stage threads take the kernel function name, truncated by Linux to
+the 15-char `TASK_COMM_LEN`:
+
+| Kernel | Thread name |
+|---|---|
+| `svt_aom_resource_coordination_kernel` | `svt_aom_resourc` |
+| `svt_aom_picture_decision_kernel`      | `svt_aom_picture` ⚠ |
+| `svt_aom_initial_rate_control_kernel`  | `svt_aom_initial` |
+| `svt_aom_picture_manager_kernel`       | `svt_aom_picture` ⚠ |
+| `svt_aom_rate_control_kernel`          | `svt_aom_rate_co` |
+| `svt_aom_packetization_kernel`         | `svt_aom_packeti` |
+
+⚠ `picture_decision` and `picture_manager` collapse to the same truncated
+name. They are still distinct threads — TID disambiguates them in Nsight
+timelines, but `top`/`htop`/`ps -L`/`/proc/<pid>/task/*/comm` will show two
+threads sharing the `svt_aom_picture` label. The application thread is
+`svt-app-main`. All names are visible in `top`, `htop`,
+`ps -L -o pid,tid,comm`, `/proc/<pid>/task/*/comm`, and the Nsight Systems
+timeline lane labels.
 
 ## Standalone runtime
 
@@ -149,5 +166,5 @@ For the `pthread_setname_np` side, while a longer encode is running:
 
 ```sh
 ls /proc/$(pidof SvtAv1EncApp)/task/*/comm | xargs -I{} cat {} | sort -u
-# expect svt-app-main, svt-rsrc, svt-me0..N, svt-md0..N, svt-cdef0..N, ...
+# expect svt-app-main, 5 distinct svt_aom_* singletons (picdec/picmgr collide), svt-me0..N, svt-md0..N, svt-cdef0..N, ...
 ```
