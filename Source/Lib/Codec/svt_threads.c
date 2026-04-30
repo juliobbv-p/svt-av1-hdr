@@ -169,6 +169,10 @@ end:
 }
 #endif
 
+void svt_format_thread_name(char* buf, size_t size, const char* prefix, uint32_t index) {
+    snprintf(buf, size, "%s%u", prefix, index);
+}
+
 /****************************************
  * svt_create_thread
  ****************************************/

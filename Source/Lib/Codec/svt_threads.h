@@ -14,8 +14,6 @@
 
 #include "definitions.h"
 
-#include <stdio.h>
-
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -33,6 +31,10 @@ extern "C" {
 EbHandle svt_create_thread(void* thread_function(void*), void* thread_context, const char* name);
 
 EbErrorType svt_destroy_thread(EbHandle thread_handle);
+
+// Format a per-instance worker thread name as `<prefix><index>` into a fixed
+// buffer (typical size 16 to match TASK_COMM_LEN). Used by EB_CREATE_THREAD_ARRAY.
+void svt_format_thread_name(char* buf, size_t size, const char* prefix, uint32_t index);
 
 /**************************************
      * Semaphores
@@ -87,7 +89,7 @@ EbErrorType svt_destroy_mutex(EbHandle mutex_handle);
         EB_ALLOC_PTR_ARRAY(pa, count);                                                         \
         for (uint32_t i = 0; i < count; i++) {                                                 \
             char _svt_thr_name[16];                                                            \
-            snprintf(_svt_thr_name, sizeof(_svt_thr_name), "%s%u", name_prefix, i);            \
+            svt_format_thread_name(_svt_thr_name, sizeof(_svt_thr_name), name_prefix, i);      \
             EB_CREATE_THREAD_NAMED(pa[i], thread_function, thread_contexts[i], _svt_thr_name); \
         }                                                                                      \
     } while (0)
