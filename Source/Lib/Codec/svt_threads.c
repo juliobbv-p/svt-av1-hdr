@@ -180,8 +180,6 @@ EbHandle svt_create_thread(void* thread_function(void*), void* thread_context, c
     EbHandle thread_handle = NULL;
 
 #ifdef _WIN32
-    (void)name;
-
     thread_handle = (EbHandle)CreateThread(
         NULL, // default security attributes
         0, // default stack size
@@ -189,6 +187,18 @@ EbHandle svt_create_thread(void* thread_function(void*), void* thread_context, c
         thread_context, // context to be tied to the new thread
         0, // thread active when created
         NULL); // new thread ID
+
+    // SetThreadDescription (Windows 10 1607+) — best effort. Older Windows
+    // returns E_NOTIMPL; nothing else we can do here.
+    if (thread_handle && name && *name) {
+        wchar_t wname[16];
+        size_t  i = 0;
+        for (; i + 1 < sizeof(wname) / sizeof(wname[0]) && name[i]; i++) {
+            wname[i] = (wchar_t)(unsigned char)name[i];
+        }
+        wname[i] = L'\0';
+        (void)SetThreadDescription((HANDLE)thread_handle, wname);
+    }
 
 #else
     if (pthread_once(&checked_once, check_set_prio)) {
