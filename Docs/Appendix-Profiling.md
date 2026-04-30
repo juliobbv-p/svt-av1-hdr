@@ -1,10 +1,11 @@
 # Appendix: NVIDIA Nsight Systems profiling
 
-SVT-AV1 ships an opt-in profiling integration for **NVIDIA Nsight Systems**,
-designed for NVIDIA Grace CPU (aarch64 Neoverse V2) hosts but functional on any
-Linux platform with the NVTX3 headers available. The integration covers the
-parity matrix of metrics that x86 users typically gather ad-hoc with
-`perf record/stat/sched/trace`, unified into one `.nsys-rep` capture.
+SVT-AV1 has an opt-in build flag (`SVT_AV1_NVTX`, default OFF) that wires the
+encoder up for **NVIDIA Nsight Systems**. The target is NVIDIA Grace CPU
+(aarch64 Neoverse V2) but it works on any Linux host with the NVTX3 headers
+installed. One `nsys profile` run replaces the typical mix of
+`perf record`, `perf stat`, `perf sched`, and `perf trace` and adds per-stage
+NVTX ranges on top.
 
 | Capability                              | Common ad-hoc tool   | This integration                       |
 | --                                      | --                   | --                                     |
