@@ -40,6 +40,11 @@ set(all_files
 add_executable(SvtAv1EncApp
     ${all_files})
 
+# Expose pthread_setname_np on glibc for the app's main-thread naming.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_compile_definitions(SvtAv1EncApp PRIVATE _GNU_SOURCE)
+endif()
+
 if(TARGET safestringlib)
     target_sources(SvtAv1EncApp PRIVATE $<TARGET_OBJECTS:safestringlib>)
 endif()

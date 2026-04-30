@@ -18,11 +18,6 @@
 //  -Calls the encoder via the API
 //  -Destructs the resources
 
-// Expose pthread_setname_np for thread naming in Nsight Systems on Linux.
-#if defined(__linux__) && !defined(_GNU_SOURCE)
-#define _GNU_SOURCE
-#endif
-
 /***************************************
  * Includes
  ***************************************/
