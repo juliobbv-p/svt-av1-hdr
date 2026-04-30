@@ -111,7 +111,7 @@ static void* svt_thread_trampoline(void* p) {
 
     if (name[0]) {
         svt_thread_self_setname(name);
-#if defined(SVT_AV1_NVTX) && SVT_AV1_NVTX
+#if SVT_AV1_NVTX
         SVT_NVTX_NAME_OS_THREAD((unsigned long)syscall(SYS_gettid), name);
 #endif
     }

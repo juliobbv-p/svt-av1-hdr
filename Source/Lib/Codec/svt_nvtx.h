@@ -24,7 +24,7 @@
 #ifndef Svt_Nvtx_h
 #define Svt_Nvtx_h
 
-#if defined(SVT_AV1_NVTX) && SVT_AV1_NVTX
+#if SVT_AV1_NVTX
 #include <nvtx3/nvToolsExt.h>
 #define SVT_NVTX_RANGE_PUSH(name) (void)nvtxRangePushA(name)
 #define SVT_NVTX_RANGE_POP() (void)nvtxRangePop()
