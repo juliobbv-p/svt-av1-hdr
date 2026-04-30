@@ -149,8 +149,9 @@ def encode_file(task: EncodeTask, output_dir: str) -> EncodeResult:
         fps=fps,
         cfg_path=cfg_path,
         output_path=encoded_path,
-        profiler_prefix=profiler_prefix,
     )
+    if profiler_prefix:
+        command = profiler_prefix + command
 
     # Get input file size
     input_size = os.path.getsize(input_path)

@@ -177,11 +177,11 @@ encoder_settings:
       nthreads: [1]
     svtav1:
       encoder: "svtav1_enc"
-      command: "{profiler_prefix}{binary_dir} --allow-mmap-file 0 --preset {speed} --hierarchical-levels 0 --rtc 0 --width {width} --height {height} --fps-num {fps} --fps-denom 1 --tbr {kbps} --rc 2 --keyint 3000 --pred-struct 1 -i {input_path} -b {output_path} --lp {nthreads}"
+      command: "{binary_dir} --allow-mmap-file 0 --preset {speed} --hierarchical-levels 0 --rtc 0 --width {width} --height {height} --fps-num {fps} --fps-denom 1 --tbr {kbps} --rc 2 --keyint 3000 --pred-struct 1 -i {input_path} -b {output_path} --lp {nthreads}"
       nthreads: [1]
     svtav1_rtc:
       encoder: "svtav1_enc"
-      command: "{profiler_prefix}{binary_dir} --allow-mmap-file 0 --preset {speed} --hierarchical-levels 0 --rtc 1 --width {width} --height {height} --fps-num {fps} --fps-denom 1 --tbr {kbps} --rc 2 --keyint 3000 --pred-struct 1 -i {input_path} -b {output_path} --lp {nthreads}"
+      command: "{binary_dir} --allow-mmap-file 0 --preset {speed} --hierarchical-levels 0 --rtc 1 --width {width} --height {height} --fps-num {fps} --fps-denom 1 --tbr {kbps} --rc 2 --keyint 3000 --pred-struct 1 -i {input_path} -b {output_path} --lp {nthreads}"
       nthreads: [1]
 
 decoder_settings:
