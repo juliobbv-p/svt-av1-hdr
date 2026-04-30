@@ -102,7 +102,7 @@ class ConfigManager:
         if platform.system() == "Darwin":
             return bins.get("mac_arm64", bins)
         if platform.machine() in ("aarch64", "arm64"):
-            return bins.get("linux_aarch64", bins.get("linux_x86_64", bins))
+            return bins.get("linux_aarch64", bins)
         return bins.get("linux_x86_64", bins)
 
     def get_profiler(self) -> Dict[str, Any]:
