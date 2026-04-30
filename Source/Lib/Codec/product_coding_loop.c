@@ -2074,13 +2074,11 @@ static void md_nsq_motion_search(PictureControlSet* pcs, ModeDecisionContext* ct
                 svt_aom_is_me_data_present(
                     block_index, block_index * pcs->ppcs->pa_me_data->max_cand, me_results, list_idx, ref_idx)) {
                 if (list_idx == 0) {
-                    mvc_x_array[mvc_count] = (me_results->me_mv_array[block_index * max_refs + ref_idx].x) << 3;
-                    mvc_y_array[mvc_count] = (me_results->me_mv_array[block_index * max_refs + ref_idx].y) << 3;
+                    mvc_x_array[mvc_count] = (me_results->me_mv_array[block_index * max_refs + ref_idx].x) * 8;
+                    mvc_y_array[mvc_count] = (me_results->me_mv_array[block_index * max_refs + ref_idx].y) * 8;
                 } else {
-                    mvc_x_array[mvc_count] = (me_results->me_mv_array[block_index * max_refs + max_l0 + ref_idx].x)
-                        << 3;
-                    mvc_y_array[mvc_count] = (me_results->me_mv_array[block_index * max_refs + max_l0 + ref_idx].y)
-                        << 3;
+                    mvc_x_array[mvc_count] = (me_results->me_mv_array[block_index * max_refs + max_l0 + ref_idx].x) * 8;
+                    mvc_y_array[mvc_count] = (me_results->me_mv_array[block_index * max_refs + max_l0 + ref_idx].y) * 8;
                 }
                 is_present = 0;
                 for (int16_t mvc_index = 0; mvc_index < mvc_count; mvc_index++) {
@@ -2217,19 +2215,19 @@ static void md_nsq_motion_search(PictureControlSet* pcs, ModeDecisionContext* ct
 static void clip_mv_on_pic_boundary(int32_t blk_org_x, int32_t blk_org_y, int32_t bwidth, int32_t bheight,
                                     EbPictureBufferDesc* ref_pic, int16_t* mvx, int16_t* mvy) {
     if (blk_org_x + (*mvx >> 3) + bwidth > ref_pic->max_width + ref_pic->border) {
-        *mvx = (ref_pic->max_width - blk_org_x) << 3;
+        *mvx = (ref_pic->max_width - blk_org_x) * 8;
     }
 
     if (blk_org_y + (*mvy >> 3) + bheight > ref_pic->max_height + ref_pic->border) {
-        *mvy = (ref_pic->max_height - blk_org_y) << 3;
+        *mvy = (ref_pic->max_height - blk_org_y) * 8;
     }
 
     if (blk_org_x + (*mvx >> 3) < -ref_pic->border) {
-        *mvx = (-blk_org_x - bwidth) << 3;
+        *mvx = (-blk_org_x - bwidth) * 8;
     }
 
     if (blk_org_y + (*mvy >> 3) < -ref_pic->border) {
-        *mvy = (-blk_org_y - bheight) << 3;
+        *mvy = (-blk_org_y - bheight) * 8;
     }
 }
 
@@ -2632,7 +2630,7 @@ static void read_refine_me_mvs_light_pd1(PictureControlSet* pcs, EbPictureBuffer
                 const Mv* me_mv_array_base = me_results->me_mv_array +
                     (ctx->me_block_offset * pcs->ppcs->pa_me_data->max_refs + ref);
                 const Mv mv_cand = me_mv_array_base[list ? max_l0 : 0];
-                Mv       me_mv   = {{mv_cand.x << 3, mv_cand.y << 3}};
+                Mv       me_mv   = {{mv_cand.x * 8, mv_cand.y * 8}};
                 // can only skip if using dc only b/c otherwise need cost at candidate generation
                 const bool skip_subpel = (ctx->is_intra_bordered &&
                                           ctx->cand_reduction_ctrls.use_neighbouring_mode_ctrls.enabled) ||
@@ -2723,8 +2721,8 @@ static void read_refine_me_mvs(PictureControlSet* pcs, ModeDecisionContext* ctx,
                     const Mv* me_mv_array_base = me_results->me_mv_array +
                         (ctx->me_block_offset * pcs->ppcs->pa_me_data->max_refs + ref);
                     const Mv mv_cand = me_mv_array_base[list ? max_l0 : 0];
-                    me_mv.x          = mv_cand.x << 3;
-                    me_mv.y          = mv_cand.y << 3;
+                    me_mv.x          = mv_cand.x * 8;
+                    me_mv.y          = mv_cand.y * 8;
                 }
                 clip_mv_on_pic_boundary(
                     ctx->blk_org_x, ctx->blk_org_y, blk_geom->bwidth, blk_geom->bheight, ref_pic, &me_mv.x, &me_mv.y);

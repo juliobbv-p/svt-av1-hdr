@@ -770,26 +770,26 @@ static void tpl_mc_flow_dispenser_sb_generic(EncodeContext* enc_ctx, SequenceCon
                 const uint32_t rf_idx    = svt_get_ref_frame_type(list_index, ref_pic_index) - 1;
                 const uint32_t me_offset = me_mb_offset * pcs->pa_me_data->max_refs +
                     (list_index ? pcs->pa_me_data->max_l0 : 0) + ref_pic_index;
-                x_curr_mv = (me_results->me_mv_array[me_offset].x) << 3;
-                y_curr_mv = (me_results->me_mv_array[me_offset].y) << 3;
+                x_curr_mv = (me_results->me_mv_array[me_offset].x) * 8;
+                y_curr_mv = (me_results->me_mv_array[me_offset].y) * 8;
 
                 ref_pic_ptr =
                     (EbPictureBufferDesc*)pcs->tpl_data.tpl_ref_ds_ptr_array[list_index][ref_pic_index].picture_ptr;
 
                 if (((int)mb_origin_x + (x_curr_mv >> 3)) < -TPL_PAD) {
-                    x_curr_mv = (-TPL_PAD - mb_origin_x) << 3;
+                    x_curr_mv = (-TPL_PAD - mb_origin_x) * 8;
                 }
 
                 if (((int)mb_origin_x + (int)bsize + (x_curr_mv >> 3)) > (TPL_PAD + (int)ref_pic_ptr->max_width - 1)) {
-                    x_curr_mv = ((TPL_PAD + ref_pic_ptr->max_width - 1) - (mb_origin_x + bsize)) << 3;
+                    x_curr_mv = ((TPL_PAD + ref_pic_ptr->max_width - 1) - (mb_origin_x + bsize)) * 8;
                 }
 
                 if (((int)mb_origin_y + (y_curr_mv >> 3)) < -TPL_PAD) {
-                    y_curr_mv = (-TPL_PAD - mb_origin_y) << 3;
+                    y_curr_mv = (-TPL_PAD - mb_origin_y) * 8;
                 }
 
                 if (((int)mb_origin_y + (int)bsize + (y_curr_mv >> 3)) > (TPL_PAD + (int)ref_pic_ptr->max_height - 1)) {
-                    y_curr_mv = ((TPL_PAD + ref_pic_ptr->max_height - 1) - (mb_origin_y + bsize)) << 3;
+                    y_curr_mv = ((TPL_PAD + ref_pic_ptr->max_height - 1) - (mb_origin_y + bsize)) * 8;
                 }
 
                 Mv best_mv = {{x_curr_mv, y_curr_mv}};
