@@ -975,11 +975,19 @@ typedef struct EbSvtAv1EncConfiguration {
      */
     int hbd_mds;
 
+    /**
+     * @brief Enable MCTF for key frames.
+     * 0 = off
+     * 1 = on
+     * Default is 1. */
+    bool enable_tf_key;
+
     // clang-format off
     /* Add 128 Byte Padding to Struct to avoid changing the size of the public configuration struct */
     uint8_t padding[128
         - sizeof(PredStructure) + sizeof (uint8_t) // pred_strucutre type was changed from uint8_t to PredStructure
         - sizeof(int) // This was added to take into account the new hbd_mds field while keeping previous ABI compat
+        - sizeof(bool) // add the ability to shut MCTF for key frames
     ];
     // clang-format on
 } EbSvtAv1EncConfiguration;

@@ -4364,6 +4364,7 @@ static void copy_api_from_app(SequenceControlSet* scs, EbSvtAv1EncConfiguration*
         scs->static_config.look_ahead_distance = compute_default_look_ahead(&scs->static_config);
     }
     scs->static_config.enable_tf          = scs->allintra ? 0 : config_struct->enable_tf;
+    scs->static_config.enable_tf_key      = config_struct->enable_tf && config_struct->enable_tf_key;
     scs->static_config.enable_overlays    = config_struct->enable_overlays;
     scs->static_config.superres_mode      = config_struct->superres_mode;
     scs->static_config.superres_denom     = config_struct->superres_denom;

@@ -952,6 +952,7 @@ EbErrorType svt_av1_set_default_params(EbSvtAv1EncConfiguration* config_ptr) {
 
     // Alt-Ref default values
     config_ptr->enable_tf       = 1;
+    config_ptr->enable_tf_key   = 1;
     config_ptr->enable_overlays = false;
     config_ptr->tune            = 1;
     // Super-resolution default values
@@ -2221,6 +2222,7 @@ EB_API EbErrorType svt_av1_enc_parse_parameter(EbSvtAv1EncConfiguration* config_
         {"fast-decode", &config_struct->fast_decode},
         {"luminance-qp-bias", &config_struct->luminance_qp_bias},
         {"enable-tf", &config_struct->enable_tf},
+        {"enable-keyframe-filtering", &config_struct->enable_tf_key},
         {"tf-strength", &config_struct->tf_strength},
         {"max-tx-size", &config_struct->max_tx_size},
     };

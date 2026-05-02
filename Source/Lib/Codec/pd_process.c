@@ -4009,7 +4009,8 @@ static void copy_tf_params(SequenceControlSet* scs, PictureParentControlSet* pcs
         return;
     }
     // Don't perform TF for overlay pics or pics in the highest layer (relevant for 2L)
-    if (pcs->is_overlay || pcs->temporal_layer_index == pcs->hierarchical_levels) {
+    if ((pcs->frm_hdr.frame_type == KEY_FRAME && !scs->static_config.enable_tf_key) || pcs->is_overlay ||
+        pcs->temporal_layer_index == pcs->hierarchical_levels) {
         pcs->tf_ctrls.enabled = 0;
     } else if (svt_aom_is_delayed_intra(pcs)) {
         pcs->tf_ctrls = scs->tf_params_per_type[0];
