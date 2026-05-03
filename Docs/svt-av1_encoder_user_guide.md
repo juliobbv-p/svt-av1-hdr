@@ -83,6 +83,12 @@ indicated below.
 The resulting encoded bit stream file in binary format. If none specified, no
 output bit stream will be produced by the encoder.
 
+The output format can be selected with `--ivf` (default) for IVF container or
+`--obu` for raw OBU (Open Bitstream Units) without container framing. The
+format is also auto-detected from the file extension: `.ivf` produces IVF
+output, `.obu` produces raw OBU output. Explicit `--ivf`/`--obu` flags
+override extension-based auto-detection.
+
 `-w integer` **[Required]**
 
 The width of each input image in units of picture luma pixels, e.g. 1920
@@ -149,3 +155,10 @@ Multiple command lines :
 
 #### 1 pass CRF at maximum speed for a 1920x1080 input with colorimetry set to BT.709
 `SvtAv1EncApp -i input.yuv -w 1920 -h 1080 --crf 30 --preset 12 --color-primaries bt709 --transfer-characteristics bt709 --matrix-coefficients bt709 -b output.ivf`
+
+#### 1 pass CRF with raw OBU output (no IVF container)
+`SvtAv1EncApp -i input.yuv -w 1920 -h 1080 --crf 30 --preset 8 -b output.obu`
+
+or equivalently using the `--obu` flag:
+
+`SvtAv1EncApp -i input.yuv -w 1920 -h 1080 --crf 30 --preset 8 --obu -b output.ivf`
