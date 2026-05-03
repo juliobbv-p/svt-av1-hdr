@@ -1018,11 +1018,14 @@ void process_output_stream_buffer(EncChannel* channel, EncApp* enc_app, int32_t*
 
                 // Write Stream Data to file
                 if (stream_file) {
-                    if (app_cfg->performance_context.frame_count == 1 && !(flags & EB_BUFFERFLAG_IS_ALT_REF)) {
-                        write_ivf_stream_header(
-                            app_cfg, app_cfg->frames_to_be_encoded == -1 ? 0 : (int32_t)app_cfg->frames_to_be_encoded);
+                    if (app_cfg->output_format == OUTPUT_FORMAT_IVF) {
+                        if (app_cfg->performance_context.frame_count == 1 && !(flags & EB_BUFFERFLAG_IS_ALT_REF)) {
+                            write_ivf_stream_header(
+                                app_cfg,
+                                app_cfg->frames_to_be_encoded == -1 ? 0 : (int32_t)app_cfg->frames_to_be_encoded);
+                        }
+                        write_ivf_frame_header(app_cfg, header_ptr->n_filled_len);
                     }
-                    write_ivf_frame_header(app_cfg, header_ptr->n_filled_len);
                     fwrite(header_ptr->p_buffer, 1, header_ptr->n_filled_len, stream_file);
                 }
 

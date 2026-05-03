@@ -50,6 +50,11 @@ typedef enum EncPass {
     MAX_ENC_PASS = 2,
 } EncPass;
 
+typedef enum OutputFormat {
+    OUTPUT_FORMAT_IVF = 0,
+    OUTPUT_FORMAT_OBU,
+} OutputFormat;
+
 #define WARNING_LENGTH 100
 
 #define MAX_NUM_TOKENS 210
@@ -171,6 +176,8 @@ typedef struct EbConfig {
     uint64_t processed_byte_count;
 
     uint64_t ivf_count;
+
+    OutputFormat output_format;
 
     struct forced_key_frames forced_keyframes;
 
