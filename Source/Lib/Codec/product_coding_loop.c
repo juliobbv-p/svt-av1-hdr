@@ -5240,6 +5240,11 @@ static void perform_dct_dct_tx_light_pd1(PictureControlSet* pcs, ModeDecisionCon
                                                            cand_bf->cand->block_mi.mode,
                                                            full_lambda,
                                                            false);
+#if OPT_COEFF_SHAVING
+    if (cand_bf->eob.y[0] == 0) {
+        return;
+    }
+#endif
     // LUMA DISTORTION
     uint32_t bwidth, bheight;
     if (pf_shape) {
@@ -6038,7 +6043,55 @@ static COMPONENT_TYPE chroma_complexity_check(PictureControlSet* pcs, ModeDecisi
     // At end, complex chroma was not detected, so only chroma path can be skipped
     return COMPONENT_LUMA;
 }
+#if OPT_COEFF_SHAVING
+static bool get_perform_tx_flag(ModeDecisionContext* ctx, ModeDecisionCandidateBuffer* cand_bf,
+                                ModeDecisionCandidate* cand) {
+    if (ctx->lpd1_allow_skipping_tx) {
+        if (ctx->lpd1_skip_inter_tx_level == 2 && is_inter_mode(cand->block_mi.mode)) {
+            return false;
+        }
 
+        MacroBlockD* xd = ctx->blk_ptr->av1xd;
+        if (xd->left_available && xd->up_available) {
+            const BlockModeInfo* const left_mi  = &xd->left_mbmi->block_mi;
+            const BlockModeInfo* const above_mi = &xd->above_mbmi->block_mi;
+            if (left_mi->skip && above_mi->skip &&
+                ((left_mi->mode == NEAREST_NEARESTMV && above_mi->mode == NEAREST_NEARESTMV) ||
+                 ctx->lpd1_skip_inter_tx_level)) {
+                /* For M12 and below, do not skip TX for candidates other than NRST_NRST and do not remove the check on neighbouring
+                    coeffs, as that may introduce blocking artifacts in certain clips. */
+
+                // Skip TX for NRST_NRST
+                if (ctx->lpd1_tx_ctrls.skip_nrst_nrst_luma_tx && cand->block_mi.mode == NEAREST_NEARESTMV) {
+                    return false;
+                }
+                // Skip TX for INTER - should only be true for M13
+                else if (ctx->lpd1_skip_inter_tx_level == 1 && is_inter_mode(cand->block_mi.mode)) {
+                    return false;
+                }
+            }
+        }
+    }
+
+    if (ctx->lpd1_bypass_tx_th) {
+        // MDS0 always performed on 8bit, so use 8bit lambda with the MDS0 distortion
+        const uint32_t full_lambda   = ctx->full_lambda_md[EB_8_BIT_MD];
+        const uint64_t est_skip_cost = RDCOST(
+            full_lambda,
+            cand_bf->fast_luma_rate + ((uint64_t)ctx->md_rate_est_ctx->skip_fac_bits[ctx->skip_coeff_ctx][1]),
+            cand_bf->full_dist << 4);
+        const uint64_t th = RDCOST(full_lambda,
+                                   cand_bf->fast_luma_rate +
+                                       ((uint64_t)ctx->md_rate_est_ctx->skip_fac_bits[ctx->skip_coeff_ctx][0]) +
+                                       INIT_BIT_EST,
+                                   (ctx->blk_geom->bheight * ctx->blk_geom->bwidth) << 4);
+        if (est_skip_cost * 100 < ctx->lpd1_bypass_tx_th * th) {
+            return false;
+        }
+    }
+    return true;
+}
+#else
 static bool get_perform_tx_flag(ModeDecisionContext* ctx, ModeDecisionCandidateBuffer* cand_bf,
                                 ModeDecisionCandidate* cand) {
     bool perform_tx = 1;
@@ -6090,6 +6143,7 @@ static bool get_perform_tx_flag(ModeDecisionContext* ctx, ModeDecisionCandidateB
     }
     return perform_tx;
 }
+#endif
 
 /*
    full loop core for light PD1 path
@@ -6118,6 +6172,25 @@ static void full_loop_core_light_pd1(PictureControlSet* pcs, ModeDecisionContext
         ctx->uv_intra_comp_only = true;
         ctx->mds_do_chroma      = true;
     }
+#if OPT_COEFF_SHAVING
+    if (perform_tx) {
+        perform_dct_dct_tx_light_pd1(pcs, ctx, cand_bf, loc, &y_coeff_bits, y_full_distortion[DIST_SSD]);
+    }
+
+    if (perform_tx == false || cand_bf->eob.y[0] == 0) {
+        cand_bf->eob.y[0]                                 = 0;
+        cand_bf->quant_dc.y[0]                            = 0;
+        cand_bf->y_has_coeff                              = 0;
+        y_full_distortion[DIST_SSD][DIST_CALC_RESIDUAL]   = 0;
+        y_full_distortion[DIST_SSD][DIST_CALC_PREDICTION] = 0;
+        y_coeff_bits                                      = 6000;
+        cand_bf->cand->transform_type[0]                  = DCT_DCT;
+        // For Inter blocks, transform type of chroma follows luma transfrom type
+        if (is_inter_mode(cand_bf->cand->block_mi.mode)) {
+            cand_bf->cand->transform_type_uv = DCT_DCT;
+        }
+    }
+#else
     if (perform_tx) {
         perform_dct_dct_tx_light_pd1(pcs, ctx, cand_bf, loc, &y_coeff_bits, y_full_distortion[DIST_SSD]);
     } else {
@@ -6133,6 +6206,7 @@ static void full_loop_core_light_pd1(PictureControlSet* pcs, ModeDecisionContext
             cand_bf->cand->transform_type_uv = DCT_DCT;
         }
     }
+#endif
     // Update coeff info based on luma TX so that chroma can take advantage of most accurate info
     cand_bf->block_has_coeff        = (cand_bf->y_has_coeff) ? 1 : 0;
     cand_bf->cnt_nz_coeff           = cand_bf->eob.y[0];

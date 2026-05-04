@@ -443,6 +443,16 @@ typedef struct RdoqCtrls {
     uint8_t eob_fast_th;
 } RdoqCtrls;
 
+#if OPT_COEFF_SHAVING
+typedef struct CoeffShavingCtrls {
+    uint8_t enabled;
+    int32_t level_threshold; // max abs(quantized_level) eligible for trailing removal
+    int32_t zero_gap_threshold; // min zero-gap to justify removing a trailing coeff
+    int32_t skip_energy_threshold; // if total abs energy of all surviving coeffs (after trailing
+    // retraction) is <= this, zero the entire block
+} CoeffShavingCtrls;
+#endif
+
 typedef struct NicScalingCtrls {
     // Scaling numerator for post-stage 0 NICS: <x>/16
     uint8_t stage1_scaling_num;
@@ -1121,6 +1131,9 @@ typedef struct ModeDecisionContext {
     NsqSearchCtrls       nsq_search_ctrls;
     DepthEarlyExitCtrls  depth_early_exit_ctrls;
     RdoqCtrls            rdoq_ctrls;
+#if OPT_COEFF_SHAVING
+    CoeffShavingCtrls coeff_shaving_ctrls;
+#endif
     uint8_t              disallow_8x8;
     uint8_t              disallow_4x4;
     uint8_t              md_disallow_nsq_search;

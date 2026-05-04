@@ -4043,7 +4043,11 @@ static void set_param_based_on_input(SequenceControlSet* scs) {
     scs->resize_pending_params.resize_state = ORIG;
     scs->resize_pending_params.resize_denom = SCALE_NUMERATOR;
 
+#if OPT_GATE_SB_LAMBDA_MOD
+    scs->stats_based_sb_lambda_modulation = (scs->static_config.enc_mode <= ENC_M11) ? 1 : 0;
+#else
     scs->stats_based_sb_lambda_modulation = 1;
+#endif
 
     scs->fast_aa_aware_screen_detection_mode = (scs->static_config.enc_mode >= ENC_M3) ? 1 : 0;
 }

@@ -60,6 +60,14 @@ extern "C" {
                                      // and ensures the NEON kernel always takes its sec==0 fast path.
 #define OPT_CDEF_SKIP_TH           1 // Replace use_skip_detector bool with configurable skip_th percentage
 
+#define OPT_COEFF_SHAVING          1 // Post-quantization coefficient shaving: retract EOB and optionally zero block
+#define OPT_COEFF_LEVEL            1 // Remove noise-level gating from derive_inter_coeff_level
+#define OPT_PERIODIC_CDF_UPDATE    1 // Selective CDF disable for M12+ RTC
+#define OPT_EC_INTERP              1 // Fixed EIGHTTAP_REGULAR when IFS is off
+#define OPT_EC_DC_ONLY             1 // Fast entropy-coding path for eob==1 (DC-only blocks)
+#define OPT_EC_MERGE_COEFF_LOOPS   1 // Merge backward/forward coefficient coding loops
+#define OPT_GATE_SB_LAMBDA_MOD     1 // Gate stats_based_sb_lambda_modulation behind preset check
+
 //FOR DEBUGGING - Do not remove
 #define LOG_ENC_DONE            0 // log encoder job one
 #define DEBUG_TPL               0 // Prints to debug TPL

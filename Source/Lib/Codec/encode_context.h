@@ -187,6 +187,9 @@ typedef struct EncodeContext {
     Dequants         deq_bd; // follows input bit depth
     Quants           quants_8bit; // 8bit
     Dequants         deq_8bit; // 8bit
+#if OPT_PERIODIC_CDF_UPDATE
+    uint32_t frames_since_last_cdf_update; // For selective CDF disable
+#endif
 } EncodeContext;
 
 typedef struct EncodeContextInitData {

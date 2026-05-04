@@ -1373,6 +1373,91 @@ uint8_t svt_av1_compute_cul_level_c(const int16_t* const scan, const int32_t* co
     return (uint8_t)cul_level;
 }
 
+#if OPT_COEFF_SHAVING
+
+// Retract EOB by removing trailing low-magnitude coefficients separated by zero gaps,
+// then compute energy on the reduced block and optionally zero it entirely if energy is low.
+// Returns the updated EOB (0 = block became skip).
+static INLINE uint16_t shave_coeff(int32_t* quant_buf, int32_t* recon_buf, uint16_t eob, TxSize tx_size, TxType tx_type,
+                                   const CoeffShavingCtrls* ctrls) {
+    if (eob <= 1) {
+        return eob;
+    }
+
+    const int16_t* const scan = get_scan_order(tx_size, tx_type)->scan;
+
+    const int level_th = ctrls->level_threshold;
+    const int gap_th   = ctrls->zero_gap_threshold;
+
+    int updated_eob = (int)eob;
+
+    // -------------------------
+    // Phase 1: EOB retraction
+    // -------------------------
+    while (updated_eob > 1) {
+        const int     last_pos = scan[updated_eob - 1];
+        const int32_t val      = quant_buf[last_pos];
+        const int32_t abs_val  = (val >= 0) ? val : -val;
+
+        if (abs_val > level_th) {
+            break;
+        }
+
+        // Find previous non-zero coefficient
+        int next_nz = updated_eob - 2;
+        while (next_nz >= 0 && quant_buf[scan[next_nz]] == 0) {
+            --next_nz;
+        }
+
+        if (next_nz < 0) {
+            break;
+        }
+
+        // Gap check
+        const int gap = (updated_eob - 1) - next_nz - 1;
+        if (gap < gap_th) {
+            break;
+        }
+
+        // Zero trailing coefficient
+        quant_buf[last_pos] = 0;
+        recon_buf[last_pos] = 0;
+
+        updated_eob = next_nz + 1;
+    }
+
+    // -------------------------
+    // Phase 2: energy check (post-shaving)
+    // -------------------------
+    const int skip_th = ctrls->skip_energy_threshold;
+    if (skip_th > 0 && updated_eob > 0) {
+        int32_t total_energy = 0;
+
+        for (int c = 0; c < updated_eob; ++c) {
+            const int32_t v = quant_buf[scan[c]];
+            total_energy += (v >= 0) ? v : -v;
+
+            if (total_energy > skip_th) {
+                break;
+            }
+        }
+
+        if (total_energy <= skip_th) {
+            // Zero entire block
+            for (int c = 0; c < updated_eob; ++c) {
+                const int pos  = scan[c];
+                quant_buf[pos] = 0;
+                recon_buf[pos] = 0;
+            }
+            return 0;
+        }
+    }
+
+    return (uint16_t)updated_eob;
+}
+
+#endif
+
 uint8_t svt_aom_quantize_inv_quantize(PictureControlSet* pcs, ModeDecisionContext* ctx, int32_t* coeff,
                                       int32_t* quant_coeff, int32_t* recon_coeff, uint32_t qindex,
                                       int32_t segmentation_qp_offset, TxSize txsize, uint16_t* eob,
@@ -1592,6 +1677,15 @@ uint8_t svt_aom_quantize_inv_quantize(PictureControlSet* pcs, ModeDecisionContex
                            lambda,
                            (component_type == COMPONENT_LUMA) ? 0 : 1);
     }
+
+#if OPT_COEFF_SHAVING
+    // Apply coefficient shaving for luma after all quantization/RDOQ is complete.
+    // This catches all luma quantize paths (light PD1, regular TX, encode pass)
+    // in a single place.
+    if (component_type == COMPONENT_LUMA && ctx->coeff_shaving_ctrls.enabled && *eob > 0) {
+        *eob = shave_coeff(quant_coeff, recon_coeff, *eob, txsize, tx_type, &ctx->coeff_shaving_ctrls);
+    }
+#endif
 
     if (!ctx->rate_est_ctrls.update_skip_ctx_dc_sign_ctx) {
         return 0;

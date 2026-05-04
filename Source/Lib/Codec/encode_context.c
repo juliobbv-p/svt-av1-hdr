@@ -152,6 +152,9 @@ EbErrorType svt_aom_encode_context_ctor(EncodeContext* enc_ctx, EbPtr object_ini
     }
     enc_ctx->rc_param_queue_head_index = 0;
     enc_ctx->cr_sb_end                 = 0;
+#if OPT_PERIODIC_CDF_UPDATE
+    enc_ctx->frames_since_last_cdf_update = 0;
+#endif
 
     EB_CREATE_MUTEX(enc_ctx->rc_param_queue_mutex);
 

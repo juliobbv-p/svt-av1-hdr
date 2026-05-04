@@ -4149,6 +4149,42 @@ static void set_rdoq_controls(ModeDecisionContext* ctx, uint8_t rdoq_level) {
     }
 }
 
+#if OPT_COEFF_SHAVING
+/*
+ * Control coeff shaving
+ */
+static void set_coeff_shaving_controls(ModeDecisionContext* ctx, uint8_t coeff_shaving_level) {
+    CoeffShavingCtrls* coeff_shaving_ctrls = &ctx->coeff_shaving_ctrls;
+
+    switch (coeff_shaving_level) {
+    case 0:
+        coeff_shaving_ctrls->enabled = 0;
+        break;
+    case 1:
+        coeff_shaving_ctrls->enabled               = 1;
+        coeff_shaving_ctrls->level_threshold       = 1;
+        coeff_shaving_ctrls->zero_gap_threshold    = 8;
+        coeff_shaving_ctrls->skip_energy_threshold = 0;
+        break;
+    case 2:
+        coeff_shaving_ctrls->enabled               = 1;
+        coeff_shaving_ctrls->level_threshold       = 1;
+        coeff_shaving_ctrls->zero_gap_threshold    = 8;
+        coeff_shaving_ctrls->skip_energy_threshold = 1;
+        break;
+    case 3:
+        coeff_shaving_ctrls->enabled               = 1;
+        coeff_shaving_ctrls->level_threshold       = 1;
+        coeff_shaving_ctrls->zero_gap_threshold    = 8;
+        coeff_shaving_ctrls->skip_energy_threshold = 2;
+        break;
+    default:
+        assert(0);
+        break;
+    }
+}
+#endif
+
 static void set_sq_txs_ctrls(ModeDecisionContext* ctx, uint8_t psq_txs_lvl) {
     NsqPsqTxsCtrls* nsq_psq_txs_ctrls = &ctx->nsq_psq_txs_ctrls;
     switch (psq_txs_lvl) {
@@ -7691,6 +7727,9 @@ void svt_aom_sig_deriv_enc_dec_light_pd1(PictureControlSet* pcs, ModeDecisionCon
         }
     }
     set_rdoq_controls(ctx, rdoq_level);
+#if OPT_COEFF_SHAVING
+    set_coeff_shaving_controls(ctx, pcs->coeff_shaving_level);
+#endif
     uint8_t me_subpel_level = 0;
     if (lpd1_level <= LPD1_LVL_0) {
         if ((rtc_tune && !use_flat_ipp && enc_mode <= ENC_M10) || (rtc_tune && use_flat_ipp && enc_mode <= ENC_M11) ||
@@ -7928,6 +7967,16 @@ void svt_aom_sig_deriv_enc_dec_default(PictureControlSet* pcs, ModeDecisionConte
     }
 
     set_rdoq_controls(ctx, rdoq_level);
+
+#if OPT_COEFF_SHAVING
+    uint8_t coeff_shaving_level = 0;
+    if (pd_pass == PD_PASS_0) {
+        coeff_shaving_level = 0;
+    } else {
+        coeff_shaving_level = pcs->coeff_shaving_level;
+    }
+    set_coeff_shaving_controls(ctx, coeff_shaving_level);
+#endif
     // There are only redundant blocks when HVA_HVB shapes are used
     if (pd_pass == PD_PASS_0 || !ctx->nsq_geom_ctrls.allow_HVA_HVB) {
         ctx->redundant_blk = false;
@@ -8131,6 +8180,16 @@ void svt_aom_sig_deriv_enc_dec_rtc(PictureControlSet* pcs, ModeDecisionContext* 
     }
 
     set_rdoq_controls(ctx, rdoq_level);
+
+#if OPT_COEFF_SHAVING
+    uint8_t coeff_shaving_level = 0;
+    if (pd_pass == PD_PASS_0) {
+        coeff_shaving_level = 0;
+    } else {
+        coeff_shaving_level = pcs->coeff_shaving_level;
+    }
+    set_coeff_shaving_controls(ctx, coeff_shaving_level);
+#endif
     // There are only redundant blocks when HVA_HVB shapes are used
     if (pd_pass == PD_PASS_0 || !ctx->nsq_geom_ctrls.allow_HVA_HVB) {
         ctx->redundant_blk = false;
@@ -8324,6 +8383,16 @@ void svt_aom_sig_deriv_enc_dec_allintra(PictureControlSet* pcs, ModeDecisionCont
     }
 
     set_rdoq_controls(ctx, rdoq_level);
+
+#if OPT_COEFF_SHAVING
+    uint8_t coeff_shaving_level = 0;
+    if (pd_pass == PD_PASS_0) {
+        coeff_shaving_level = 0;
+    } else {
+        coeff_shaving_level = pcs->coeff_shaving_level;
+    }
+    set_coeff_shaving_controls(ctx, coeff_shaving_level);
+#endif
     // There are only redundant blocks when HVA_HVB shapes are used
     if (pd_pass == PD_PASS_0 || !ctx->nsq_geom_ctrls.allow_HVA_HVB) {
         ctx->redundant_blk = false;
@@ -9442,6 +9511,9 @@ void svt_aom_sig_deriv_mode_decision_config_default(SequenceControlSet* scs, Pic
     } else {
         pcs->rdoq_level = 2;
     }
+#if OPT_COEFF_SHAVING
+    pcs->coeff_shaving_level = 0;
+#endif
 
     pcs->rate_est_level = 1;
 #if OPT_VLPD0_COST_BIS
@@ -9464,7 +9536,11 @@ void svt_aom_sig_deriv_mode_decision_config_default(SequenceControlSet* scs, Pic
             }
         }
     }
+#if OPT_EC_INTERP
+    frm_hdr->interpolation_filter = pcs->interpolation_search_level ? SWITCHABLE : EIGHTTAP_REGULAR;
+#else
     frm_hdr->interpolation_filter = SWITCHABLE;
+#endif
 
     pcs->chroma_level = svt_aom_get_chroma_level_default(enc_mode, is_islice);
 
@@ -9889,7 +9965,24 @@ void svt_aom_sig_deriv_mode_decision_config_rtc(SequenceControlSet* scs, Picture
         pcs->ppcs->use_accurate_part_ctx = false;
     }
 
-    FrameHeader* frm_hdr             = &ppcs->frm_hdr;
+    FrameHeader* frm_hdr = &ppcs->frm_hdr;
+#if OPT_PERIODIC_CDF_UPDATE
+    // Selective CDF disable
+    if (enc_mode <= ENC_M11) {
+        frm_hdr->disable_cdf_update = 0;
+    } else {
+        uint64_t       frames_since_key = ppcs->picture_number - ppcs->last_idr_picture;
+        EncodeContext* enc_ctx          = scs->enc_ctx;
+        if (is_islice || ppcs->scene_change_flag || frames_since_key < 30 ||
+            (enc_ctx->frames_since_last_cdf_update >= 8 && ppcs->norm_me_dist > 0)) {
+            frm_hdr->disable_cdf_update           = 0;
+            enc_ctx->frames_since_last_cdf_update = 1;
+        } else {
+            frm_hdr->disable_cdf_update = 1;
+            enc_ctx->frames_since_last_cdf_update++;
+        }
+    }
+#endif
     frm_hdr->allow_high_precision_mv = (frm_hdr->quantization_params.base_q_idx < HIGH_PRECISION_MV_QTHRESH_0 ||
                                         (pcs->ref_hp_percentage > HIGH_PRECISION_REF_PERC_TH &&
                                          frm_hdr->quantization_params.base_q_idx < HIGH_PRECISION_MV_QTHRESH_1)) &&
@@ -9997,9 +10090,30 @@ void svt_aom_sig_deriv_mode_decision_config_rtc(SequenceControlSet* scs, Picture
     // Set RDOQ level
     if ((!flat_rtc && enc_mode <= ENC_M8) || (flat_rtc && enc_mode <= ENC_M9)) {
         pcs->rdoq_level = 1;
+#if OPT_COEFF_SHAVING
+    } else if (enc_mode <= ENC_M11) {
+        pcs->rdoq_level = is_islice ? 1 : 0;
+    } else {
+        pcs->rdoq_level = 0;
+    }
+#else
     } else {
         pcs->rdoq_level = is_islice ? 1 : 0;
     }
+#endif
+#if OPT_COEFF_SHAVING
+    if (pcs->rdoq_level) {
+        pcs->coeff_shaving_level = 0;
+    } else {
+        if (enc_mode <= ENC_M8) {
+            pcs->coeff_shaving_level = 0;
+        } else if (enc_mode <= ENC_M11) {
+            pcs->coeff_shaving_level = 2;
+        } else {
+            pcs->coeff_shaving_level = 3;
+        }
+    }
+#endif
 
     pcs->rate_est_level = 1;
 #if OPT_VLPD0_COST_BIS
@@ -10018,6 +10132,22 @@ void svt_aom_sig_deriv_mode_decision_config_rtc(SequenceControlSet* scs, Picture
         pcs->interpolation_search_level = 2;
     } else if (enc_mode <= ENC_M7) {
         pcs->interpolation_search_level = 4;
+#if OPT_EC_INTERP
+    } else if (enc_mode <= ENC_M11) {
+        pcs->interpolation_search_level = 4;
+        if (!is_base) {
+            const uint8_t th[INPUT_SIZE_COUNT] = {100, 100, 85, 50, 30, 30, 30};
+            const uint8_t skip_area            = pcs->ref_skip_percentage;
+            if (skip_area > th[input_resolution]) {
+                pcs->interpolation_search_level = 0;
+            }
+        }
+    } else {
+        pcs->interpolation_search_level = 0;
+    }
+
+    frm_hdr->interpolation_filter = pcs->interpolation_search_level ? SWITCHABLE : EIGHTTAP_REGULAR;
+#else
     } else {
         pcs->interpolation_search_level = 4;
         if (!is_base) {
@@ -10029,6 +10159,7 @@ void svt_aom_sig_deriv_mode_decision_config_rtc(SequenceControlSet* scs, Picture
         }
     }
     frm_hdr->interpolation_filter = SWITCHABLE;
+#endif
 
     pcs->chroma_level = svt_aom_get_chroma_level_rtc(enc_mode, is_islice);
 
@@ -10412,6 +10543,9 @@ void svt_aom_sig_deriv_mode_decision_config_allintra(SequenceControlSet* scs, Pi
     } else {
         pcs->rdoq_level = 2;
     }
+#if OPT_COEFF_SHAVING
+    pcs->coeff_shaving_level = 0;
+#endif
     // Set the rate estimation level
     if (enc_mode <= ENC_M6) {
         pcs->rate_est_level = 1;

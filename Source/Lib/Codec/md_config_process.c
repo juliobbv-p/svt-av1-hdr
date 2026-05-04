@@ -648,6 +648,7 @@ static void derive_intra_coeff_level(PictureControlSet* pcs) {
 }
 
 static void derive_inter_coeff_level(PictureControlSet* pcs) {
+#if !OPT_COEFF_LEVEL
     // Derive the input nois level
     EbPictureBufferDesc* input_pic = pcs->ppcs->enhanced_pic;
 
@@ -658,7 +659,8 @@ static void derive_inter_coeff_level(PictureControlSet* pcs) {
                                                        input_pic->height,
                                                        input_pic->y_stride);
 
-    noise_level_fp16             = svt_aom_noise_log1p_fp16(noise_level_fp16);
+    noise_level_fp16 = svt_aom_noise_log1p_fp16(noise_level_fp16);
+#endif
     uint64_t cmplx               = pcs->ppcs->norm_me_dist / MAX(1, pcs->scs->static_config.qp);
     uint64_t coeff_vlow_level_th = COEFF_LVL_INTER_TH_0;
     uint64_t coeff_low_level_th  = COEFF_LVL_INTER_TH_1;
@@ -677,6 +679,7 @@ static void derive_inter_coeff_level(PictureControlSet* pcs) {
         coeff_high_level_th = (uint64_t)((double)coeff_high_level_th * 1.2);
     }
 
+#if !OPT_COEFF_LEVEL
     if (noise_level_fp16 < 26572 /*FLOAT2FP(log1p(0.5), 16, int32_t)*/) {
         coeff_vlow_level_th = (uint64_t)((double)coeff_vlow_level_th * 0.7);
         coeff_low_level_th  = (uint64_t)((double)coeff_low_level_th * 0.7);
@@ -686,6 +689,7 @@ static void derive_inter_coeff_level(PictureControlSet* pcs) {
         coeff_low_level_th  = (uint64_t)((double)coeff_low_level_th * 1.05);
         coeff_high_level_th = (uint64_t)((double)coeff_high_level_th * 1.05);
     }
+#endif
 
     pcs->coeff_lvl = NORMAL_LVL;
     if (cmplx < coeff_vlow_level_th) {
