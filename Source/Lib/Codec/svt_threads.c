@@ -34,8 +34,8 @@
 #include <string.h>
 #include "svt_threads.h"
 #include "svt_log.h"
-#include "svt_nvtx.h"
 #if SVT_AV1_NVTX
+#include "svt_nvtx.h"
 #include <sys/syscall.h>
 #endif
 /****************************************
