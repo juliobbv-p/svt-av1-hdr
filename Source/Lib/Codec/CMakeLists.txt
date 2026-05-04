@@ -319,4 +319,7 @@ if(SVT_AV1_NVTX)
     target_compile_definitions(CODEC PRIVATE SVT_AV1_NVTX=1)
     # NVTX3 is header-only; the implementation is dlopen'd lazily, so we need libdl.
     target_link_libraries(CODEC PRIVATE ${CMAKE_DL_LIBS})
+else()
+    # Always define SVT_AV1_NVTX so `#if SVT_AV1_NVTX` is well-formed under -Wundef.
+    target_compile_definitions(CODEC PRIVATE SVT_AV1_NVTX=0)
 endif()

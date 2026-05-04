@@ -35,7 +35,7 @@
 #include "svt_threads.h"
 #include "svt_log.h"
 #include "svt_nvtx.h"
-#if defined(__linux__)
+#if SVT_AV1_NVTX
 #include <sys/syscall.h>
 #endif
 /****************************************
@@ -112,6 +112,8 @@ static void* svt_thread_trampoline(void* p) {
     if (name[0]) {
         svt_thread_self_setname(name);
 #if SVT_AV1_NVTX
+        // syscall(SYS_gettid) instead of gettid(): gettid() needs glibc 2.30+
+        // (Aug 2019); the raw syscall works on older glibc and musl too.
         SVT_NVTX_NAME_OS_THREAD((unsigned long)syscall(SYS_gettid), name);
 #endif
     }
@@ -200,13 +202,15 @@ EbHandle svt_create_thread(void* thread_function(void*), void* thread_context, c
     // SetThreadDescription (Windows 10 1607+) — best effort. Older Windows
     // returns E_NOTIMPL; nothing else we can do here.
     if (thread_handle && name && *name) {
+        // Mirror Linux's TASK_COMM_LEN (15 + NUL); MultiByteToWideChar fails if
+        // the source doesn't fit, so truncate first.
+        char    truncated[16];
         wchar_t wname[16];
-        size_t  i = 0;
-        for (; i + 1 < sizeof(wname) / sizeof(wname[0]) && name[i]; i++) {
-            wname[i] = (wchar_t)(unsigned char)name[i];
+        strncpy(truncated, name, sizeof(truncated) - 1);
+        truncated[sizeof(truncated) - 1] = '\0';
+        if (MultiByteToWideChar(CP_UTF8, 0, truncated, -1, wname, (int)(sizeof(wname) / sizeof(wname[0]))) > 0) {
+            (void)SetThreadDescription((HANDLE)thread_handle, wname);
         }
-        wname[i] = L'\0';
-        (void)SetThreadDescription((HANDLE)thread_handle, wname);
     }
 
 #else
