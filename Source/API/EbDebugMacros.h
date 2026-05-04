@@ -52,6 +52,9 @@ extern "C" {
 #define OPT_SC_RA                   1 // optimize the SC path (scm1) for RA
 #define OPT_SC_RTC                  1 // optimize the SC path (scm1) for RTC
 
+#define OPT_VLPD0_COST             1 // Optimize VLPD0 inter-depth partitioning
+#define OPT_VLPD0_COST_BIS         1 // Faster VLPD0 inter-depth partitioning
+
 //FOR DEBUGGING - Do not remove
 #define LOG_ENC_DONE            0 // log encoder job one
 #define DEBUG_TPL               0 // Prints to debug TPL

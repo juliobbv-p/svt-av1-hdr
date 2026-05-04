@@ -7329,6 +7329,65 @@ void svt_aom_sig_deriv_enc_dec_light_pd0(SequenceControlSet* scs, PictureControl
         }
     }
     set_intra_ctrls(pcs, ctx, intra_level, 2);
+#if OPT_VLPD0_COST
+    ctx->parent_cost_bias = 1000;
+    if (!scs->allintra && pd0_level == VERY_LIGHT_PD0) {
+        // Modulate the inter-depth bias based on the QP and the temporal complexity of the SB.
+        // bias > 1000 : inflates parent cost - favors split
+        // bias < 1000 : deflates parent cost - favors parent
+        //
+        // At low QP, the missing coeff rate is large and disproportionately penalizes the parent,
+        // so we bias towards split. At high QP, most coefficients quantize to zero, so the
+        // cost without coeff rate is already accurate : stay close to neutral.
+
+        // QP component: linear interpolation from 1100 (q=0) to 950 (q=255)
+        const uint32_t base_q = pcs->ppcs->frm_hdr.quantization_params.base_q_idx;
+        ctx->parent_cost_bias = 1100 - (base_q * 150 + 127) / 255;
+
+        // ME variance component: fine-grained modulation based on SB complexity.
+        // Complex SBs (high variance):  split is beneficial
+        // Easy SBs (low variance): parent is good enough
+        const uint32_t me_var = ppcs->me_8x8_cost_variance[ctx->sb_index];
+#if OPT_VLPD0_COST_BIS
+        if (pcs->vlpd0_cost_bias_weight) {
+            // Scale the default variance offsets by a weight derived from ME distortion ratio.
+            // weight is in [512..1024] = 50%..100%, so the offset is never increased, only reduced.
+            const uint32_t dist_64 = ppcs->me_64x64_distortion[ctx->sb_index];
+            const uint32_t dist_8  = AOMMAX(ppcs->me_8x8_distortion[ctx->sb_index], 1);
+            // ratio in Q4: uniform SB ≈ 16, complex ≈ 64+
+            const uint32_t ratio_q4 = (dist_64 * 16) / dist_8;
+            const uint32_t w        = CLIP3(
+                pcs->vlpd0_cost_bias_weight, 1024, (ratio_q4 - 16) * 16 + pcs->vlpd0_cost_bias_weight);
+
+            if (me_var > 2000) {
+                ctx->parent_cost_bias += (75 * w) >> 10;
+            } else if (me_var > 1000) {
+                ctx->parent_cost_bias += (50 * w) >> 10;
+            } else if (me_var > 500) {
+                ctx->parent_cost_bias += (25 * w) >> 10;
+            }
+        } else {
+            if (me_var > 2000) {
+                ctx->parent_cost_bias += 75;
+            } else if (me_var > 1000) {
+                ctx->parent_cost_bias += 50;
+            } else if (me_var > 500) {
+                ctx->parent_cost_bias += 25;
+            }
+        }
+#else
+        if (me_var > 2000) {
+            ctx->parent_cost_bias += 75;
+        } else if (me_var > 1000) {
+            ctx->parent_cost_bias += 50;
+        } else if (me_var > 500) {
+            ctx->parent_cost_bias += 25;
+        }
+#endif
+        // Clamp to a safe range
+        ctx->parent_cost_bias = CLIP3(900, 1200, ctx->parent_cost_bias);
+    }
+#else
     if (!scs->allintra && pd0_level == VERY_LIGHT_PD0) {
         // Modulate the inter-depth bias based on the QP and the temporal complexity of the SB
         // towards more split for low QPs or/and complex SBs,
@@ -7348,6 +7407,7 @@ void svt_aom_sig_deriv_enc_dec_light_pd0(SequenceControlSet* scs, PictureControl
     } else {
         ctx->parent_cost_bias = 1000;
     }
+#endif
 
     if (allintra) {
         ctx->lpd0_use_src_samples = true;
@@ -9274,6 +9334,9 @@ void svt_aom_sig_deriv_mode_decision_config_default(SequenceControlSet* scs, Pic
     }
 
     pcs->rate_est_level = 1;
+#if OPT_VLPD0_COST_BIS
+    pcs->vlpd0_cost_bias_weight = 0;
+#endif
 
     // Set the level the interpolation search
     pcs->interpolation_search_level = 0;
@@ -9829,6 +9892,15 @@ void svt_aom_sig_deriv_mode_decision_config_rtc(SequenceControlSet* scs, Picture
     }
 
     pcs->rate_est_level = 1;
+#if OPT_VLPD0_COST_BIS
+    // ME distortion ratio-weighted variance bias for VLPD0 inter-depth decision
+    // 0: off (default offsets), 512..1024: min weight = 50%..100% of default offset
+    if (enc_mode <= ENC_M11) {
+        pcs->vlpd0_cost_bias_weight = 0;
+    } else {
+        pcs->vlpd0_cost_bias_weight = 600;
+    }
+#endif
 
     // Set the level the interpolation search
     pcs->interpolation_search_level = 0;
@@ -10238,6 +10310,9 @@ void svt_aom_sig_deriv_mode_decision_config_allintra(SequenceControlSet* scs, Pi
     } else {
         pcs->rate_est_level = 0;
     }
+#if OPT_VLPD0_COST_BIS
+    pcs->vlpd0_cost_bias_weight = 0;
+#endif
 
     // Set the interpolation search level.
     // This could be avoided for all-intra coding, but only after ensuring

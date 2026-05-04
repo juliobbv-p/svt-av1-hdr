@@ -307,6 +307,9 @@ typedef struct PictureControlSet {
     uint8_t md_pme_level;
     uint8_t mds0_level;
     uint8_t rdoq_level;
+#if OPT_VLPD0_COST_BIS
+    uint16_t vlpd0_cost_bias_weight; // [512..1024] = 50%..100% of default variance offset; 0 = off
+#endif
     uint8_t rate_est_level;
     uint8_t intra_level;
     uint8_t dist_based_ang_intra_level;

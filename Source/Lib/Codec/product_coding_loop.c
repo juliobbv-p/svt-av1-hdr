@@ -7744,6 +7744,25 @@ static INLINE uint32_t compute_vlpd0_cost_allintra(PictureControlSet* pcs, ModeD
     return (area * bias) / 1000;
 }
 
+#if OPT_VLPD0_COST
+// Predict the RD cost of a VLPD0 block from its residual variance and lambda
+#define VLPD0_NOISE_SHIFT 10
+
+static INLINE uint64_t compute_vlpd0_cost_from_variance(ModeDecisionContext* ctx, uint32_t variance) {
+    const uint32_t lambda         = ctx->full_sb_lambda_md[EB_8_BIT_MD];
+    const uint32_t area           = ctx->blk_geom->bwidth * ctx->blk_geom->bheight;
+    const uint32_t partition_rate = ctx->md_rate_est_ctx->partition_fac_bits[0][PARTITION_NONE];
+
+    const uint32_t var_pp = variance / area;
+    const uint32_t noise  = lambda >> VLPD0_NOISE_SHIFT;
+
+    // Distortion = min(var_pp, noise) * area; above the noise floor, distortion is capped
+    const uint64_t dist = (uint64_t)MIN(var_pp, noise) * area;
+
+    return RDCOST(lambda, partition_rate, dist);
+}
+#endif
+
 static void md_encode_block_light_pd0(PictureControlSet* pcs, ModeDecisionContext* ctx,
                                       EbPictureBufferDesc* input_pic) {
     const BlockGeom* blk_geom = ctx->blk_geom;
@@ -7796,9 +7815,13 @@ static void md_encode_block_light_pd0(PictureControlSet* pcs, ModeDecisionContex
     }
 
     if (ctx->lpd0_ctrls.pd0_level == VERY_LIGHT_PD0) {
+#if OPT_VLPD0_COST
+        ctx->blk_ptr->cost = compute_vlpd0_cost_from_variance(ctx, (uint32_t)ctx->mds0_best_cost);
+#else
         uint32_t rate      = ctx->md_rate_est_ctx->partition_fac_bits[0][PARTITION_NONE];
         uint64_t dist      = ctx->mds0_best_cost;
         ctx->blk_ptr->cost = RDCOST(ctx->full_sb_lambda_md[EB_8_BIT_MD], rate, dist);
+#endif
     } else {
         ctx->md_stage = MD_STAGE_3;
         md_stage_3_light_pd0(pcs, ctx, input_pic, input_origin_index, blk_origin_index);
