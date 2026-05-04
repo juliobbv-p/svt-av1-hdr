@@ -985,8 +985,12 @@ static void set_cdef_search_controls(PictureParentControlSet* pcs, uint8_t cdef_
     case 0:
         cdef_ctrls->enabled               = 0;
         cdef_ctrls->use_reference_cdef_fs = 0;
-        cdef_ctrls->use_skip_detector     = 0;
-        cdef_ctrls->uv_from_y             = false;
+#if OPT_CDEF_SKIP_TH
+        cdef_ctrls->skip_th = 0;
+#else
+        cdef_ctrls->use_skip_detector = 0;
+#endif
+        cdef_ctrls->uv_from_y = false;
         break;
     case 1:
         // pf_set {0,1,..,15}
@@ -1028,9 +1032,13 @@ static void set_cdef_search_controls(PictureParentControlSet* pcs, uint8_t cdef_
         cdef_ctrls->use_reference_cdef_fs = 0;
         cdef_ctrls->search_best_ref_fs    = 0;
         cdef_ctrls->subsampling_factor    = 1;
-        cdef_ctrls->use_skip_detector     = 0;
-        cdef_ctrls->uv_from_y             = false;
-        cdef_ctrls->use_qp_strength       = false;
+#if OPT_CDEF_SKIP_TH
+        cdef_ctrls->skip_th = 0;
+#else
+        cdef_ctrls->use_skip_detector = 0;
+#endif
+        cdef_ctrls->uv_from_y       = false;
+        cdef_ctrls->use_qp_strength = false;
         break;
     case 2:
         // pf_set {0,1,2,4,5,6,8,9,10,12,13,14}
@@ -1068,9 +1076,13 @@ static void set_cdef_search_controls(PictureParentControlSet* pcs, uint8_t cdef_
         cdef_ctrls->use_reference_cdef_fs = 0;
         cdef_ctrls->search_best_ref_fs    = 0;
         cdef_ctrls->subsampling_factor    = 1;
-        cdef_ctrls->use_skip_detector     = 0;
-        cdef_ctrls->uv_from_y             = false;
-        cdef_ctrls->use_qp_strength       = false;
+#if OPT_CDEF_SKIP_TH
+        cdef_ctrls->skip_th = 0;
+#else
+        cdef_ctrls->use_skip_detector = 0;
+#endif
+        cdef_ctrls->uv_from_y       = false;
+        cdef_ctrls->use_qp_strength = false;
         break;
     case 3:
         // pf_set {0,4,8,12,15}
@@ -1101,9 +1113,13 @@ static void set_cdef_search_controls(PictureParentControlSet* pcs, uint8_t cdef_
         cdef_ctrls->use_reference_cdef_fs = 0;
         cdef_ctrls->search_best_ref_fs    = 0;
         cdef_ctrls->subsampling_factor    = 1;
-        cdef_ctrls->use_skip_detector     = 0;
-        cdef_ctrls->uv_from_y             = false;
-        cdef_ctrls->use_qp_strength       = false;
+#if OPT_CDEF_SKIP_TH
+        cdef_ctrls->skip_th = 0;
+#else
+        cdef_ctrls->use_skip_detector = 0;
+#endif
+        cdef_ctrls->uv_from_y       = false;
+        cdef_ctrls->use_qp_strength = false;
         break;
     case 4:
         // pf_set {0,7,15}
@@ -1132,9 +1148,13 @@ static void set_cdef_search_controls(PictureParentControlSet* pcs, uint8_t cdef_
         cdef_ctrls->use_reference_cdef_fs = 0;
         cdef_ctrls->search_best_ref_fs    = 0;
         cdef_ctrls->subsampling_factor    = 1;
-        cdef_ctrls->use_skip_detector     = 0;
-        cdef_ctrls->uv_from_y             = false;
-        cdef_ctrls->use_qp_strength       = false;
+#if OPT_CDEF_SKIP_TH
+        cdef_ctrls->skip_th = 0;
+#else
+        cdef_ctrls->use_skip_detector = 0;
+#endif
+        cdef_ctrls->uv_from_y       = false;
+        cdef_ctrls->use_qp_strength = false;
         break;
     case 5:
         // pf_set {0,7,15}
@@ -1159,9 +1179,13 @@ static void set_cdef_search_controls(PictureParentControlSet* pcs, uint8_t cdef_
         cdef_ctrls->use_reference_cdef_fs = 0;
         cdef_ctrls->search_best_ref_fs    = is_not_highest_layer ? 0 : 1;
         cdef_ctrls->subsampling_factor    = 1;
-        cdef_ctrls->use_skip_detector     = 0;
-        cdef_ctrls->uv_from_y             = false;
-        cdef_ctrls->use_qp_strength       = false;
+#if OPT_CDEF_SKIP_TH
+        cdef_ctrls->skip_th = 0;
+#else
+        cdef_ctrls->use_skip_detector = 0;
+#endif
+        cdef_ctrls->uv_from_y       = false;
+        cdef_ctrls->use_qp_strength = false;
         break;
     case 6:
         // pf_set {0,15}
@@ -1185,9 +1209,13 @@ static void set_cdef_search_controls(PictureParentControlSet* pcs, uint8_t cdef_
         cdef_ctrls->use_reference_cdef_fs = 0;
         cdef_ctrls->search_best_ref_fs    = is_not_highest_layer ? 0 : 1;
         cdef_ctrls->subsampling_factor    = 4;
-        cdef_ctrls->use_skip_detector     = 0;
-        cdef_ctrls->uv_from_y             = false;
-        cdef_ctrls->use_qp_strength       = false;
+#if OPT_CDEF_SKIP_TH
+        cdef_ctrls->skip_th = 0;
+#else
+        cdef_ctrls->use_skip_detector = 0;
+#endif
+        cdef_ctrls->uv_from_y       = false;
+        cdef_ctrls->use_qp_strength = false;
         break;
     case 7:
         // pf_set {0,15}
@@ -1210,9 +1238,13 @@ static void set_cdef_search_controls(PictureParentControlSet* pcs, uint8_t cdef_
         cdef_ctrls->use_reference_cdef_fs = is_not_highest_layer ? 0 : 1;
         cdef_ctrls->search_best_ref_fs    = is_base ? 0 : 1;
         cdef_ctrls->subsampling_factor    = 4;
-        cdef_ctrls->use_skip_detector     = is_base ? 0 : 1;
-        cdef_ctrls->uv_from_y             = false;
-        cdef_ctrls->use_qp_strength       = false;
+#if OPT_CDEF_SKIP_TH
+        cdef_ctrls->skip_th = is_base ? 0 : 80;
+#else
+        cdef_ctrls->use_skip_detector = is_base ? 0 : 1;
+#endif
+        cdef_ctrls->uv_from_y       = false;
+        cdef_ctrls->use_qp_strength = false;
         break;
     case 8:
         // pf_set {0,15}
@@ -1235,16 +1267,57 @@ static void set_cdef_search_controls(PictureParentControlSet* pcs, uint8_t cdef_
         cdef_ctrls->use_reference_cdef_fs = is_base ? 0 : 1;
         cdef_ctrls->search_best_ref_fs    = is_base ? 0 : 1;
         cdef_ctrls->subsampling_factor    = 4;
-        cdef_ctrls->use_skip_detector     = 0;
-        cdef_ctrls->uv_from_y             = true;
-        cdef_ctrls->use_qp_strength       = false;
+#if OPT_CDEF_SKIP_TH
+        cdef_ctrls->skip_th = is_base ? 0 : 80;
+#else
+        cdef_ctrls->use_skip_detector = 0;
+#endif
+        cdef_ctrls->uv_from_y       = true;
+        cdef_ctrls->use_qp_strength = false;
         break;
 
+#if OPT_CDEF_PRI_ONLY
+    case 9:
+        // Primary-only: no secondary strength candidates
+        cdef_ctrls->enabled                      = 1;
+        cdef_ctrls->first_pass_fs_num            = 2;
+        second_pass_fs_num                       = 0;
+        cdef_ctrls->default_second_pass_fs_num   = 0;
+        cdef_ctrls->default_first_pass_fs[0]     = pf_gi[0];
+        cdef_ctrls->default_first_pass_fs[1]     = pf_gi[15];
+        cdef_ctrls->default_first_pass_fs_uv[0]  = -1;
+        cdef_ctrls->default_first_pass_fs_uv[1]  = -1;
+        cdef_ctrls->default_first_pass_fs_uv[2]  = -1;
+        cdef_ctrls->default_second_pass_fs_uv[0] = -1;
+        cdef_ctrls->default_second_pass_fs_uv[1] = -1;
+
+        cdef_ctrls->use_reference_cdef_fs = is_base ? 0 : 1;
+        cdef_ctrls->search_best_ref_fs    = is_base ? 0 : 1;
+        cdef_ctrls->subsampling_factor    = 4;
+#if OPT_CDEF_SKIP_TH
+        cdef_ctrls->skip_th = is_base ? 0 : 80;
+#else
+        cdef_ctrls->use_skip_detector = 0;
+#endif
+        cdef_ctrls->uv_from_y       = true;
+        cdef_ctrls->use_qp_strength = false;
+        break;
+
+    case 10:
+        cdef_ctrls->enabled               = 1;
+        cdef_ctrls->use_reference_cdef_fs = 0;
+        cdef_ctrls->use_qp_strength       = true;
+#if OPT_CDEF_SKIP_TH
+        cdef_ctrls->skip_th = is_base ? 0 : 80;
+#endif
+        break;
+#else
     case 9:
         cdef_ctrls->enabled               = 1;
         cdef_ctrls->use_reference_cdef_fs = 0;
         cdef_ctrls->use_qp_strength       = true;
         break;
+#endif
     default:
         assert(0);
         break;
@@ -2351,6 +2424,37 @@ void svt_aom_sig_deriv_multi_processes_rtc(SequenceControlSet* scs, PictureParen
     } else if (scs->static_config.cdef_level != DEFAULT) {
         cdef_search_level = (int8_t)(scs->static_config.cdef_level);
     } else {
+#if TUNE_CDEF_LEVEL
+        if (flat_rtc) {
+            if (enc_mode <= ENC_M7) {
+                cdef_search_level = 5;
+            } else if (enc_mode <= ENC_M11) {
+                if (pcs->input_resolution <= INPUT_SIZE_360p_RANGE) {
+                    cdef_search_level = 6;
+                } else {
+                    cdef_search_level = is_islice ? 5 : 8;
+                }
+            } else {
+#if OPT_CDEF_PRI_ONLY
+                cdef_search_level = is_islice ? 5 : 9;
+#else
+                cdef_search_level = is_islice ? 5 : 8;
+#endif
+            }
+        } else {
+            if (enc_mode <= ENC_M7) {
+                cdef_search_level = 5;
+            } else if (enc_mode <= ENC_M8) {
+                if (pcs->input_resolution <= INPUT_SIZE_360p_RANGE) {
+                    cdef_search_level = 6;
+                } else {
+                    cdef_search_level = is_islice ? 5 : 8;
+                }
+            } else {
+                cdef_search_level = is_islice ? 5 : 8;
+            }
+        }
+#else
         if (sc_class1) {
             if (enc_mode <= ENC_M7) {
                 cdef_search_level = 5;
@@ -2380,6 +2484,7 @@ void svt_aom_sig_deriv_multi_processes_rtc(SequenceControlSet* scs, PictureParen
                 cdef_search_level = is_islice ? 5 : 8;
             }
         }
+#endif
     }
 
     set_cdef_search_controls(pcs, cdef_search_level);
@@ -2595,8 +2700,13 @@ void svt_aom_sig_deriv_multi_processes_allintra(SequenceControlSet* scs, Picture
             } else if (enc_mode <= ENC_M6) {
                 cdef_search_level = 7;
             } else {
+#if OPT_CDEF_PRI_ONLY
+                // For fd1/fd2, disable CDEF search if fd0 uses level 10 or 0
+                cdef_search_level = 10;
+#else
                 // For fd1/fd2, disable CDEF search if fd0 uses level 9 or 0
                 cdef_search_level = 9;
+#endif
             }
         } else {
             if (enc_mode <= ENC_M3) {

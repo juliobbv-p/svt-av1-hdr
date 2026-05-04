@@ -552,8 +552,13 @@ typedef struct CdefSearchControls {
     // process at once. Only search best filter strengths of the nearest ref frames (skips the
     // search if the filters of list0/list1 are the same).
     uint8_t search_best_ref_fs;
+#if OPT_CDEF_SKIP_TH
+    // Shut CDEF if ref skip percentage exceeds this threshold (0 = OFF).
+    uint8_t skip_th;
+#else
     // Shut CDEF at the picture level based on the skip area of the nearest reference frames.
     uint8_t use_skip_detector;
+#endif
     // If true, skip UV filter search and force UV filters to take the chosen luma values
     bool uv_from_y;
     // Enable QP-based CDEF strength prediction (bypass strength search)

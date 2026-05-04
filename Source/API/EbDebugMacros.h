@@ -55,6 +55,11 @@ extern "C" {
 #define OPT_VLPD0_COST             1 // Optimize VLPD0 inter-depth partitioning
 #define OPT_VLPD0_COST_BIS         1 // Faster VLPD0 inter-depth partitioning
 
+#define TUNE_CDEF_LEVEL            1 // Simplify RTC CDEF level derivation (remove sc_class1 branch, split flat/3L)
+#define OPT_CDEF_PRI_ONLY          1 // Only test pri-only strengths {0, 15*4}. Halves search evaluations
+                                     // and ensures the NEON kernel always takes its sec==0 fast path.
+#define OPT_CDEF_SKIP_TH           1 // Replace use_skip_detector bool with configurable skip_th percentage
+
 //FOR DEBUGGING - Do not remove
 #define LOG_ENC_DONE            0 // log encoder job one
 #define DEBUG_TPL               0 // Prints to debug TPL
