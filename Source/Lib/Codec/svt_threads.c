@@ -179,6 +179,15 @@ void svt_format_thread_name(char* buf, size_t size, const char* prefix, uint32_t
 EbHandle svt_create_thread(void* thread_function(void*), void* thread_context, const char* name) {
     EbHandle thread_handle = NULL;
 
+    // Drop the `svt_aom_` prefix that EB_CREATE_THREAD pulls in via
+    // `#thread_function`. Linux's TASK_COMM_LEN is 15 chars; without the strip
+    // `svt_aom_picture_decision_kernel` and `svt_aom_picture_manager_kernel`
+    // collapse to the same `svt_aom_picture` label in /proc/.../comm and the
+    // Nsight ThreadNames table.
+    if (name && !strncmp(name, "svt_aom_", 8)) {
+        name += 8;
+    }
+
 #ifdef _WIN32
     thread_handle = (EbHandle)CreateThread(
         NULL, // default security attributes

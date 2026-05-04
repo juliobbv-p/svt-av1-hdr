@@ -61,20 +61,20 @@ the 15-char `TASK_COMM_LEN`:
 
 | Kernel | Thread name |
 |---|---|
-| `svt_aom_resource_coordination_kernel` | `svt_aom_resourc` |
-| `svt_aom_picture_decision_kernel`      | `svt_aom_picture` ⚠ |
-| `svt_aom_initial_rate_control_kernel`  | `svt_aom_initial` |
-| `svt_aom_picture_manager_kernel`       | `svt_aom_picture` ⚠ |
-| `svt_aom_rate_control_kernel`          | `svt_aom_rate_co` |
-| `svt_aom_packetization_kernel`         | `svt_aom_packeti` |
+| `svt_aom_resource_coordination_kernel` | `resource_coordi` |
+| `svt_aom_picture_decision_kernel`      | `picture_decisio` |
+| `svt_aom_initial_rate_control_kernel`  | `initial_rate_co` |
+| `svt_aom_picture_manager_kernel`       | `picture_manager` |
+| `svt_aom_rate_control_kernel`          | `rate_control_ke` |
+| `svt_aom_packetization_kernel`         | `packetization_k` |
 
-⚠ `picture_decision` and `picture_manager` collapse to the same truncated
-name. They are still distinct threads — TID disambiguates them in Nsight
-timelines, but `top`/`htop`/`ps -L`/`/proc/<pid>/task/*/comm` will show two
-threads sharing the `svt_aom_picture` label. The application thread is
-`svt-app-main`. All names are visible in `top`, `htop`,
-`ps -L -o pid,tid,comm`, `/proc/<pid>/task/*/comm`, and the Nsight Systems
-timeline lane labels.
+The `svt_aom_` prefix is stripped at thread-creation time so each singleton
+fits the 15-char `TASK_COMM_LEN` window distinctly. Without the strip,
+`picture_decision_kernel` and `picture_manager_kernel` would both truncate to
+`svt_aom_picture` and become indistinguishable in `/proc/<pid>/task/*/comm`
+and the Nsight ThreadNames table. The application thread is `svt-app-main`.
+All names are visible in `top`, `htop`, `ps -L -o pid,tid,comm`,
+`/proc/<pid>/task/*/comm`, and the Nsight Systems timeline lane labels.
 
 ## Standalone runtime
 
@@ -165,5 +165,5 @@ For the `pthread_setname_np` side, while a longer encode is running:
 
 ```sh
 ls /proc/$(pidof SvtAv1EncApp)/task/*/comm | xargs -I{} cat {} | sort -u
-# expect svt-app-main, 5 distinct svt_aom_* singletons (picdec/picmgr collide), svt-me0..N, svt-md0..N, svt-cdef0..N, ...
+# expect svt-app-main, 6 distinct singletons (picture_decisio, picture_manager, initial_rate_co, rate_control_ke, packetization_k, resource_coordi), svt-me0..N, svt-md0..N, svt-cdef0..N, ...
 ```
