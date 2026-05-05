@@ -114,12 +114,14 @@ typedef struct MrpCtrls {
      */
     uint8_t referencing_scheme;
 
+#if !TUNE_SIMPLIFY_SETTINGS
     // SC signals
     uint8_t sc_base_ref_list0_count;
     uint8_t sc_base_ref_list1_count;
     uint8_t sc_non_base_ref_list0_count;
     uint8_t sc_non_base_ref_list1_count;
     // non-SC signals
+#endif
     uint8_t base_ref_list0_count;
     uint8_t base_ref_list1_count;
     uint8_t non_base_ref_list0_count;

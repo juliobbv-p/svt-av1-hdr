@@ -1444,7 +1444,9 @@ static void set_ref_list_counts(PictureParentControlSet* pcs, PictureDecisionCon
     Av1RpsNode*           av1_rps   = &pcs->av1_ref_signal;
     const MrpCtrls* const mrp_ctrls = &pcs->scs->mrp_ctrls;
     const bool            is_base   = pcs->temporal_layer_index == 0;
-    const bool            is_sc     = pcs->sc_class1;
+#if !TUNE_SIMPLIFY_SETTINGS
+    const bool is_sc = pcs->sc_class1;
+#endif
 
     // Get list0 count
     uint8_t list0_count   = 1;
@@ -1477,10 +1479,15 @@ static void set_ref_list_counts(PictureParentControlSet* pcs, PictureDecisionCon
             list0_count++;
         }
     }
+#if TUNE_SIMPLIFY_SETTINGS
+    pcs->ref_list0_count = MIN(list0_count,
+                               (is_base ? mrp_ctrls->base_ref_list0_count : mrp_ctrls->non_base_ref_list0_count));
+#else
     pcs->ref_list0_count = MIN(
         list0_count,
         is_sc ? (is_base ? mrp_ctrls->sc_base_ref_list0_count : mrp_ctrls->sc_non_base_ref_list0_count)
               : (is_base ? mrp_ctrls->base_ref_list0_count : mrp_ctrls->non_base_ref_list0_count));
+#endif
     assert(pcs->ref_list0_count);
 
     if (svt_aom_is_incomp_mg_frame(pcs) || pcs->is_overlay) {
@@ -1530,10 +1537,15 @@ static void set_ref_list_counts(PictureParentControlSet* pcs, PictureDecisionCon
             list1_count++;
         }
     }
+#if TUNE_SIMPLIFY_SETTINGS
+    pcs->ref_list1_count = MIN(list1_count,
+                               (is_base ? mrp_ctrls->base_ref_list1_count : mrp_ctrls->non_base_ref_list1_count));
+#else
     pcs->ref_list1_count = MIN(
         list1_count,
         is_sc ? (is_base ? mrp_ctrls->sc_base_ref_list1_count : mrp_ctrls->sc_non_base_ref_list1_count)
               : (is_base ? mrp_ctrls->base_ref_list1_count : mrp_ctrls->non_base_ref_list1_count));
+#endif
     // Old assert fails when M13 uses non-zero mrp
     assert(!(pcs->ref_list1_count == 0 && pcs->scs->static_config.pred_structure == RANDOM_ACCESS));
 }
@@ -1654,12 +1666,16 @@ static void av1_generate_rps_info(PictureParentControlSet* pcs, EncodeContext* e
 
         assert(!pcs->is_overlay && "overlays not supported in LD");
 
-        const MrpCtrls* const mrp_ctrls       = &pcs->scs->mrp_ctrls;
-        const bool            is_base         = temporal_layer == 0;
-        const bool            is_sc           = pcs->sc_class1;
-        uint8_t               ref_list1_count = is_sc
-                          ? (is_base ? mrp_ctrls->sc_base_ref_list1_count : mrp_ctrls->sc_non_base_ref_list1_count)
-                          : (is_base ? mrp_ctrls->base_ref_list1_count : mrp_ctrls->non_base_ref_list1_count);
+        const MrpCtrls* const mrp_ctrls = &pcs->scs->mrp_ctrls;
+        const bool            is_base   = temporal_layer == 0;
+#if TUNE_SIMPLIFY_SETTINGS
+        uint8_t ref_list1_count = is_base ? mrp_ctrls->base_ref_list1_count : mrp_ctrls->non_base_ref_list1_count;
+#else
+        const bool is_sc           = pcs->sc_class1;
+        uint8_t    ref_list1_count = is_sc
+               ? (is_base ? mrp_ctrls->sc_base_ref_list1_count : mrp_ctrls->sc_non_base_ref_list1_count)
+               : (is_base ? mrp_ctrls->base_ref_list1_count : mrp_ctrls->non_base_ref_list1_count);
+#endif
 
         const uint8_t lay1_pic_idx = (hierarchical_levels == 0) ? 0 : ((1 << (hierarchical_levels - 1)) - 1);
         // When list1 is not used, the pics after the layer 1 pic should use the layer 1 pic as ref instead of previous base
@@ -3843,15 +3859,19 @@ static void send_picture_out(SequenceControlSet* scs, PictureParentControlSet* p
         me_update_param(pcs->pa_me_data, scs);
     }
 
+#if TUNE_SIMPLIFY_SETTINGS
+    uint8_t ref_count_used_list0 = MAX(mrp_ctrl->base_ref_list0_count, mrp_ctrl->non_base_ref_list0_count);
+    uint8_t ref_count_used_list1 = MAX(mrp_ctrl->base_ref_list1_count, mrp_ctrl->non_base_ref_list1_count);
+#else
     uint8_t ref_count_used_list0 = MAX(
         mrp_ctrl->sc_base_ref_list0_count,
         MAX(mrp_ctrl->base_ref_list0_count,
             MAX(mrp_ctrl->sc_non_base_ref_list0_count, mrp_ctrl->non_base_ref_list0_count)));
-
     uint8_t ref_count_used_list1 = MAX(
         mrp_ctrl->sc_base_ref_list1_count,
         MAX(mrp_ctrl->base_ref_list1_count,
             MAX(mrp_ctrl->sc_non_base_ref_list1_count, mrp_ctrl->non_base_ref_list1_count)));
+#endif
 
     uint8_t max_ref_to_alloc, max_cand_to_alloc;
 
@@ -4031,6 +4051,15 @@ void svt_aom_is_screen_content_antialiasing_aware(PictureParentControlSet* pcs);
 */
 void update_count_try(SequenceControlSet* scs, PictureParentControlSet* pcs) {
     MrpCtrls* mrp_ctrl = &scs->mrp_ctrls;
+#if TUNE_SIMPLIFY_SETTINGS
+    if (pcs->temporal_layer_index == 0) {
+        pcs->ref_list0_count_try = MIN(pcs->ref_list0_count, mrp_ctrl->base_ref_list0_count);
+        pcs->ref_list1_count_try = MIN(pcs->ref_list1_count, mrp_ctrl->base_ref_list1_count);
+    } else {
+        pcs->ref_list0_count_try = MIN(pcs->ref_list0_count, mrp_ctrl->non_base_ref_list0_count);
+        pcs->ref_list1_count_try = MIN(pcs->ref_list1_count, mrp_ctrl->non_base_ref_list1_count);
+    }
+#else
     if (pcs->sc_class1) {
         if (pcs->temporal_layer_index == 0) {
             pcs->ref_list0_count_try = MIN(pcs->ref_list0_count, mrp_ctrl->sc_base_ref_list0_count);
@@ -4048,6 +4077,7 @@ void update_count_try(SequenceControlSet* scs, PictureParentControlSet* pcs) {
             pcs->ref_list1_count_try = MIN(pcs->ref_list1_count, mrp_ctrl->non_base_ref_list1_count);
         }
     }
+#endif
 }
 
 /*
@@ -4337,6 +4367,9 @@ static void perform_sc_detection(SequenceControlSet* scs, PictureParentControlSe
         ctx->last_i_picture_sc_class2 = pcs->sc_class2;
         ctx->last_i_picture_sc_class3 = pcs->sc_class3;
         ctx->last_i_picture_sc_class4 = pcs->sc_class4;
+#if TUNE_SIMPLIFY_SETTINGS
+        ctx->last_i_picture_sc_class5 = pcs->sc_class5;
+#endif
 
     } else {
         pcs->sc_class0 = ctx->last_i_picture_sc_class0;
@@ -4344,6 +4377,9 @@ static void perform_sc_detection(SequenceControlSet* scs, PictureParentControlSe
         pcs->sc_class2 = ctx->last_i_picture_sc_class2;
         pcs->sc_class3 = ctx->last_i_picture_sc_class3;
         pcs->sc_class4 = ctx->last_i_picture_sc_class4;
+#if TUNE_SIMPLIFY_SETTINGS
+        pcs->sc_class5 = ctx->last_i_picture_sc_class5;
+#endif
     }
 }
 

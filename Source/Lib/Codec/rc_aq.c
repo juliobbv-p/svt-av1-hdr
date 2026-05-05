@@ -311,7 +311,11 @@ void svt_aom_cyclic_refresh_setup(PictureParentControlSet* ppcs) {
     cr->me_distortion[2]    = cr->actual_num_seg2_sbs ? cr->me_distortion[2] / cr->actual_num_seg2_sbs : 0;
 
     int rate_boost_fac = cr->rate_boost_fac;
+#if TUNE_SIMPLIFY_SETTINGS
+    if (cr->actual_num_seg2_sbs) {
+#else
     if (!ppcs->sc_class1 && cr->actual_num_seg2_sbs) {
+#endif
         seg2_dist    = seg2_dist / cr->actual_num_seg2_sbs;
         uint64_t dev = (avg_me_dist - seg2_dist) * 100 / avg_me_dist;
         // Quadratic Scaling; boost = BOOST_MAX * (dev/100)^2

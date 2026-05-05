@@ -920,7 +920,11 @@ void* svt_aom_mode_decision_configuration_kernel(void* input_ptr) {
         pcs->coeff_lvl = INVALID_LVL;
         if (scs->allintra) {
             derive_intra_coeff_level(pcs);
+#if TUNE_SIMPLIFY_SETTINGS
+        } else if (!scs->static_config.rtc && pcs->slice_type != I_SLICE) {
+#else
         } else if (!scs->static_config.rtc && pcs->slice_type != I_SLICE && !pcs->ppcs->sc_class1) {
+#endif
             derive_inter_coeff_level(pcs);
         }
         // -------

@@ -56,8 +56,7 @@ extern "C" {
 #define OPT_VLPD0_COST_BIS         1 // Faster VLPD0 inter-depth partitioning
 
 #define TUNE_CDEF_LEVEL            1 // Simplify RTC CDEF level derivation (remove sc_class1 branch, split flat/3L)
-#define OPT_CDEF_PRI_ONLY          1 // Only test pri-only strengths {0, 15*4}. Halves search evaluations
-                                     // and ensures the NEON kernel always takes its sec==0 fast path.
+#define OPT_CDEF_PRI_ONLY          1 // Only test pri-only strengths {0,15*4}
 #define OPT_CDEF_SKIP_TH           1 // Replace use_skip_detector bool with configurable skip_th percentage
 
 #define OPT_COEFF_SHAVING          1 // Post-quantization coefficient shaving: retract EOB and optionally zero block
@@ -72,7 +71,8 @@ extern "C" {
 #define TUNE_LPD1_LEVEL            1 // Unified pic_lpd1_lvl derivation for RTC (remove sc_class1 special case)
 #define OPT_STATS_MUTEX            1 // Use local accumulators for qindex stats instead of per-block mutex
 #define OPT_SKIP_INTRA             1 // Skip INTRA using me-distortion
-
+#define TUNE_SIMPLIFY_SETTINGS     1 // Unify settings by removing differences across prediction structures (flat vs 3L), content types (SC vs non-SC), and resolutions
+#define TUNE_SHIFT_PRESETS_RTC     1 // Shift RTC presets: M10 -> M9, M11 -> M10, M12 -> M11; cap at M11
 
 //FOR DEBUGGING - Do not remove
 #define LOG_ENC_DONE            0 // log encoder job one

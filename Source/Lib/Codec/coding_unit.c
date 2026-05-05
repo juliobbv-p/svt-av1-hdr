@@ -55,9 +55,15 @@ Tasks & Questions
     -Need a ReconPicture for each candidate.
     -I don't see a way around doing the copies in temp memory and then copying it in...
 */
+#if TUNE_SIMPLIFY_SETTINGS
 EbErrorType svt_aom_largest_coding_unit_ctor(SuperBlock* larget_coding_unit_ptr, uint8_t sb_size_pix,
                                              uint16_t sb_origin_x, uint16_t sb_origin_y, uint16_t sb_index,
                                              EncMode enc_mode, bool rtc, bool allintra, PictureControlSet* pcs) {
+#else
+EbErrorType svt_aom_largest_coding_unit_ctor(SuperBlock* larget_coding_unit_ptr, uint8_t sb_size_pix,
+                                             uint16_t sb_origin_x, uint16_t sb_origin_y, uint16_t sb_index,
+                                             EncMode enc_mode, bool rtc, bool allintra, PictureControlSet* pcs) {
+#endif
     larget_coding_unit_ptr->dctor = svt_aom_largest_coding_unit_dctor;
 
     // ************ SB ***************
@@ -74,8 +80,12 @@ EbErrorType svt_aom_largest_coding_unit_ctor(SuperBlock* larget_coding_unit_ptr,
     bool disallow_sub_16x16_nsq   = true;
     for (uint8_t coeff_lvl = 0; coeff_lvl <= HIGH_LVL + 1; coeff_lvl++) {
         uint8_t nsq_geom_lvl = allintra ? svt_aom_get_nsq_geom_level_allintra(enc_mode)
-            : rtc                       ? svt_aom_get_nsq_geom_level_rtc(enc_mode)
-                                        : svt_aom_get_nsq_geom_level_default(enc_mode, coeff_lvl);
+#if TUNE_SIMPLIFY_SETTINGS
+            : rtc ? svt_aom_get_nsq_geom_level_rtc()
+#else
+            : rtc ? svt_aom_get_nsq_geom_level_rtc(enc_mode)
+#endif
+                  : svt_aom_get_nsq_geom_level_default(enc_mode, coeff_lvl);
         // nsq_geom_lvl level 0 means NSQ shapes are disallowed so don't adjust based on the level
         if (nsq_geom_lvl) {
             uint8_t allow_HVA_HVB, allow_HV4, min_nsq_bsize;
@@ -88,9 +98,13 @@ EbErrorType svt_aom_largest_coding_unit_ctor(SuperBlock* larget_coding_unit_ptr,
             }
         }
     }
-    bool     disallow_4x4 = allintra ? svt_aom_get_disallow_4x4_allintra(enc_mode)
-            : rtc                    ? svt_aom_get_disallow_4x4_rtc(enc_mode)
-                                     : svt_aom_get_disallow_4x4_default(enc_mode);
+    bool disallow_4x4 = allintra ? svt_aom_get_disallow_4x4_allintra(enc_mode)
+#if TUNE_SIMPLIFY_SETTINGS
+        : rtc ? svt_aom_get_disallow_4x4_rtc()
+#else
+        : rtc ? svt_aom_get_disallow_4x4_rtc(enc_mode)
+#endif
+              : svt_aom_get_disallow_4x4_default(enc_mode);
     bool     disallow_8x8 = allintra ? svt_aom_get_disallow_8x8_allintra()
             : rtc                    ? svt_aom_get_disallow_8x8_rtc(enc_mode, pcs->frame_width, pcs->frame_height)
                                      : svt_aom_get_disallow_8x8_default();

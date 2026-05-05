@@ -14,22 +14,43 @@ void    svt_aom_set_txt_controls(ModeDecisionContext* ctx, uint8_t txt_level);
 void    svt_aom_set_wm_controls(ModeDecisionContext* ctx, uint8_t wm_level);
 uint8_t svt_aom_set_nic_controls(ModeDecisionContext* ctx, uint8_t nic_level);
 uint8_t svt_aom_set_chroma_controls(ModeDecisionContext* ctx, uint8_t uv_level);
+#if TUNE_SIMPLIFY_SETTINGS
+uint8_t svt_aom_get_update_cdf_level_default(EncMode enc_mode, SliceType is_islice, uint8_t is_base);
+uint8_t svt_aom_get_update_cdf_level_rtc(EncMode enc_mode, SliceType is_islice);
+#else
 uint8_t svt_aom_get_update_cdf_level_default(EncMode enc_mode, SliceType is_islice, uint8_t is_base, uint8_t sc_class1);
 uint8_t svt_aom_get_update_cdf_level_rtc(EncMode enc_mode, SliceType is_islice, uint8_t is_base, uint8_t sc_class1);
+#endif
 uint8_t svt_aom_get_update_cdf_level_allintra(EncMode enc_mode);
 uint8_t svt_aom_get_chroma_level_default(EncMode enc_mode, const uint8_t is_islice);
+#if TUNE_SIMPLIFY_SETTINGS
+uint8_t svt_aom_get_chroma_level_rtc(EncMode enc_mode, const bool use_flat_ipp);
+#else
 uint8_t svt_aom_get_chroma_level_rtc(EncMode enc_mode, const uint8_t is_islice);
+#endif
 uint8_t svt_aom_get_chroma_level_allintra(EncMode enc_mode);
 uint8_t svt_aom_get_bypass_encdec_default(EncMode enc_mode, uint8_t encoder_bit_depth);
 uint8_t svt_aom_get_bypass_encdec_rtc(EncMode enc_mode, uint8_t encoder_bit_depth);
 uint8_t svt_aom_get_bypass_encdec_allintra(EncMode enc_mode);
+#if TUNE_SIMPLIFY_SETTINGS
+uint8_t svt_aom_get_nic_level_default(EncMode enc_mode, uint8_t is_base);
+#else
 uint8_t svt_aom_get_nic_level_default(EncMode enc_mode, uint8_t is_base, uint8_t sc_class1);
+#endif
+#if TUNE_SIMPLIFY_SETTINGS
+uint8_t svt_aom_get_nic_level_rtc(EncMode enc_mode);
+#else
 uint8_t svt_aom_get_nic_level_rtc(EncMode enc_mode, bool use_flat_ipp);
+#endif
 uint8_t svt_aom_get_nic_level_allintra(EncMode enc_mode);
 uint8_t svt_aom_get_enable_me_16x16(EncMode enc_mode);
 bool    svt_aom_is_ref_same_size(PictureControlSet* pcs, uint8_t list_idx, uint8_t ref_idx);
+#if TUNE_SIMPLIFY_SETTINGS
+uint8_t svt_aom_get_enable_me_8x8(EncMode enc_mode, ResolutionRange input_resolution, const bool rtc_tune);
+#else
 uint8_t svt_aom_get_enable_me_8x8(EncMode enc_mode, ResolutionRange input_resolution, const bool rtc_tune,
                                   const bool flat_rtc_tune);
+#endif
 void    svt_aom_sig_deriv_mode_decision_config_default(SequenceControlSet* scs, PictureControlSet* pcs);
 void    svt_aom_sig_deriv_mode_decision_config_rtc(SequenceControlSet* scs, PictureControlSet* pcs);
 void    svt_aom_sig_deriv_mode_decision_config_allintra(SequenceControlSet* scs, PictureControlSet* pcs);
@@ -58,43 +79,77 @@ void    svt_aom_set_gm_controls(PictureParentControlSet* pcs, uint8_t gm_level);
 uint8_t svt_aom_derive_gm_level(PictureParentControlSet* pcs, bool super_res_off);
 
 uint8_t svt_aom_get_enable_sg_default(EncMode enc_mode, uint8_t input_resolution, uint8_t fast_decode);
+#if TUNE_SIMPLIFY_SETTINGS
+uint8_t svt_aom_get_enable_sg_rtc(uint8_t input_resolution, uint8_t fast_decode);
+#else
 uint8_t svt_aom_get_enable_sg_rtc(EncMode enc_mode, uint8_t input_resolution, uint8_t fast_decode);
+#endif
 uint8_t svt_aom_get_enable_sg_allintra();
 uint8_t svt_aom_get_enable_restoration_default(EncMode enc_mode, int8_t config_enable_restoration,
                                                uint8_t input_resolution, uint8_t fast_decode);
+#if TUNE_SIMPLIFY_SETTINGS
+uint8_t svt_aom_get_enable_restoration_rtc(int8_t config_enable_restoration, uint8_t input_resolution,
+                                           uint8_t fast_decode);
+#else
 uint8_t svt_aom_get_enable_restoration_rtc(EncMode enc_mode, int8_t config_enable_restoration, uint8_t input_resolution,
                                            uint8_t fast_decode);
+#endif
 uint8_t svt_aom_get_enable_restoration_allintra(EncMode enc_mode, int8_t config_enable_restoration);
 void    svt_aom_set_dist_based_ref_pruning_controls(ModeDecisionContext* ctx, uint8_t dist_based_ref_pruning_level);
 bool    svt_aom_get_disallow_4x4_default(EncMode enc_mode);
-bool    svt_aom_get_disallow_4x4_rtc(EncMode enc_mode);
-bool    svt_aom_get_disallow_4x4_allintra(EncMode enc_mode);
+#if TUNE_SIMPLIFY_SETTINGS
+bool svt_aom_get_disallow_4x4_rtc();
+#else
+bool svt_aom_get_disallow_4x4_rtc(EncMode enc_mode);
+#endif
+bool svt_aom_get_disallow_4x4_allintra(EncMode enc_mode);
 
 bool    svt_aom_get_disallow_8x8_default();
 bool    svt_aom_get_disallow_8x8_rtc(EncMode enc_mode, const uint16_t aligned_width, const uint16_t aligned_height);
 bool    svt_aom_get_disallow_8x8_allintra();
 uint8_t svt_aom_get_nsq_geom_level_default(EncMode enc_mode, InputCoeffLvl coeff_lvl);
+#if TUNE_SIMPLIFY_SETTINGS
+uint8_t svt_aom_get_nsq_geom_level_rtc();
+#else
 uint8_t svt_aom_get_nsq_geom_level_rtc(EncMode enc_mode);
+#endif
 uint8_t svt_aom_get_nsq_geom_level_allintra(EncMode enc_mode);
 
 uint8_t svt_aom_get_nsq_search_level_default(PictureControlSet* pcs, EncMode enc_mode, InputCoeffLvl coeff_lvl,
                                              uint32_t qp);
+#if TUNE_SIMPLIFY_SETTINGS
+uint8_t svt_aom_get_nsq_search_level_rtc(PictureControlSet* pcs, InputCoeffLvl coeff_lvl, uint32_t qp);
+#else
 uint8_t svt_aom_get_nsq_search_level_rtc(PictureControlSet* pcs, EncMode enc_mode, InputCoeffLvl coeff_lvl,
                                          uint32_t qp);
+#endif
 uint8_t svt_aom_get_nsq_search_level_allintra(PictureControlSet* pcs, EncMode enc_mode, uint32_t qp);
 uint8_t get_inter_compound_level(EncMode enc_mode);
 uint8_t get_filter_intra_level_default(EncMode enc_mode);
+#if TUNE_SIMPLIFY_SETTINGS
+uint8_t get_filter_intra_level_rtc();
+#else
 uint8_t get_filter_intra_level_rtc(EncMode enc_mode);
+#endif
 uint8_t get_filter_intra_level_allintra(EncMode enc_mode);
 uint8_t svt_aom_get_inter_intra_level(EncMode enc_mode, uint8_t transition_present);
+#if TUNE_SHIFT_PRESETS_RTC
+uint8_t svt_aom_get_obmc_level(EncMode enc_mode, uint32_t qp, uint8_t seq_qp_mod, bool rtc_tune);
+#else
 uint8_t svt_aom_get_obmc_level(EncMode enc_mode, uint32_t qp, uint8_t seq_qp_mod);
-void    svt_aom_set_nsq_geom_ctrls(ModeDecisionContext* ctx, uint8_t nsq_geom_level, uint8_t* allow_HVA_HVB,
-                                   uint8_t* allow_HV4, uint8_t* min_nsq_bsize);
-void    svt_aom_get_intra_mode_levels_default(EncMode enc_mode, bool is_islice, bool is_base, int transition_present,
-                                              uint32_t* intra_level_ptr, uint32_t* dist_based_ang_intra_level_ptr);
-void    svt_aom_get_intra_mode_levels_rtc(EncMode enc_mode, bool is_islice, bool sc_class1, int transition_present,
-                                          bool flat_rtc_tune, uint32_t* intra_level_ptr,
-                                          uint32_t* dist_based_ang_intra_level_ptr);
+#endif
+void svt_aom_set_nsq_geom_ctrls(ModeDecisionContext* ctx, uint8_t nsq_geom_level, uint8_t* allow_HVA_HVB,
+                                uint8_t* allow_HV4, uint8_t* min_nsq_bsize);
+void svt_aom_get_intra_mode_levels_default(EncMode enc_mode, bool is_islice, bool is_base, int transition_present,
+                                           uint32_t* intra_level_ptr, uint32_t* dist_based_ang_intra_level_ptr);
+#if TUNE_SIMPLIFY_SETTINGS
+void svt_aom_get_intra_mode_levels_rtc(EncMode enc_mode, bool is_islice, int transition_present, bool use_flat_ipp,
+                                       uint32_t* intra_level_ptr, uint32_t* dist_based_ang_intra_level_ptr);
+#else
+void svt_aom_get_intra_mode_levels_rtc(EncMode enc_mode, bool is_islice, bool sc_class1, int transition_present,
+                                       bool flat_rtc_tune, uint32_t* intra_level_ptr,
+                                       uint32_t* dist_based_ang_intra_level_ptr);
+#endif
 void    svt_aom_get_intra_mode_levels_allintra(EncMode enc_mode, uint32_t* intra_level_ptr,
                                                uint32_t* dist_based_ang_intra_level_ptr);
 uint8_t svt_aom_get_tpl_synthesizer_block_size(int8_t tpl_level, uint32_t picture_width, uint32_t picture_height);

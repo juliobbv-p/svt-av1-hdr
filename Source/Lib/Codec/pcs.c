@@ -104,8 +104,12 @@ EbErrorType svt_aom_me_sb_results_ctor(MeSbResults* obj_ptr, PictureControlSetIn
     ResolutionRange resolution;
     svt_aom_derive_input_resolution(&resolution, init_data_ptr->picture_width * init_data_ptr->picture_height);
     uint8_t number_of_pus = svt_aom_get_enable_me_16x16(init_data_ptr->enc_mode)
+#if TUNE_SIMPLIFY_SETTINGS
+        ? svt_aom_get_enable_me_8x8(init_data_ptr->enc_mode, resolution, init_data_ptr->static_config.rtc)
+#else
         ? svt_aom_get_enable_me_8x8(
               init_data_ptr->enc_mode, resolution, init_data_ptr->static_config.rtc, init_data_ptr->use_flat_ipp)
+#endif
             ? SQUARE_PU_COUNT
             : MAX_SB64_PU_COUNT_NO_8X8
         : MAX_SB64_PU_COUNT_WO_16X16;
@@ -393,12 +397,16 @@ EbErrorType pcs_update_param(PictureControlSet* pcs) {
     if ((is_16bit) || (scs->is_16bit_pipeline)) {
         svt_picture_buffer_desc_update(pcs->input_frame16bit, (EbPtr)&coeff_buffer_desc_init_data);
     }
-    if (allintra       ? svt_aom_get_enable_restoration_allintra(scs->static_config.enc_mode,
+    if (allintra ? svt_aom_get_enable_restoration_allintra(scs->static_config.enc_mode,
                                                            scs->static_config.enable_restoration_filtering)
+#if TUNE_SIMPLIFY_SETTINGS
+            : rtc_tune ? svt_aom_get_enable_restoration_rtc(
+#else
             : rtc_tune ? svt_aom_get_enable_restoration_rtc(scs->static_config.enc_mode,
-                                                            scs->static_config.enable_restoration_filtering,
-                                                            scs->input_resolution,
-                                                            scs->static_config.fast_decode)
+#endif
+                             scs->static_config.enable_restoration_filtering,
+                             scs->input_resolution,
+                             scs->static_config.fast_decode)
                        : svt_aom_get_enable_restoration_default(scs->static_config.enc_mode,
                                                                 scs->static_config.enable_restoration_filtering,
                                                                 scs->input_resolution,
@@ -492,11 +500,15 @@ static EbErrorType picture_control_set_ctor(PictureControlSet* object_ptr, EbPtr
     bool enable_restoration                       = allintra
                               ? svt_aom_get_enable_restoration_allintra(init_data_ptr->enc_mode,
                                                   init_data_ptr->static_config.enable_restoration_filtering)
-                              : rtc_tune ? svt_aom_get_enable_restoration_rtc(init_data_ptr->enc_mode,
-                                                        init_data_ptr->static_config.enable_restoration_filtering,
-                                                        init_data_ptr->input_resolution,
-                                                        init_data_ptr->static_config.fast_decode)
-                                         : svt_aom_get_enable_restoration_default(init_data_ptr->enc_mode,
+#if TUNE_SIMPLIFY_SETTINGS
+        : rtc_tune ? svt_aom_get_enable_restoration_rtc(
+#else
+        : rtc_tune ? svt_aom_get_enable_restoration_rtc(init_data_ptr->enc_mode,
+#endif
+                         init_data_ptr->static_config.enable_restoration_filtering,
+                         init_data_ptr->input_resolution,
+                         init_data_ptr->static_config.fast_decode)
+                   : svt_aom_get_enable_restoration_default(init_data_ptr->enc_mode,
                                                             init_data_ptr->static_config.enable_restoration_filtering,
                                                             init_data_ptr->input_resolution,
                                                             init_data_ptr->static_config.fast_decode);
@@ -559,6 +571,7 @@ static EbErrorType picture_control_set_ctor(PictureControlSet* object_ptr, EbPtr
     object_ptr->sb_total_count_unscaled = all_sb;
     EB_ALLOC_PTR_ARRAY(object_ptr->sb_ptr_array, object_ptr->sb_total_count_unscaled);
     for (sb_index = 0; sb_index < all_sb; ++sb_index) {
+#if TUNE_SIMPLIFY_SETTINGS
         EB_NEW(object_ptr->sb_ptr_array[sb_index],
                svt_aom_largest_coding_unit_ctor,
                (uint8_t)init_data_ptr->sb_size,
@@ -569,6 +582,18 @@ static EbErrorType picture_control_set_ctor(PictureControlSet* object_ptr, EbPtr
                init_data_ptr->static_config.rtc,
                allintra,
                object_ptr);
+#else
+        EB_NEW(object_ptr->sb_ptr_array[sb_index],
+               svt_aom_largest_coding_unit_ctor,
+               (uint8_t)init_data_ptr->sb_size,
+               (uint16_t)(sb_origin_x * max_blk_size),
+               (uint16_t)(sb_origin_y * max_blk_size),
+               (uint16_t)sb_index,
+               init_data_ptr->enc_mode,
+               init_data_ptr->static_config.rtc,
+               allintra,
+               object_ptr);
+#endif
         // Increment the Order in coding order (Raster Scan Order)
         sb_origin_y = (sb_origin_x == picture_sb_w - 1) ? sb_origin_y + 1 : sb_origin_y;
         sb_origin_x = (sb_origin_x == picture_sb_w - 1) ? 0 : sb_origin_x + 1;
@@ -1065,8 +1090,12 @@ static EbErrorType picture_control_set_ctor(PictureControlSet* object_ptr, EbPtr
             break;
         }
         uint8_t nsq_geom_lvl = allintra ? svt_aom_get_nsq_geom_level_allintra(init_data_ptr->enc_mode)
-            : rtc_tune                  ? svt_aom_get_nsq_geom_level_rtc(init_data_ptr->enc_mode)
-                                        : svt_aom_get_nsq_geom_level_default(init_data_ptr->enc_mode, coeff_lvl);
+#if TUNE_SIMPLIFY_SETTINGS
+            : rtc_tune ? svt_aom_get_nsq_geom_level_rtc()
+#else
+            : rtc_tune ? svt_aom_get_nsq_geom_level_rtc(init_data_ptr->enc_mode)
+#endif
+                       : svt_aom_get_nsq_geom_level_default(init_data_ptr->enc_mode, coeff_lvl);
         // nsq_geom_lvl level 0 means NSQ shapes are disallowed so don't adjust based on the level
         if (nsq_geom_lvl) {
             uint8_t allow_HVA_HVB, allow_HV4, min_nsq_bsize;
@@ -1081,8 +1110,12 @@ static EbErrorType picture_control_set_ctor(PictureControlSet* object_ptr, EbPtr
     }
 
     disallow_4x4 = allintra ? MIN(disallow_4x4, svt_aom_get_disallow_4x4_allintra(init_data_ptr->enc_mode))
-        : rtc_tune          ? MIN(disallow_4x4, svt_aom_get_disallow_4x4_rtc(init_data_ptr->enc_mode))
-                            : MIN(disallow_4x4, svt_aom_get_disallow_4x4_default(init_data_ptr->enc_mode));
+#if TUNE_SIMPLIFY_SETTINGS
+        : rtc_tune ? MIN(disallow_4x4, svt_aom_get_disallow_4x4_rtc())
+#else
+        : rtc_tune ? MIN(disallow_4x4, svt_aom_get_disallow_4x4_rtc(init_data_ptr->enc_mode))
+#endif
+                   : MIN(disallow_4x4, svt_aom_get_disallow_4x4_default(init_data_ptr->enc_mode));
 
     object_ptr->disallow_4x4_all_frames = disallow_4x4;
     disallow_8x8                        = allintra ? MIN(disallow_8x8, svt_aom_get_disallow_8x8_allintra())
@@ -1410,8 +1443,12 @@ static EbErrorType picture_parent_control_set_ctor(PictureParentControlSet* obje
 
     // 8x8 can only be used if 16x16 is enabled
     object_ptr->enable_me_8x8 = object_ptr->enable_me_16x16
+#if TUNE_SIMPLIFY_SETTINGS
+        ? svt_aom_get_enable_me_8x8(init_data_ptr->enc_mode, resolution, init_data_ptr->static_config.rtc)
+#else
         ? svt_aom_get_enable_me_8x8(
               init_data_ptr->enc_mode, resolution, init_data_ptr->static_config.rtc, init_data_ptr->use_flat_ipp)
+#endif
         : 0;
     EB_NEW(object_ptr->dg_detector, svt_aom_dg_detector_seg_ctor);
     return return_error;

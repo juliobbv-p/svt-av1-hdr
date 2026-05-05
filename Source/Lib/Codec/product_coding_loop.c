@@ -6629,7 +6629,11 @@ static void full_loop_core(PictureControlSet* pcs, ModeDecisionContext* ctx, Mod
     }
     // Check if should perform TX type search
     if (ctx->blk_geom->sq_size <= 64 && start_tx_depth == 0 && end_tx_depth == 0 && // TXS off
+#if TUNE_SIMPLIFY_SETTINGS
+        (!pcs->ppcs->sc_class1 || pcs->scs->static_config.rtc) &&
+#else
         !pcs->ppcs->sc_class1 && // Can't be SC b/c SC tries DCT_DCT and IDTX when only_dct_dct is 1
+#endif
         search_dct_dct_only(pcs,
                             ctx,
                             cand_bf,

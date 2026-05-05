@@ -91,13 +91,22 @@ EbErrorType svt_aom_rest_context_ctor(EbThreadContext* thread_ctx, const EbEncHa
     uint8_t enable_restoration = allintra
         ? svt_aom_get_enable_restoration_allintra(config->enc_mode, config->enable_restoration_filtering)
         : rtc_tune
+#if TUNE_SIMPLIFY_SETTINGS
+        ? svt_aom_get_enable_restoration_rtc(
+              config->enable_restoration_filtering, scs->input_resolution, config->fast_decode)
+#else
         ? svt_aom_get_enable_restoration_rtc(
               config->enc_mode, config->enable_restoration_filtering, scs->input_resolution, config->fast_decode)
+#endif
         : svt_aom_get_enable_restoration_default(
               config->enc_mode, config->enable_restoration_filtering, scs->input_resolution, config->fast_decode);
 
     uint8_t enable_sg = allintra ? svt_aom_get_enable_sg_allintra()
+#if TUNE_SIMPLIFY_SETTINGS
+        : rtc_tune ? svt_aom_get_enable_sg_rtc(scs->input_resolution, config->fast_decode)
+#else
         : rtc_tune ? svt_aom_get_enable_sg_rtc(config->enc_mode, scs->input_resolution, config->fast_decode)
+#endif
                    : svt_aom_get_enable_sg_default(config->enc_mode, scs->input_resolution, config->fast_decode);
 
     if (enable_restoration) {
