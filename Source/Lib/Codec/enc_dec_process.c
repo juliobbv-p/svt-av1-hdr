@@ -3052,7 +3052,15 @@ void* svt_aom_mode_decision_kernel(void* input_ptr) {
                         }
                         exaustive_light_pd1_features(md_ctx, ppcs, md_ctx->lpd1_ctrls.pd1_level > REGULAR_PD1, 0);
                         if (md_ctx->lpd1_ctrls.pd1_level > REGULAR_PD1) {
+#if OPT_LPD1
+                            if (scs->static_config.rtc) {
+                                svt_aom_sig_deriv_enc_dec_light_pd1_rtc(pcs, ed_ctx->md_ctx);
+                            } else {
+                                svt_aom_sig_deriv_enc_dec_light_pd1_default(pcs, ed_ctx->md_ctx);
+                            }
+#else
                             svt_aom_sig_deriv_enc_dec_light_pd1(pcs, ed_ctx->md_ctx);
+#endif
                         } else if (scs->allintra) {
                             svt_aom_sig_deriv_enc_dec_allintra(pcs, ed_ctx->md_ctx);
                         } else if (scs->static_config.rtc) {

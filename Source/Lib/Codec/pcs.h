@@ -305,6 +305,10 @@ typedef struct PictureControlSet {
     uint8_t md_sq_mv_search_level;
     uint8_t md_nsq_mv_search_level;
     uint8_t md_pme_level;
+#if OPT_LPD1
+    uint8_t me_subpel_level;
+    uint8_t pme_subpel_level;
+#endif
     uint8_t mds0_level;
     uint8_t rdoq_level;
 #if OPT_COEFF_SHAVING

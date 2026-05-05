@@ -410,7 +410,9 @@ typedef struct MdSubPelSearchCtrls {
     uint8_t skip_diag_refinement;
     // Specifies whether the Sub-Pel search will be performed for around (0,0) or not (0: OFF, 1:
     // ON)
+#if !OPT_LPD1
     uint8_t skip_zz_mv;
+#endif
     uint8_t min_blk_sz; //blk size below which we skip subpel
     uint8_t mvp_th; // when > 0, use mvp info to skip hpel search. skip if ME is  worse than MVP.
     // Skip high precision (1/8-Pel) when the ME vs. MVP MV difference (x or y) is larger than the threshold.

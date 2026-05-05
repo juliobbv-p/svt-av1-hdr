@@ -682,7 +682,12 @@ typedef enum ATTRIBUTE_PACKED {
     LPD1_LVL_2 = 2, // Light PD1 path, having more shortcuts than previous LPD1 level
     LPD1_LVL_3 = 3, // Light PD1 path, having more shortcuts than previous LPD1 level
     LPD1_LVL_4 = 4, // Light PD1 path, having more shortcuts than previous LPD1 level
+#if OPT_LPD1
+    LPD1_LVL_5 = 5, // Light PD1 path, having more shortcuts than previous LPD1 level
+    LPD1_LVL_6 = 6, // Light-PD1 path, with most aggressive feature levels
+#else
     LPD1_LVL_5 = 5, // Light-PD1 path, with most aggressive feature levels
+#endif
     LPD1_LEVELS // Number of light-PD1 paths (regular PD1 isn't a light-PD1 path)
 } Pd1Level;
 
@@ -765,8 +770,12 @@ enum {
 enum {
     SUBPEL_TREE        = 0,
     SUBPEL_TREE_PRUNED = 1, // Prunes 1/2-pel searches
-    //SUBPEL_TREE_PRUNED_MORE = 2,      // Not supported - (from libaom: Prunes 1/2-pel searches more aggressively)
-    //SUBPEL_TREE_PRUNED_EVENMORE = 3,  // Not supported - (from libaom: Prunes 1/2- and 1/4-pel searches)
+#if OPT_LPD1
+    SUBPEL_FIXED_STAGE_SEARCH = 2,
+#else
+//SUBPEL_TREE_PRUNED_MORE = 2,      // Not supported - (from libaom: Prunes 1/2-pel searches more aggressively)
+//SUBPEL_TREE_PRUNED_EVENMORE = 3,  // Not supported - (from libaom: Prunes 1/2- and 1/4-pel searches)
+#endif
 } UENUM1BYTE(SUBPEL_SEARCH_METHODS);
 
 enum { EIGHTH_PEL, QUARTER_PEL, HALF_PEL, FULL_PEL } UENUM1BYTE(SUBPEL_FORCE_STOP);

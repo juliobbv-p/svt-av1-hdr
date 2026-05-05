@@ -184,6 +184,10 @@ void* svt_aom_entropy_coding_kernel(void* input_ptr) {
         svt_release_mutex(pcs->entropy_coding_pic_mutex);
 
         if (!svt_aom_is_pic_skipped(pcs->ppcs)) {
+#if OPT_STATS_MUTEX
+            context_ptr->tot_qindex = 0;
+            context_ptr->valid_area = 0;
+#endif
             for (uint32_t y_sb_index = 0; y_sb_index < tile_height_in_sb; ++y_sb_index) {
                 for (uint32_t x_sb_index = 0; x_sb_index < tile_width_in_sb; ++x_sb_index) {
                     uint16_t    sb_index = (uint16_t)((x_sb_index + tile_sb_start_x) +
@@ -218,6 +222,11 @@ void* svt_aom_entropy_coding_kernel(void* input_ptr) {
         svt_aom_encode_slice_finish(pcs->ec_info[tile_idx]->ec);
 
         svt_block_on_mutex(pcs->entropy_coding_pic_mutex);
+#if OPT_STATS_MUTEX
+        // Flush locally-accumulated qindex stats (avoids per-block mutex)
+        pcs->ppcs->tot_qindex += context_ptr->tot_qindex;
+        pcs->ppcs->valid_qindex_area += context_ptr->valid_area;
+#endif
         pcs->ec_info[tile_idx]->entropy_coding_tile_done = true;
         for (uint16_t i = 0; i < tile_cnt; i++) {
             if (pcs->ec_info[i]->entropy_coding_tile_done == false) {

@@ -40,8 +40,12 @@ void    svt_aom_sig_deriv_multi_processes_default(SequenceControlSet* scs, Pictu
 void    svt_aom_sig_deriv_multi_processes_rtc(SequenceControlSet* scs, PictureParentControlSet* pcs);
 void    svt_aom_sig_deriv_multi_processes_allintra(SequenceControlSet* scs, PictureParentControlSet* pcs);
 void    svt_aom_sig_deriv_me_tf(PictureParentControlSet* pcs, MeContext* me_ctx);
-
+#if OPT_LPD1
+void svt_aom_sig_deriv_enc_dec_light_pd1_default(PictureControlSet* pcs, ModeDecisionContext* ctx);
+void svt_aom_sig_deriv_enc_dec_light_pd1_rtc(PictureControlSet* pcs, ModeDecisionContext* ctx);
+#else
 void svt_aom_sig_deriv_enc_dec_light_pd1(PictureControlSet* pcs, ModeDecisionContext* ctx);
+#endif
 void svt_aom_sig_deriv_enc_dec_light_pd0(SequenceControlSet* scs, PictureControlSet* pcs, ModeDecisionContext* ctx);
 void svt_aom_sig_deriv_enc_dec_common(SequenceControlSet* scs, PictureControlSet* pcs, ModeDecisionContext* ctx);
 

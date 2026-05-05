@@ -68,6 +68,12 @@ extern "C" {
 #define OPT_EC_MERGE_COEFF_LOOPS   1 // Merge backward/forward coefficient coding loops
 #define OPT_GATE_SB_LAMBDA_MOD     1 // Gate stats_based_sb_lambda_modulation behind preset check
 
+#define OPT_LPD1                   1 // Optimize LPD1: fixed-stage subpel, bias_fp, unify VLPD1, remove skip_zz_mv, fix rate-est
+#define TUNE_LPD1_LEVEL            1 // Unified pic_lpd1_lvl derivation for RTC (remove sc_class1 special case)
+#define OPT_STATS_MUTEX            1 // Use local accumulators for qindex stats instead of per-block mutex
+#define OPT_SKIP_INTRA             1 // Skip INTRA using me-distortion
+
+
 //FOR DEBUGGING - Do not remove
 #define LOG_ENC_DONE            0 // log encoder job one
 #define DEBUG_TPL               0 // Prints to debug TPL

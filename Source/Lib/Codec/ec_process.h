@@ -61,6 +61,10 @@ typedef struct EntropyCodingContext {
    */
     WienerInfo  wiener_info[MAX_PLANES];
     SgrprojInfo sgrproj_info[MAX_PLANES];
+#if OPT_STATS_MUTEX
+    uint64_t tot_qindex; // qindex accumulator
+    uint32_t valid_area; // valid area accumulator
+#endif
 } EntropyCodingContext;
 
 /**************************************

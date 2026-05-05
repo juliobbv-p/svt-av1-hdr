@@ -2575,7 +2575,11 @@ static int md_subpel_search(SUBPEL_STAGE       search_stage, //ME or PME
     ms_params->round_dev_th                     = md_subpel_ctrls.round_dev_th;
     ms_params->skip_diag_refinement             = md_subpel_ctrls.skip_diag_refinement;
     uint8_t early_exit = (ctx->is_intra_bordered && ctx->cand_reduction_ctrls.use_neighbouring_mode_ctrls.enabled) ||
+#if OPT_LPD1
+        (ctx->blk_geom->sq_size <= md_subpel_ctrls.min_blk_sz);
+#else
         (md_subpel_ctrls.skip_zz_mv && best_mv.as_int == 0) || (ctx->blk_geom->sq_size <= md_subpel_ctrls.min_blk_sz);
+#endif
     ms_params->var_params.bias_fp = md_subpel_ctrls.bias_fp;
     int besterr                   = subpel_search_method(ctx,
                                        xd,
@@ -2594,6 +2598,94 @@ static int md_subpel_search(SUBPEL_STAGE       search_stage, //ME or PME
     return besterr;
 }
 
+#if OPT_LPD1
+static uint32_t md_subpel_search_fixed_stage(ModeDecisionContext* ctx, const EbPictureBufferDesc* ref_pic,
+                                             const uint8_t* src, const int src_stride, Mv* me_mv) {
+    const uint8_t* ref_buf    = ref_pic->y_buffer;
+    const int      blk_org_x  = ctx->blk_org_x;
+    const int      blk_org_y  = ctx->blk_org_y;
+    const int      ref_w      = ref_pic->width;
+    const int      ref_h_px   = ref_pic->height;
+    const int      blk_w      = ctx->blk_geom->bwidth;
+    const int      blk_h      = ctx->blk_geom->bheight;
+    const int      ref_stride = ref_pic->y_stride;
+
+    const AomVarianceFnPtr* fn_ptr  = &svt_aom_mefn_ptr[ctx->blk_geom->bsize];
+    const int               mv_x_fp = me_mv->x;
+    const int               mv_y_fp = me_mv->y;
+    const uint16_t          bias_fp = ctx->md_subpel_me_ctrls.bias_fp;
+
+    static const int8_t hpel_dx[4] = {4, -4, 0, 0};
+    static const int8_t hpel_dy[4] = {0, 0, 4, -4};
+    uint32_t            best_var   = UINT32_MAX;
+    int                 best_dx = 0, best_dy = 0;
+
+    // integer-pel baseline
+    {
+        const int fp_x = blk_org_x + (mv_x_fp >> 3);
+        const int fp_y = blk_org_y + (mv_y_fp >> 3);
+        if (fp_x >= 0 && fp_y >= 0 && fp_x + blk_w <= ref_w && fp_y + blk_h <= ref_h_px) {
+            unsigned int sse;
+            best_var = fn_ptr->vf(ref_buf + fp_x + fp_y * ref_stride, ref_stride, src, src_stride, &sse);
+        }
+    }
+
+    // half-pel neighbors
+    for (int i = 0; i < 4; ++i) {
+        const int subx = (mv_x_fp + hpel_dx[i]) & 7;
+        const int suby = (mv_y_fp + hpel_dy[i]) & 7;
+        const int fp_x = blk_org_x + ((mv_x_fp + hpel_dx[i]) >> 3);
+        const int fp_y = blk_org_y + ((mv_y_fp + hpel_dy[i]) >> 3);
+        if (fp_x < 0 || fp_y < 0 || fp_x + blk_w > ref_w || fp_y + blk_h > ref_h_px) {
+            continue;
+        }
+        unsigned int   sse;
+        const uint32_t var = fn_ptr->svf(
+            ref_buf + fp_x + fp_y * ref_stride, ref_stride, subx, suby, src, src_stride, &sse);
+        const uint32_t biased_var = (bias_fp && best_dx == 0 && best_dy == 0)
+            ? (uint32_t)(((uint64_t)var * bias_fp) / 100)
+            : var;
+        if (biased_var < best_var) {
+            best_var = var;
+            best_dx  = hpel_dx[i];
+            best_dy  = hpel_dy[i];
+        }
+    }
+
+    // quarter-pel neighbors
+    if (ctx->md_subpel_me_ctrls.max_precision <= QUARTER_PEL) {
+        static const int8_t qpel_dx[4] = {2, -2, 0, 0};
+        static const int8_t qpel_dy[4] = {0, 0, 2, -2};
+
+        for (int i = 0; i < 4; ++i) {
+            const int tot_dx = best_dx + qpel_dx[i];
+            const int tot_dy = best_dy + qpel_dy[i];
+            const int subx   = (mv_x_fp + tot_dx) & 7;
+            const int suby   = (mv_y_fp + tot_dy) & 7;
+            const int fp_x   = blk_org_x + ((mv_x_fp + tot_dx) >> 3);
+            const int fp_y   = blk_org_y + ((mv_y_fp + tot_dy) >> 3);
+            if (fp_x < 0 || fp_y < 0 || fp_x + blk_w > ref_w || fp_y + blk_h > ref_h_px) {
+                continue;
+            }
+            unsigned int   sse;
+            const uint32_t var = fn_ptr->svf(
+                ref_buf + fp_x + fp_y * ref_stride, ref_stride, subx, suby, src, src_stride, &sse);
+            const uint32_t biased_var = (bias_fp && best_dx == 0 && best_dy == 0)
+                ? (uint32_t)(((uint64_t)var * bias_fp) / 100)
+                : var;
+            if (biased_var < best_var) {
+                best_var = var;
+                best_dx  = tot_dx;
+                best_dy  = tot_dy;
+            }
+        }
+    }
+    me_mv->x = (int16_t)(mv_x_fp + best_dx);
+    me_mv->y = (int16_t)(mv_y_fp + best_dy);
+    return best_var;
+}
+#endif
+
 // Copy ME_MVs (generated @ PA) from input buffer (pcs-> .. ->me_results) to local
 // MD buffers (ctx->sb_me_mv) - simplified for LPD1
 static void read_refine_me_mvs_light_pd1(PictureControlSet* pcs, EbPictureBufferDesc* input_pic,
@@ -2606,7 +2698,9 @@ static void read_refine_me_mvs_light_pd1(PictureControlSet* pcs, EbPictureBuffer
     const uint8_t      max_l0     = pcs->ppcs->pa_me_data->max_l0;
 
     const bool subpel_enabled = ctx->md_subpel_me_ctrls.enabled;
-    const bool skip_zero_mv   = ctx->md_subpel_me_ctrls.skip_zz_mv;
+#if !OPT_LPD1
+    const bool skip_zero_mv = ctx->md_subpel_me_ctrls.skip_zz_mv;
+#endif
 
     const bool no_mv_stack = ctx->shut_fast_rate;
 
@@ -2634,8 +2728,12 @@ static void read_refine_me_mvs_light_pd1(PictureControlSet* pcs, EbPictureBuffer
                 // can only skip if using dc only b/c otherwise need cost at candidate generation
                 const bool skip_subpel = (ctx->is_intra_bordered &&
                                           ctx->cand_reduction_ctrls.use_neighbouring_mode_ctrls.enabled) ||
+#if OPT_LPD1
+                    (ctx->blk_geom->sq_size <= ctx->md_subpel_me_ctrls.min_blk_sz);
+#else
                     (skip_zero_mv && me_mv.x == 0 && me_mv.y == 0) ||
                     (ctx->blk_geom->sq_size <= ctx->md_subpel_me_ctrls.min_blk_sz);
+#endif
 
                 if (subpel_enabled && !skip_subpel) {
                     if (no_mv_stack) {
@@ -2647,8 +2745,20 @@ static void read_refine_me_mvs_light_pd1(PictureControlSet* pcs, EbPictureBuffer
                             ctx, ref_pair, NEWMV, me_mv, (Mv){{0}}, &drl_index, best_pred_mv);
                         ctx->ref_mv.as_int = best_pred_mv[0].as_int;
                     }
+#if OPT_LPD1
+                    if (ctx->md_subpel_me_ctrls.subpel_search_method == SUBPEL_FIXED_STAGE_SEARCH) {
+                        const uint8_t* src = input_pic->y_buffer + ctx->blk_org_x +
+                            (ctx->blk_org_y) * input_pic->y_stride;
+                        ctx->post_subpel_me_mv_cost[list][ref] = md_subpel_search_fixed_stage(
+                            ctx, ref_pic, src, input_pic->y_stride, &me_mv);
+                    } else {
+                        ctx->post_subpel_me_mv_cost[list][ref] = md_subpel_search(
+                            SPEL_ME, pcs, ctx, ctx->md_subpel_me_ctrls, rf[0], &me_mv);
+                    }
+#else
                     ctx->post_subpel_me_mv_cost[list][ref] = md_subpel_search(
                         SPEL_ME, pcs, ctx, ctx->md_subpel_me_ctrls, rf[0], &me_mv);
+#endif
 
                     if (ctx->post_subpel_me_mv_cost[list][ref] < ctx->md_me_dist) {
                         ctx->md_me_dist = ctx->post_subpel_me_mv_cost[list][ref];
@@ -2743,8 +2853,20 @@ static void read_refine_me_mvs(PictureControlSet* pcs, ModeDecisionContext* ctx,
                 ctx->fp_me_mv[list][ref].as_int        = me_mv.as_int;
 
                 if (do_subpel) {
+#if OPT_LPD1
+                    if (ctx->md_subpel_me_ctrls.subpel_search_method == SUBPEL_FIXED_STAGE_SEARCH) {
+                        const uint8_t* src = input_pic->y_buffer + ctx->blk_org_x +
+                            (ctx->blk_org_y) * input_pic->y_stride;
+                        ctx->post_subpel_me_mv_cost[list][ref] = md_subpel_search_fixed_stage(
+                            ctx, ref_pic, src, input_pic->y_stride, &me_mv);
+                    } else {
+                        ctx->post_subpel_me_mv_cost[list][ref] = md_subpel_search(
+                            SPEL_ME, pcs, ctx, md_subpel_me_ctrls, rf[0], &me_mv);
+                    }
+#else
                     ctx->post_subpel_me_mv_cost[list][ref] = md_subpel_search(
                         SPEL_ME, pcs, ctx, md_subpel_me_ctrls, rf[0], &me_mv);
+#endif
                     if (ctx->post_subpel_me_mv_cost[list][ref] < ctx->md_me_dist) {
                         ctx->md_me_dist = ctx->post_subpel_me_mv_cost[list][ref];
                     }
@@ -3198,8 +3320,19 @@ static void pme_search(PictureControlSet* pcs, ModeDecisionContext* ctx, EbPictu
                 }
             }
             if (ctx->md_subpel_pme_ctrls.enabled) {
+#if OPT_LPD1
+                if (ctx->md_subpel_me_ctrls.subpel_search_method == SUBPEL_FIXED_STAGE_SEARCH) {
+                    const uint8_t* src = input_pic->y_buffer + ctx->blk_org_x + (ctx->blk_org_y) * input_pic->y_stride;
+                    post_subpel_pme_mv_cost = md_subpel_search_fixed_stage(
+                        ctx, ref_pic, src, input_pic->y_stride, &best_search_mv);
+                } else {
+                    post_subpel_pme_mv_cost = (uint32_t)md_subpel_search(
+                        SPEL_PME, pcs, ctx, ctx->md_subpel_pme_ctrls, rf[0], &best_search_mv);
+                }
+#else
                 post_subpel_pme_mv_cost = (uint32_t)md_subpel_search(
                     SPEL_PME, pcs, ctx, ctx->md_subpel_pme_ctrls, rf[0], &best_search_mv);
+#endif
             }
             ctx->best_pme_mv[list_idx][ref_idx].as_int = best_search_mv.as_int;
             ctx->valid_pme_mv[list_idx][ref_idx]       = 1;

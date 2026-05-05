@@ -5578,10 +5578,15 @@ static EbErrorType write_modes_b(PictureControlSet* pcs, EntropyCodingContext* e
             }
         }
     }
+#if OPT_STATS_MUTEX
+    ec_ctx->tot_qindex += (uint64_t)blk_ptr->qindex * bwidth * bheight;
+    ec_ctx->valid_area += bwidth * bheight;
+#else
     svt_block_on_mutex(pcs->entropy_coding_pic_mutex);
     pcs->ppcs->tot_qindex += blk_ptr->qindex * bwidth * bheight;
     pcs->ppcs->valid_qindex_area += bwidth * bheight;
     svt_release_mutex(pcs->entropy_coding_pic_mutex);
+#endif
     // Update the neighbors
     ec_update_neighbors(pcs, ec_ctx, blk_org_x, blk_org_y, tile_idx, bsize);
 
