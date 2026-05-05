@@ -2792,6 +2792,13 @@ static void write_sequence_header(SequenceControlSet* scs, AomWriteBitBuffer* wb
     if (max_frame_height > (1 << frame_height_bits)) {
         ++frame_height_bits;
     }
+    // AV1 spec requires at least 1 bit for frame dimensions
+    if (frame_width_bits < 1) {
+        frame_width_bits = 1;
+    }
+    if (frame_height_bits < 1) {
+        frame_height_bits = 1;
+    }
     scs->seq_header.frame_width_bits  = frame_width_bits;
     scs->seq_header.frame_height_bits = frame_height_bits;
 

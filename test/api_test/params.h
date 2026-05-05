@@ -173,6 +173,13 @@ static const vector<uint32_t> default_source_width = {
     0,
 };
 static const vector<uint32_t> valid_source_width = {
+    1,
+    2,
+    3,
+    4,
+    8,
+    16,
+    32,
     64,
     320,
     640,
@@ -185,15 +192,7 @@ static const vector<uint32_t> valid_source_width = {
 };
 static const vector<uint32_t> invalid_source_width = {
     0,
-    1,
-    2,
-    4,
-    8,
-    16,
-    32,
-    63,
-    65,
-    4097,  // ...
+    16385,  // > 16384
 };
 
 /* The height of input source in units of picture luma pixels.
@@ -203,6 +202,13 @@ static const vector<uint32_t> default_source_height = {
     0,
 };
 static const vector<uint32_t> valid_source_height = {
+    1,
+    2,
+    3,
+    4,
+    8,
+    16,
+    32,
     64,
     240,
     480,
@@ -214,15 +220,7 @@ static const vector<uint32_t> valid_source_height = {
 };
 static const vector<uint32_t> invalid_source_height = {
     0,
-    1,
-    2,
-    4,
-    8,
-    16,
-    32,
-    63,
-    65,
-    2161,  // ...
+    8705,  // > 8704
 };
 
 // TODO: follwoing two parameters should be a combination test

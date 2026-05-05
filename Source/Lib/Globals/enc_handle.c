@@ -228,12 +228,12 @@ void set_segments_numbers(SequenceControlSet* scs) {
 
     scs->enc_dec_segment_row_count_array =
         (lp == PARALLEL_LEVEL_1 || is_pic_dimension_single_sb(scs->super_block_size, scs->max_input_luma_width)) ? 1
-        : (scs->super_block_size == 128) ? ((scs->max_input_luma_height + 64) / 128)
-                                         : ((scs->max_input_luma_height + 32) / 64);
+        : (scs->super_block_size == 128) ? MAX((int32_t)((scs->max_input_luma_height + 64) / 128), 1)
+                                         : MAX((int32_t)((scs->max_input_luma_height + 32) / 64), 1);
     scs->enc_dec_segment_col_count_array =
         (lp == PARALLEL_LEVEL_1 || is_pic_dimension_single_sb(scs->super_block_size, scs->max_input_luma_height)) ? 1
-        : (scs->super_block_size == 128) ? ((scs->max_input_luma_width + 64) / 128)
-                                         : ((scs->max_input_luma_width + 32) / 64);
+        : (scs->super_block_size == 128) ? MAX((int32_t)((scs->max_input_luma_width + 64) / 128), 1)
+                                         : MAX((int32_t)((scs->max_input_luma_width + 32) / 64), 1);
 
     scs->me_segment_row_count_array = scs->tf_segment_row_count = (lp == PARALLEL_LEVEL_1) ? 1
         : (((scs->max_input_luma_height + 32) / BLOCK_SIZE_64) < 6)                        ? 1
@@ -255,9 +255,11 @@ void set_segments_numbers(SequenceControlSet* scs) {
     scs->tpl_segment_row_count_array = (lp == PARALLEL_LEVEL_1 ||
                                         is_pic_dimension_single_sb(64, scs->max_input_luma_width))
         ? 1
-        : ((scs->max_input_luma_height + 32) / 64);
+        : MAX((int32_t)((scs->max_input_luma_height + 32) / 64), 1);
 
-    scs->tpl_segment_col_count_array = (lp == PARALLEL_LEVEL_1) ? 1 : ((scs->max_input_luma_width + 32) / 64);
+    scs->tpl_segment_col_count_array = (lp == PARALLEL_LEVEL_1)
+        ? 1
+        : MAX((int32_t)((scs->max_input_luma_width + 32) / 64), 1);
 
     scs->cdef_segment_row_count    = (lp == PARALLEL_LEVEL_1)          ? 1
            : (((scs->max_input_luma_height + 32) / BLOCK_SIZE_64) < 6) ? 1

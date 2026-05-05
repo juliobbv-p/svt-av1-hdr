@@ -46,12 +46,12 @@ EbErrorType svt_av1_verify_settings(SequenceControlSet* scs) {
         SVT_ERROR("EncoderMode must be in the range of [-1-%d]\n", MAX_ENC_PRESET);
         return_error = EB_ErrorBadParameter;
     }
-    if (scs->max_input_luma_width < 4) {
-        SVT_ERROR("Source Width must be at least 4\n");
+    if (scs->max_input_luma_width < 1) {
+        SVT_ERROR("Source Width must be at least 1\n");
         return_error = EB_ErrorBadParameter;
     }
-    if (scs->max_input_luma_height < 4) {
-        SVT_ERROR("Source Height must be at least 4\n");
+    if (scs->max_input_luma_height < 1) {
+        SVT_ERROR("Source Height must be at least 1\n");
         return_error = EB_ErrorBadParameter;
     }
     if (config->pred_structure > RANDOM_ACCESS) {
@@ -178,12 +178,12 @@ EbErrorType svt_av1_verify_settings(SequenceControlSet* scs) {
         return_error = EB_ErrorBadParameter;
     }
 
-    if (scs->seq_header.max_frame_width < 4) {
-        SVT_ERROR("Forced Max Width must be at least 4\n");
+    if (scs->seq_header.max_frame_width < 1) {
+        SVT_ERROR("Forced Max Width must be at least 1\n");
         return_error = EB_ErrorBadParameter;
     }
-    if (scs->seq_header.max_frame_height < 4) {
-        SVT_ERROR("Forced Max Height must be at least 4\n");
+    if (scs->seq_header.max_frame_height < 1) {
+        SVT_ERROR("Forced Max Height must be at least 1\n");
         return_error = EB_ErrorBadParameter;
     }
     if (scs->seq_header.max_frame_width > 16384) {
@@ -197,8 +197,8 @@ EbErrorType svt_av1_verify_settings(SequenceControlSet* scs) {
 
     // This is not an AV1 spec limitation, but an implementation limitation in the encoder
     // This check will stay in place until restoration filtering can handle these dimensions
-    if ((scs->max_input_luma_width >= 4 && scs->max_input_luma_width < 64) ||
-        (scs->max_input_luma_height >= 4 && scs->max_input_luma_height < 64)) {
+    if ((scs->max_input_luma_width >= 1 && scs->max_input_luma_width < 64) ||
+        (scs->max_input_luma_height >= 1 && scs->max_input_luma_height < 64)) {
         if (config->aq_mode != 0) {
             SVT_WARN("AQ mode %i is unsupported with source dimensions (%i / %i), setting AQ mode to 0\n",
                      config->aq_mode,

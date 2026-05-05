@@ -198,3 +198,124 @@ TEST(EncApiTest, DISABLED_repeat_normal_setup) {
 }
 
 }  // namespace
+
+/**
+ * @brief Small resolution encoding tests
+ *
+ * Test strategy:
+ * Initialize encoder with small resolutions, send a dummy frame,
+ * retrieve output, and verify no crashes or hangs occur.
+ *
+ * Covers: 1x1, 3x3, 4x4, 64x1, 65x1, 360x1, 1x360
+ * These test the minimum dimension support and the segment count
+ * fix for non-square small images.
+ */
+
+struct SmallResParam {
+    uint32_t width;
+    uint32_t height;
+};
+
+using SmallResEncodeTest = ::testing::TestWithParam<SmallResParam>;
+
+TEST_P(SmallResEncodeTest, encode_one_frame) {
+    const SmallResParam &p = GetParam();
+    svt_av1_test::SvtAv1Context ctxt{};
+
+    // init handle
+    ASSERT_EQ(EB_ErrorNone,
+              svt_av1_enc_init_handle(&ctxt.enc_handle, &ctxt.enc_params));
+
+    // configure for small resolution AVIF-style encoding
+    ctxt.enc_params.source_width = p.width;
+    ctxt.enc_params.source_height = p.height;
+    ctxt.enc_params.encoder_bit_depth = 8;
+    ctxt.enc_params.encoder_color_format = EB_YUV420;
+    ctxt.enc_params.pred_structure = ALL_INTRA;
+
+    ASSERT_EQ(EB_ErrorNone,
+              svt_av1_enc_set_parameter(ctxt.enc_handle, &ctxt.enc_params));
+
+    // open encoder
+    ASSERT_EQ(EB_ErrorNone, svt_av1_enc_init(ctxt.enc_handle));
+
+    // allocate and send a dummy input frame (all zeros)
+    EbBufferHeaderType input_buf{};
+    input_buf.size = sizeof(EbBufferHeaderType);
+
+    EbSvtIOFormat input_pic{};
+
+    const uint32_t luma_size = p.width * p.height;
+    const uint32_t chroma_w = (p.width + 1) / 2;
+    const uint32_t chroma_h = (p.height + 1) / 2;
+    const uint32_t chroma_size = chroma_w * chroma_h;
+
+    std::vector<uint8_t> luma(luma_size, 128);
+    std::vector<uint8_t> cb(chroma_size, 128);
+    std::vector<uint8_t> cr(chroma_size, 128);
+
+    input_pic.luma = luma.data();
+    input_pic.cb = cb.data();
+    input_pic.cr = cr.data();
+    input_pic.y_stride = p.width;
+    input_pic.cb_stride = chroma_w;
+    input_pic.cr_stride = chroma_w;
+
+    input_buf.p_buffer = reinterpret_cast<uint8_t *>(&input_pic);
+    input_buf.n_filled_len = luma_size + 2 * chroma_size;
+    input_buf.pts = 0;
+    input_buf.pic_type = EB_AV1_INVALID_PICTURE;
+
+    ASSERT_EQ(EB_ErrorNone,
+              svt_av1_enc_send_picture(ctxt.enc_handle, &input_buf));
+
+    // send EOS
+    EbBufferHeaderType eos_buf{};
+    eos_buf.size = sizeof(EbBufferHeaderType);
+    eos_buf.flags = EB_BUFFERFLAG_EOS;
+    ASSERT_EQ(EB_ErrorNone,
+              svt_av1_enc_send_picture(ctxt.enc_handle, &eos_buf));
+
+    // get output — drain until EOS
+    bool got_eos = false;
+    bool got_data = false;
+    while (!got_eos) {
+        EbBufferHeaderType *out = nullptr;
+        EbErrorType ret =
+            svt_av1_enc_get_packet(ctxt.enc_handle, &out, /*pic_send_done=*/1);
+        if (ret == EB_ErrorNone && out != nullptr) {
+            if (out->n_filled_len > 0)
+                got_data = true;
+            if (out->flags & EB_BUFFERFLAG_EOS)
+                got_eos = true;
+            svt_av1_enc_release_out_buffer(&out);
+        } else {
+            break;
+        }
+    }
+    EXPECT_TRUE(got_eos) << "Did not receive EOS for " << p.width << "x"
+                         << p.height;
+    EXPECT_TRUE(got_data) << "No encoded data for " << p.width << "x"
+                          << p.height;
+
+    // cleanup
+    ASSERT_EQ(EB_ErrorNone, svt_av1_enc_deinit(ctxt.enc_handle));
+    ASSERT_EQ(EB_ErrorNone, svt_av1_enc_deinit_handle(ctxt.enc_handle));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    SmallResolutions, SmallResEncodeTest,
+    ::testing::Values(SmallResParam{1, 1},    // minimum possible
+                      SmallResParam{2, 2},    // sub-MI size
+                      SmallResParam{3, 3},    // odd sub-MI size
+                      SmallResParam{4, 4},    // 1 MI unit
+                      SmallResParam{8, 8},    // 1 MIN_BLOCK_SIZE
+                      SmallResParam{64, 1},   // single SB width, minimal height
+                      SmallResParam{65, 1},   // multi-SB width, minimal height
+                      SmallResParam{65, 4},   // multi-SB width, small height
+                      SmallResParam{128, 1},  // 2 SB width, minimal height
+                      SmallResParam{360, 1},  // wide strip, minimal height
+                      SmallResParam{1, 64},   // minimal width, single SB height
+                      SmallResParam{1, 65},   // minimal width, multi-SB height
+                      SmallResParam{1, 360}   // tall strip, minimal width
+                      ));
