@@ -15,13 +15,6 @@
 
 #include "rc_process.h"
 
-// If test videos are concatenated then at concatenation point scene change is
-// abrupt and using low qindex for first frame gives huge quality boost for next frames.
-// Regular CBR mistakenly allows such low qindex due to inability to properly
-// predict frame size and thus benefits from quality propagation.
-// This flag is to make comparison for fair, only for testing purposes.
-#define USE_SCENE_CUT_WORKAROUND 0
-
 // Binary search evaluation function type
 typedef double (*arg_eval_fn)(void* ctx, int arg);
 
@@ -103,10 +96,10 @@ static int find_closest_arg(double target, int min_arg, int max_arg, arg_eval_fn
 }
 
 /******************************************************************************
-* compute_cr_deltaq
+* rtc_compute_cr_deltaq
 * Find deltaq which changes the size according to rate_ratio
 *******************************************************************************/
-static int compute_cr_deltaq(PictureControlSet* pcs, int qindex, double rcf, uint64_t me_dist, double rate_ratio) {
+static int rtc_compute_cr_deltaq(PictureControlSet* pcs, int qindex, double rcf, uint64_t me_dist, double rate_ratio) {
     CyclicRefresh* cr = &pcs->ppcs->cyclic_refresh;
     RATE_CONTROL*  rc = &pcs->scs->enc_ctx->rc;
 
@@ -126,18 +119,18 @@ static int compute_cr_deltaq(PictureControlSet* pcs, int qindex, double rcf, uin
     return AOMMAX(target_index - qindex, -cr->max_qdelta_perc * qindex / 100);
 }
 
-static void cyclic_refresh_compute_cr_qdeltas(PictureControlSet* pcs, int qindex, double rcf) {
+static void rtc_cyclic_refresh_compute_cr_qdeltas(PictureControlSet* pcs, int qindex, double rcf) {
     CyclicRefresh* cr   = &pcs->ppcs->cyclic_refresh;
     cr->qindex_delta[0] = 0;
     cr->qindex_delta[1] = 0;
     cr->qindex_delta[2] = 0;
     if (cr->actual_num_seg1_sbs) {
         double qdelta       = AOMMIN(4.0, cr->rate_ratio_qdelta);
-        cr->qindex_delta[1] = compute_cr_deltaq(pcs, qindex, rcf, cr->me_distortion[1], qdelta);
+        cr->qindex_delta[1] = rtc_compute_cr_deltaq(pcs, qindex, rcf, cr->me_distortion[1], qdelta);
     }
     if (cr->actual_num_seg2_sbs) {
         double qdelta       = AOMMIN(8.0, cr->rate_ratio_qdelta_seg2);
-        cr->qindex_delta[2] = compute_cr_deltaq(pcs, qindex, rcf, cr->me_distortion[2], qdelta);
+        cr->qindex_delta[2] = rtc_compute_cr_deltaq(pcs, qindex, rcf, cr->me_distortion[2], qdelta);
     }
 }
 
@@ -148,7 +141,7 @@ static int av1_estimate_frame_size(PictureControlSet* pcs, int qindex, double rc
     double estimated_size;
     if (cr->apply_cyclic_refresh) {
         if (calc_sb_qindex) {
-            cyclic_refresh_compute_cr_qdeltas(pcs, qindex, rcf);
+            rtc_cyclic_refresh_compute_cr_qdeltas(pcs, qindex, rcf);
         }
 
         // Weight for non-base segments
@@ -197,13 +190,6 @@ static int calc_pframe_target_size(PictureParentControlSet* ppcs) {
     SequenceControlSet* scs    = ppcs->scs;
     RATE_CONTROL*       rc     = &scs->enc_ctx->rc;
     RateControlCfg*     rc_cfg = &scs->enc_ctx->rc_cfg;
-
-#if USE_SCENE_CUT_WORKAROUND
-    double me_dist = rc->cur_avg_base_me_dist;
-    if (rc->ema_me_dist <= 0) {
-        rc->ema_me_dist = me_dist;
-    }
-#endif
 
     if (ppcs->temporal_layer_index == 0 && rc->mini_qop_size > 1) {
         double weights[1 + MAX_TEMPORAL_LAYERS] = {0};
@@ -265,12 +251,6 @@ static int calc_pframe_target_size(PictureParentControlSet* ppcs) {
     // temporal dependency and mode decision modulation
     frame_target *= rc->target_size_factors[ppcs->temporal_layer_index + 1];
 
-#if USE_SCENE_CUT_WORKAROUND
-    if (me_dist > rc->ema_me_dist * 1.5 && scs->use_flat_ipp) {
-        frame_target *= me_dist / rc->ema_me_dist;
-    }
-#endif
-
     // buffer adjustment, estimate buffer level after this frame
     buffer_diff += frame_target - rc->avg_frame_bandwidth;
     if (buffer_diff > 0) {
@@ -287,7 +267,7 @@ static int calc_pframe_target_size(PictureParentControlSet* ppcs) {
     return AOMMAX(min_frame_target, frame_target);
 }
 
-static void cyclic_refresh_init(PictureParentControlSet* ppcs) {
+static void rtc_cyclic_refresh_init(PictureParentControlSet* ppcs) {
     SequenceControlSet* scs = ppcs->scs;
     RATE_CONTROL*       rc  = &scs->enc_ctx->rc;
     CyclicRefresh*      cr  = &ppcs->cyclic_refresh;
@@ -357,7 +337,7 @@ static int get_rcf_index(PictureParentControlSet* ppcs) {
     return ppcs->frm_hdr.frame_type == KEY_FRAME ? 0 : ppcs->pred_struct_index + 1;
 }
 
-static double get_rate_correction_factor(PictureParentControlSet* ppcs, int width, int height) {
+static double rtc_get_rate_correction_factor(PictureParentControlSet* ppcs, int width, int height) {
     RATE_CONTROL* rc = &ppcs->scs->enc_ctx->rc;
     svt_block_on_mutex(rc->rc_mutex);
     double rcf = rc->rcf_values[get_rcf_index(ppcs)];
@@ -370,7 +350,7 @@ static double get_rate_correction_factor(PictureParentControlSet* ppcs, int widt
     return rcf * res_scale;
 }
 
-static void set_rate_correction_factor(PictureParentControlSet* ppcs, double rcf, int width, int height) {
+static void rtc_set_rate_correction_factor(PictureParentControlSet* ppcs, double rcf, int width, int height) {
     // Normalize RCF to account for the size-dependent scaling factor.
     FrameSize* frm_size  = &ppcs->av1_cm->frm_size;
     double     res_scale = (double)(frm_size->frame_width * frm_size->frame_height) / (width * height);
@@ -430,12 +410,12 @@ static double calculate_qindex(PictureControlSet* pcs, SequenceControlSet* scs) 
     ppcs->base_frame_target = AOMMIN(ppcs->base_frame_target, max_size);
     ppcs->this_frame_target = ppcs->base_frame_target;
 
-    cyclic_refresh_init(ppcs);
+    rtc_cyclic_refresh_init(ppcs);
     svt_aom_cyclic_refresh_setup(ppcs);
 
     int    width  = ppcs->av1_cm->frm_size.frame_width;
     int    height = ppcs->av1_cm->frm_size.frame_height;
-    double rcf    = get_rate_correction_factor(ppcs, width, height);
+    double rcf    = rtc_get_rate_correction_factor(ppcs, width, height);
 
     EvalFrameSizeCtx ctx = {pcs, rcf};
 
@@ -490,10 +470,6 @@ void svt_av1_rc_calc_qindex_rtc_cbr(PictureControlSet* pcs) {
             // TODO: VBR
             rc->target_size_factors[0] = 10;
         }
-
-#if USE_SCENE_CUT_WORKAROUND
-        rc->ema_me_dist = 0;
-#endif
     }
 
     int qindex = calculate_qindex(pcs, scs);
@@ -503,18 +479,18 @@ void svt_av1_rc_calc_qindex_rtc_cbr(PictureControlSet* pcs) {
         int width  = ppcs->av1_cm->frm_size.frame_width;
         int height = ppcs->av1_cm->frm_size.frame_height;
 
-        double rcf = get_rate_correction_factor(ppcs, width, height);
-        cyclic_refresh_compute_cr_qdeltas(pcs, qindex, rcf);
+        double rcf = rtc_get_rate_correction_factor(ppcs, width, height);
+        rtc_cyclic_refresh_compute_cr_qdeltas(pcs, qindex, rcf);
     }
 
     ppcs->frm_hdr.quantization_params.base_q_idx = qindex;
 }
 
-static void av1_rc_update_rate_correction_factors(PictureParentControlSet* ppcs) {
+static void rtc_update_rate_correction_factors(PictureParentControlSet* ppcs) {
     int    width      = ppcs->av1_cm->frm_size.frame_width;
     int    height     = ppcs->av1_cm->frm_size.frame_height;
     int    base_q_idx = ppcs->frm_hdr.quantization_params.base_q_idx;
-    double rcf        = get_rate_correction_factor(ppcs, width, height);
+    double rcf        = rtc_get_rate_correction_factor(ppcs, width, height);
 
     // Do not update the rate factors for arf overlay frames.
     if (ppcs->is_overlay) {
@@ -567,14 +543,14 @@ static void av1_rc_update_rate_correction_factors(PictureParentControlSet* ppcs)
     // Update estimation variance
     rc->rcf_kalman_P[k] = (1.0 - K) * P;
 
-    set_rate_correction_factor(ppcs, rcf, width, height);
+    rtc_set_rate_correction_factor(ppcs, rcf, width, height);
 }
 
 // Update the buffer level: leaky bucket model.
 // In contrast to other RC modes bucket here is infinite in size - no data is dropped at
 // encoder itself. Higher level simply means delayed transmission over constant rate network.
 // However bucket cannot go below empty (negative) - unused bits are simply lost.
-static void update_buffer_level(PictureParentControlSet* ppcs, int encoded_frame_size) {
+static void rtc_update_buffer_level(PictureParentControlSet* ppcs, int encoded_frame_size) {
     RATE_CONTROL* rc = &ppcs->scs->enc_ctx->rc;
 
     // Non-viewable frames are a special case and are treated as pure overhead.
@@ -595,13 +571,9 @@ void svt_av1_rc_postencode_update_rtc_cbr(PictureParentControlSet* ppcs) {
     ppcs->projected_frame_size = (int)ppcs->total_num_bits;
 
     // Post encode loop adjustment of Q prediction.
-    av1_rc_update_rate_correction_factors(ppcs);
+    rtc_update_rate_correction_factors(ppcs);
 
-    update_buffer_level(ppcs, ppcs->projected_frame_size);
-
-#if USE_SCENE_CUT_WORKAROUND
-    rc->ema_me_dist += 0.5 * (rc->cur_avg_base_me_dist - rc->ema_me_dist);
-#endif
+    rtc_update_buffer_level(ppcs, ppcs->projected_frame_size);
 
     int qindex = frm_hdr->quantization_params.base_q_idx;
 

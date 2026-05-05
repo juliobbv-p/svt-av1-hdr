@@ -190,7 +190,6 @@ typedef struct RATE_CONTROL {
     uint32_t prev_avg_base_me_dist;
 
     // RTC CBR
-    double ema_me_dist; // exponentially smoothed average of cur_avg_base_me_dist
     int    mini_qop_size;
     int    min_ref_base_q_idx;
     double target_size_factors[1 + MAX_TEMPORAL_LAYERS];
