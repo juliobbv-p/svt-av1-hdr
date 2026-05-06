@@ -4889,6 +4889,11 @@ static void copy_api_from_app(SequenceControlSet* scs, EbSvtAv1EncConfiguration*
         scs->static_config.variance_boost_strength = 3;
         scs->static_config.variance_boost_curve    = 2;
     }
+#if FTR_TUNE_VMAF
+    else if (scs->static_config.tune == TUNE_VMAF) {
+        SVT_WARN("Tune VMAF: a pre-processing / unsharp masking is applied\n");
+    }
+#endif
     return;
 }
 

@@ -3605,6 +3605,66 @@ int32_t svt_estimate_noise_highbd_fp16_c(const uint16_t* src, int width, int hei
 }
 #endif
 
+#if OPT_TUNE_VMAF
+uint32_t svt_vmaf_compute_avg_mad_c(const uint8_t* src, int width, int height, int stride) {
+    uint64_t total_activity = 0;
+    int      block_count    = 0;
+    for (int by = 0; by + 8 <= height; by += 8) {
+        for (int bx = 0; bx + 8 <= width; bx += 8) {
+            uint32_t sum = 0;
+            for (int r = 0; r < 8; r++) {
+                for (int c = 0; c < 8; c++) {
+                    sum += src[(by + r) * stride + (bx + c)];
+                }
+            }
+            uint32_t mean = sum >> 6;
+            uint32_t mad  = 0;
+            for (int r = 0; r < 8; r++) {
+                for (int c = 0; c < 8; c++) {
+                    mad += (uint32_t)abs((int)src[(by + r) * stride + (bx + c)] - (int)mean);
+                }
+            }
+            total_activity += mad;
+            block_count++;
+        }
+    }
+    if (block_count == 0) {
+        return 0;
+    }
+    return (uint32_t)(total_activity / ((uint64_t)block_count * 64));
+}
+
+void svt_vmaf_apply_unsharp_row_c(const uint8_t* src, const int16_t* blur, uint8_t* dst, int width, int amount,
+                                  int32_t max_delta) {
+    for (int j = 0; j < width; j++) {
+        int32_t detail = (int32_t)src[j] - (int32_t)blur[j];
+        detail         = detail > max_delta ? max_delta : detail < -max_delta ? -max_delta : detail;
+        int32_t result = (int32_t)src[j] + ((detail * amount) >> 16);
+        dst[j]         = (uint8_t)(result < 0 ? 0 : result > 255 ? 255 : result);
+    }
+}
+
+void svt_vmaf_vpass_row_c(const uint32_t* hpass, uint32_t* sc0, uint32_t* sc1, uint32_t* sc2, uint32_t* sc3,
+                          int16_t* blur_row, int alloc_width, int width, int steps_x, int do_output) {
+    (void)width;
+    const int blur_start = 2 * steps_x;
+    for (int i = 0; i < alloc_width; i++) {
+        uint32_t tmp1 = hpass[i];
+        uint32_t tmp2 = sc0[i] + tmp1;
+        sc0[i]        = tmp1;
+        tmp1          = sc1[i] + tmp2;
+        sc1[i]        = tmp2;
+        tmp2          = sc2[i] + tmp1;
+        sc2[i]        = tmp1;
+        tmp1          = sc3[i] + tmp2;
+        sc3[i]        = tmp2;
+        if (do_output && i >= blur_start) {
+            blur_row[i - blur_start] = (int16_t)((tmp1 + 128u) >> 8);
+        }
+    }
+}
+#endif
+
 void pad_and_decimate_filtered_pic(PictureParentControlSet* centre_pcs) {
     // reference structures (padded pictures + downsampled versions)
     SequenceControlSet*  scs        = centre_pcs->scs;

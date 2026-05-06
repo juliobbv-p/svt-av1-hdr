@@ -1791,8 +1791,13 @@ typedef enum Tune {
     TUNE_PSNR = 1, // Average of (PSNR, SSIM, VMAF)
     TUNE_SSIM = 2, // SSIM-optimized
     TUNE_IQ   = 3, // Image Quality
+#if FTR_TUNE_VMAF
+    TUNE_MS_SSIM = 4,  // MS_SSIM and SSIMULACRA2 optimized
+    TUNE_VMAF    = 5   // VMAF preprocessing (unsharp filter on luma)
+#else
     TUNE_MS_SSIM = 4 // MS_SSIM and SSIMULACRA2 optimized
 
+#endif
 } Tune;
 
 /*

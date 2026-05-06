@@ -15,6 +15,9 @@
 
 #include "aom_dsp_rtcd.h"
 #include "definitions.h"
+#if OPT_TUNE_VMAF
+#include "temporal_filtering.h"
+#endif
 #include "enc_handle.h"
 #include "sys_resource_manager.h"
 #include "pcs.h"
@@ -1555,6 +1558,277 @@ void svt_aom_pad_input_pictures(SequenceControlSet* scs, EbPictureBufferDesc* in
     }
 }
 
+#if OPT_TUNE_VMAF
+/*********************************************************************************
+ *
+ * @brief
+ *  Determines the per-frame unsharp mask sharpening strength for TUNE_VMAF.
+ *
+ * @par Description:
+ *  The sharpening amount is derived by combining two independent signals and
+ *  taking the more conservative (minimum) of the two:
+ *
+ *  1. Per-QP component: maps the base encoding QP to a target sharpening
+ *     amount. Very low QP uses moderate sharpening to avoid over-processing
+ *     already high-quality content. Mid-range QP targets peak
+ *     sharpening where VMAF gains are largest. High QP reduces the amount
+ *     since heavy compression masks fine detail regardless.
+ *
+ *  2. Spatial component: measures per-frame spatial activity as the average
+ *     Mean Absolute Deviation (MAD) over non-overlapping 8x8 luma blocks.
+ *     High-activity (highly textured) frames are capped at a lower sharpening
+ *     amount to avoid ringing and noise amplification. Low-activity (flat or
+ *     smooth) frames receive reduced sharpening as there is little high-
+ *     frequency content to enhance.
+ *
+ *  The final strength is min(per_qp, spatial), so the filter never sharpens
+ *  more than both the QP level and the content activity independently allow.
+ *
+ ********************************************************************************/
+static uint32_t vmaf_compute_avg_mad(PictureParentControlSet* pcs) {
+    EbPictureBufferDesc* pic    = pcs->enhanced_pic;
+    const int            stride = pic->y_stride;
+    const uint8_t*       y      = pic->y_buffer;
+    return svt_vmaf_compute_avg_mad(y, pic->width, pic->height, stride);
+}
+
+static float vmaf_get_spatial_amount(uint32_t avg_mad) {
+    if (avg_mad < 2) {
+        return 0.15f;
+    }
+    if (avg_mad < 12) {
+        return 0.30f;
+    }
+    if (avg_mad < 20) {
+        return 0.45f;
+    }
+    return 0.50f;
+}
+
+static float vmaf_compute_combined_amount_with_mad(PictureParentControlSet* pcs, uint32_t avg_mad) {
+    const uint32_t base_qp = pcs->scs->static_config.qp;
+
+    float per_qp;
+    if (base_qp < 18) {
+        per_qp = 0.5f - (base_qp / 17.0f) * (0.5f - 0.2f);
+    } else if (base_qp < 30) {
+        per_qp = 0.5f + ((base_qp - 18) / 12.0f) * (0.7f - 0.5f);
+    } else if (base_qp < 45) {
+        per_qp = 0.6f - ((base_qp - 30) / 15.0f) * (0.6f - 0.3f);
+    } else {
+        per_qp = 0.3f;
+    }
+
+    float spatial = vmaf_get_spatial_amount(avg_mad);
+    return (per_qp < spatial) ? per_qp : spatial;
+}
+
+/*********************************************************************************
+ *
+ * @brief
+ *  Computes a per-frame sharpening scale factor to suppress over-sharpening
+ *  on noisy content.
+ *
+ * @par Description:
+ *  Estimates the noise level of the luma plane using a Laplacian-based
+ *  estimator. The raw noise estimate is passed through a log1p compression
+ *  to reduce sensitivity to outliers, then mapped to a gate multiplier in
+ *  the range [gate_floor, 1.0]:
+ *
+ *    - Below gate_start : multiplier = 1.0  (no reduction, clean frame)
+ *    - Between gate_start and gate_end : multiplier decreases linearly
+ *    - Above gate_end   : multiplier = gate_floor (maximum reduction)
+ *
+ *  The resulting multiplier is applied directly to the sharpening amount,
+ *  so noisy frames receive proportionally less sharpening to prevent the
+ *  unsharp mask from amplifying noise instead of enhancing real detail.
+ *
+ ********************************************************************************/
+static float vmaf_get_noise_gate(PictureParentControlSet* pcs) {
+    EbPictureBufferDesc* pic = pcs->enhanced_pic;
+
+    const uint8_t* y          = pic->y_buffer;
+    int32_t        noise_fp16 = svt_estimate_noise_fp16(
+        y, (uint16_t)pic->width, (uint16_t)pic->height, (uint16_t)pic->y_stride);
+    if (noise_fp16 < 0) {
+        return 1.0f;
+    }
+
+    int32_t noise_log1p = svt_aom_noise_log1p_fp16(noise_fp16);
+
+    const int32_t gate_start = 40000;
+    const int32_t gate_end   = 80000;
+    const float   gate_floor = 0.3f;
+
+    if (noise_log1p <= gate_start) {
+        return 1.0f;
+    }
+    if (noise_log1p >= gate_end) {
+        return gate_floor;
+    }
+
+    float t = (float)(noise_log1p - gate_start) / (float)(gate_end - gate_start);
+    return 1.0f - t * (1.0f - gate_floor);
+}
+#endif
+
+#if FTR_TUNE_VMAF
+/*********************************************************************************
+ *
+ * @brief
+ *  Applies a separable cascaded box blur to the luma plane to produce the
+ *  reference blur for the unsharp mask.
+ *
+ * @par Description:
+ *  Implements a two-pass separable filter. The horizontal pass processes each
+ *  row independently, applying two consecutive box filter stages (steps_x = 2)
+ *  using a running accumulator. The result is stored as uint32_t intermediate
+ *  values. The vertical pass then applies two further box filter stages
+ *  (steps_y = 2) over the horizontal outputs, producing the final blurred luma
+ *  plane used by the unsharp mask.
+ *
+ ********************************************************************************/
+static void vmaf_box_blur_frame(const uint8_t* src, int stride, int16_t* blur_plane, int width, int height) {
+    const int steps_x      = 2;
+    const int steps_y      = 2;
+    const int padded_width = width + 2 * steps_x;
+
+    uint32_t* h_row = NULL;
+    EB_MALLOC_ARRAY_NO_CHECK(h_row, padded_width);
+    if (!h_row) {
+        return;
+    }
+
+    uint32_t* v_acc[4] = {NULL};
+    for (int i = 0; i < 4; i++) {
+        EB_CALLOC_ARRAY_NO_CHECK(v_acc[i], padded_width);
+        if (!v_acc[i]) {
+            for (int j = 0; j < i; j++) {
+                EB_FREE_ARRAY(v_acc[j]);
+            }
+            EB_FREE_ARRAY(h_row);
+            return;
+        }
+    }
+
+    const uint8_t* src_row = src;
+    uint32_t       h_acc[4];
+    uint32_t       val, accum;
+
+    for (int y = -steps_y; y < steps_y + height; y++) {
+        /* H-pass */
+        memset(h_acc, 0, sizeof(h_acc));
+        for (int x = -steps_x; x < width + steps_x; x++) {
+            val = x <= 0 ? src_row[0] : x >= width ? src_row[width - 1] : (uint32_t)src_row[x];
+            for (int s = 0; s < steps_x * 2; s += 2) {
+                accum        = h_acc[s] + val;
+                h_acc[s]     = val;
+                val          = h_acc[s + 1] + accum;
+                h_acc[s + 1] = accum;
+            }
+            h_row[x + steps_x] = val;
+        }
+
+        /* V-pass */
+        const int do_write = (y >= steps_y) ? 1 : 0;
+        int16_t*  blur_row = do_write ? blur_plane + (y - steps_y) * width : blur_plane;
+        svt_vmaf_vpass_row(
+            h_row, v_acc[0], v_acc[1], v_acc[2], v_acc[3], blur_row, padded_width, width, steps_x, do_write);
+
+        if (y >= 0 && y < height - 1) {
+            src_row += stride;
+        }
+    }
+
+    for (int i = 0; i < 4; i++) {
+        EB_FREE_ARRAY(v_acc[i]);
+    }
+    EB_FREE_ARRAY(h_row);
+}
+
+/*********************************************************************************
+ * Inspired by libaom's unsharp_rect() in av1/encoder/tune_vmaf.c
+ *
+ * @brief
+ *  Applies the unsharp mask to the full luma plane row by row.
+ *
+ * @par Description:
+ *  For each row, computes the detail signal as the difference between the
+ *  original and blurred luma, scales it by the sharpening amount, and adds
+ *  it back to the original. The per-pixel delta is clamped to delta_clip
+ *  before scaling to limit distortion on strong edges. The result is written
+ *  directly into the destination buffer.
+ *
+ ********************************************************************************/
+static void vmaf_unsharp_apply_frame(const uint8_t* src, const int16_t* blur_plane, uint8_t* dst, int width, int height,
+                                     int stride, int sharp_amount, int32_t delta_clip) {
+    for (int y = 0; y < height; y++) {
+        svt_vmaf_apply_unsharp_row(
+            src + y * stride, blur_plane + y * width, dst + y * stride, width, sharp_amount, delta_clip);
+    }
+}
+
+/*********************************************************************************
+ * Inspired by libaom's av1_vmaf_frame_preprocessing() in av1/encoder/tune_vmaf.c
+ *
+ * @brief
+ *  Entry point for the TUNE_VMAF luma preprocessing pipeline applied once
+ *  per input frame before encoding.
+ *
+ * @par Description:
+ *  Runs the full preprocessing sequence on the luma plane:
+ *    1. Computes the adaptive sharpening amount from per-QP and spatial
+ *       activity signals, then scales it down via the noise gate if the
+ *       frame is noisy.
+ *    2. Derives the per-pixel delta clip from the current QP to limit
+ *       PSNR loss on strong edges.
+ *    3. Takes a copy of the original luma plane to use as the filter input,
+ *       so the blur always sees the unmodified source.
+ *    4. Blurs the copy with vmaf_box_blur_frame, then applies the unsharp
+ *       mask with vmaf_unsharp_apply_frame, writing the result back in place.
+ *
+ ********************************************************************************/
+static void vmaf_preprocess_frame(PictureParentControlSet* pcs) {
+    EbPictureBufferDesc* pic_ptr    = pcs->enhanced_pic;
+    const int            pic_width  = pic_ptr->width;
+    const int            pic_height = pic_ptr->height;
+    const int            y_stride   = pic_ptr->y_stride;
+
+    uint32_t avg_mad            = vmaf_compute_avg_mad(pcs);
+    int      sharp_amount       = (int)(vmaf_compute_combined_amount_with_mad(pcs, avg_mad) * 65536.0f);
+    sharp_amount                = (int)(sharp_amount * vmaf_get_noise_gate(pcs));
+    pcs->vmaf_sharpening_amount = sharp_amount;
+
+    const int32_t qp_lo      = 45;
+    const int32_t qp_hi      = 50;
+    const int32_t dmin       = 8;
+    const int32_t dmax       = 12;
+    const int32_t cur_qp     = (int32_t)pcs->scs->static_config.qp;
+    pcs->vmaf_max_delta      = cur_qp <= qp_lo ? dmin
+             : cur_qp >= qp_hi                 ? dmax
+                                               : dmin + (cur_qp - qp_lo) * (dmax - dmin) / (qp_hi - qp_lo);
+    const int32_t delta_clip = pcs->vmaf_max_delta;
+
+    uint8_t* luma       = pic_ptr->y_buffer;
+    uint8_t* src_copy   = NULL;
+    int16_t* blur_plane = NULL;
+    EB_MALLOC_ARRAY_NO_CHECK(src_copy, (size_t)y_stride * pic_height);
+    EB_MALLOC_ARRAY_NO_CHECK(blur_plane, (size_t)pic_width * pic_height);
+    if (!src_copy || !blur_plane) {
+        EB_FREE_ARRAY(src_copy);
+        EB_FREE_ARRAY(blur_plane);
+        return;
+    }
+    memcpy(src_copy, luma, (size_t)y_stride * pic_height);
+
+    vmaf_box_blur_frame(src_copy, y_stride, blur_plane, pic_width, pic_height);
+    vmaf_unsharp_apply_frame(src_copy, blur_plane, luma, pic_width, pic_height, y_stride, sharp_amount, delta_clip);
+
+    EB_FREE_ARRAY(blur_plane);
+    EB_FREE_ARRAY(src_copy);
+}
+#endif
+
 /* Picture Analysis Kernel */
 
 /*********************************************************************************
@@ -1608,6 +1882,11 @@ EbErrorType svt_aom_picture_analysis_kernel_iter(void* context) {
         input_pic               = pcs->enhanced_pic;
         EbPictureBufferDesc* input_padded_pic;
         {
+#if FTR_TUNE_VMAF
+            if (scs->static_config.tune == TUNE_VMAF) {
+                vmaf_preprocess_frame(pcs);
+            }
+#endif
             // Padding for input pictures
             svt_aom_pad_input_pictures(scs, input_pic);
 

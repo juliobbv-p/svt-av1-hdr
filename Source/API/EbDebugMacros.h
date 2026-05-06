@@ -76,6 +76,10 @@ extern "C" {
 
 #define FIX_MR_STILL_IMAGE         1 // Restore MR for still-image
 
+#define FTR_TUNE_VMAF  1 // Implement an unsharp preprocessing filter under TUNE-VMAF (--tune 5)
+#define OPT_TUNE_VMAF  1 // TUNE-VMAF Optimizations: adaptive sharpening (per-QP + spatial MAD), noise gate (Laplacian),
+                         // per-pixel High Frequency delta clip (QP-adaptive), chroma QP compensation, SIMD
+
 //FOR DEBUGGING - Do not remove
 #define LOG_ENC_DONE            0 // log encoder job one
 #define DEBUG_TPL               0 // Prints to debug TPL

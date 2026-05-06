@@ -876,6 +876,14 @@ int32_t svt_estimate_noise_fp16_c(const uint8_t *src, uint16_t width, uint16_t h
 RTCD_EXTERN int32_t (*svt_estimate_noise_highbd_fp16)(const uint16_t *src, int width, int height, int stride, int bd);
 int32_t svt_estimate_noise_highbd_fp16_c(const uint16_t *src, int width, int height, int stride, int bd);
 #endif
+#if OPT_TUNE_VMAF
+RTCD_EXTERN uint32_t (*svt_vmaf_compute_avg_mad)(const uint8_t *src, int width, int height, int stride);
+uint32_t svt_vmaf_compute_avg_mad_c(const uint8_t *src, int width, int height, int stride);
+RTCD_EXTERN void (*svt_vmaf_apply_unsharp_row)(const uint8_t *src, const int16_t *blur, uint8_t *dst, int width, int amount, int32_t max_delta);
+void svt_vmaf_apply_unsharp_row_c(const uint8_t *src, const int16_t *blur, uint8_t *dst, int width, int amount, int32_t max_delta);
+RTCD_EXTERN void (*svt_vmaf_vpass_row)(const uint32_t *hpass, uint32_t *sc0, uint32_t *sc1, uint32_t *sc2, uint32_t *sc3, int16_t *blur_row, int alloc_width, int width, int steps_x, int do_output);
+void svt_vmaf_vpass_row_c(const uint32_t *hpass, uint32_t *sc0, uint32_t *sc1, uint32_t *sc2, uint32_t *sc3, int16_t *blur_row, int alloc_width, int width, int steps_x, int do_output);
+#endif
 RTCD_EXTERN void(*svt_copy_mi_map_grid)(MbModeInfo** mi_grid_ptr, uint32_t mi_stride, uint8_t num_rows, uint8_t num_cols);
 void svt_copy_mi_map_grid_c(MbModeInfo** mi_grid_ptr, uint32_t mi_stride, uint8_t num_rows, uint8_t num_cols);
 void svt_copy_mi_map_grid_avx2(MbModeInfo** mi_grid_ptr, uint32_t mi_stride, uint8_t num_rows, uint8_t num_cols);
@@ -2267,6 +2275,11 @@ void svt_av1_calc_target_weighted_pred_left_avx2(uint8_t is16bit, MacroBlockD* x
 int32_t svt_estimate_noise_fp16_avx2(const uint8_t *src, uint16_t width, uint16_t height, uint16_t y_stride);
 #if CONFIG_ENABLE_HIGH_BIT_DEPTH
 int32_t svt_estimate_noise_highbd_fp16_avx2(const uint16_t *src, int width, int height, int stride, int bd);
+#endif
+#if OPT_TUNE_VMAF
+uint32_t svt_vmaf_compute_avg_mad_avx2(const uint8_t *src, int width, int height, int stride);
+void svt_vmaf_apply_unsharp_row_avx2(const uint8_t *src, const int16_t *blur, uint8_t *dst, int width, int amount, int32_t max_delta);
+void svt_vmaf_vpass_row_avx2(const uint32_t *hpass, uint32_t *sc0, uint32_t *sc1, uint32_t *sc2, uint32_t *sc3, int16_t *blur_row, int alloc_width, int width, int steps_x, int do_output);
 #endif
 void svt_av1_add_block_observations_internal_avx2(uint32_t n, const double val, const double recp_sqr_norm, double *buffer, double *buffer_norm, double *b, double *A);
 void svt_av1_pointwise_multiply_avx2(const float *a, float *b, float *c, double *b_d, double *c_d, int32_t n);

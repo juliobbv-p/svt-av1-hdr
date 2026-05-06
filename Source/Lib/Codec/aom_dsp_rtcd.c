@@ -546,6 +546,11 @@ void svt_aom_setup_rtcd_internal(EbCpuFlags flags) {
 #if CONFIG_ENABLE_HIGH_BIT_DEPTH
     SET_AVX2(svt_estimate_noise_highbd_fp16, svt_estimate_noise_highbd_fp16_c, svt_estimate_noise_highbd_fp16_avx2);
 #endif
+#if OPT_TUNE_VMAF
+    SET_AVX2(svt_vmaf_compute_avg_mad,   svt_vmaf_compute_avg_mad_c,   svt_vmaf_compute_avg_mad_avx2);
+    SET_AVX2(svt_vmaf_apply_unsharp_row, svt_vmaf_apply_unsharp_row_c, svt_vmaf_apply_unsharp_row_avx2);
+    SET_AVX2(svt_vmaf_vpass_row,         svt_vmaf_vpass_row_c,         svt_vmaf_vpass_row_avx2);
+#endif
     SET_AVX2(svt_copy_mi_map_grid, svt_copy_mi_map_grid_c, svt_copy_mi_map_grid_avx2);
 #if CONFIG_ENABLE_FILM_GRAIN
     SET_AVX2(svt_av1_add_block_observations_internal, svt_av1_add_block_observations_internal_c, svt_av1_add_block_observations_internal_avx2);

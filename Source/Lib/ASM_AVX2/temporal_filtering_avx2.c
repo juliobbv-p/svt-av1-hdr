@@ -900,6 +900,135 @@ void svt_aom_apply_filtering_central_highbd_avx2(MeContext* me_ctx, EbPictureBuf
     }
 }
 
+#if OPT_TUNE_VMAF
+uint32_t svt_vmaf_compute_avg_mad_avx2(const uint8_t* src, int width, int height, int stride) {
+    const __m128i zero           = _mm_setzero_si128();
+    const __m128i ones           = _mm_set1_epi16(1);
+    uint64_t      total_activity = 0;
+    int           block_count    = 0;
+
+    for (int by = 0; by + 8 <= height; by += 8) {
+        for (int bx = 0; bx + 8 <= width; bx += 8) {
+            __m128i sum = zero;
+            for (int r = 0; r < 8; r++) {
+                __m128i row = _mm_loadl_epi64((__m128i const*)(src + (by + r) * stride + bx));
+                sum         = _mm_add_epi32(sum, _mm_sad_epu8(row, zero));
+            }
+            const uint32_t block_sum = (uint32_t)(_mm_cvtsi128_si32(sum) + _mm_extract_epi32(sum, 2));
+            const uint32_t mean      = block_sum >> 6;
+
+            const __m128i mean_vec = _mm_set1_epi16((int16_t)mean);
+            __m128i       mad_sum  = zero;
+            for (int r = 0; r < 8; r++) {
+                __m128i row    = _mm_loadl_epi64((__m128i const*)(src + (by + r) * stride + bx));
+                __m128i row_16 = _mm_unpacklo_epi8(row, zero);
+                __m128i dif    = _mm_abs_epi16(_mm_sub_epi16(row_16, mean_vec));
+                mad_sum        = _mm_add_epi32(mad_sum, _mm_madd_epi16(dif, ones));
+            }
+            mad_sum = _mm_hadd_epi32(mad_sum, mad_sum);
+            mad_sum = _mm_hadd_epi32(mad_sum, mad_sum);
+            total_activity += (uint32_t)_mm_cvtsi128_si32(mad_sum);
+            block_count++;
+        }
+    }
+    if (block_count == 0) {
+        return 0;
+    }
+    return (uint32_t)(total_activity / ((uint64_t)block_count * 64));
+}
+
+void svt_vmaf_apply_unsharp_row_avx2(const uint8_t* src, const int16_t* blur, uint8_t* dst, int width, int amount,
+                                     int32_t max_delta) {
+    const int16_t amount_i16    = (int16_t)(amount > 32767 ? 32767 : amount);
+    const int16_t max_delta_i16 = (int16_t)(max_delta > 32767 ? 32767 : max_delta);
+    const __m256i amount_vec    = _mm256_set1_epi16(amount_i16);
+    const __m256i clamp_max     = _mm256_set1_epi16(max_delta_i16);
+    const __m256i clamp_min     = _mm256_sub_epi16(_mm256_setzero_si256(), clamp_max);
+    const __m256i zero          = _mm256_setzero_si256();
+
+    int j = 0;
+    for (; j + 16 <= width; j += 16) {
+        __m256i src_16        = _mm256_cvtepu8_epi16(_mm_loadu_si128((__m128i const*)(src + j)));
+        __m256i blur_16       = _mm256_loadu_si256((__m256i const*)(blur + j));
+        __m256i detail        = _mm256_sub_epi16(src_16, blur_16);
+        detail                = _mm256_max_epi16(detail, clamp_min);
+        detail                = _mm256_min_epi16(detail, clamp_max);
+        __m256i detail_scaled = _mm256_mulhi_epi16(detail, amount_vec);
+        __m256i result        = _mm256_add_epi16(src_16, detail_scaled);
+        __m256i packed        = _mm256_packus_epi16(result, zero);
+        packed                = _mm256_permute4x64_epi64(packed, 0xD8);
+        _mm_storeu_si128((__m128i*)(dst + j), _mm256_castsi256_si128(packed));
+    }
+    for (; j < width; j++) {
+        int32_t detail = (int32_t)src[j] - (int32_t)blur[j];
+        detail         = detail > max_delta ? max_delta : detail < -max_delta ? -max_delta : detail;
+        int32_t result = (int32_t)src[j] + ((detail * amount) >> 16);
+        dst[j]         = (uint8_t)(result < 0 ? 0 : result > 255 ? 255 : result);
+    }
+}
+
+void svt_vmaf_vpass_row_avx2(const uint32_t* hpass, uint32_t* sc0, uint32_t* sc1, uint32_t* sc2, uint32_t* sc3,
+                             int16_t* blur_row, int alloc_width, int width, int steps_x, int do_output) {
+    (void)width;
+    const __m256i rounding   = _mm256_set1_epi32(128);
+    const __m256i zero       = _mm256_setzero_si256();
+    const int     blur_start = 2 * steps_x;
+    int           i;
+
+    for (i = 0; i < blur_start; i++) {
+        uint32_t tmp1 = hpass[i];
+        uint32_t tmp2 = sc0[i] + tmp1;
+        sc0[i]        = tmp1;
+        tmp1          = sc1[i] + tmp2;
+        sc1[i]        = tmp2;
+        tmp2          = sc2[i] + tmp1;
+        sc2[i]        = tmp1;
+        tmp1          = sc3[i] + tmp2;
+        sc3[i]        = tmp2;
+    }
+
+    for (; i + 8 <= alloc_width; i += 8) {
+        __m256i hpass_val = _mm256_loadu_si256((__m256i const*)(hpass + i));
+        __m256i sc0_vec   = _mm256_loadu_si256((__m256i const*)(sc0 + i));
+        __m256i sc1_vec   = _mm256_loadu_si256((__m256i const*)(sc1 + i));
+        __m256i sc2_vec   = _mm256_loadu_si256((__m256i const*)(sc2 + i));
+        __m256i sc3_vec   = _mm256_loadu_si256((__m256i const*)(sc3 + i));
+
+        __m256i tmp = _mm256_add_epi32(sc0_vec, hpass_val);
+        _mm256_storeu_si256((__m256i*)(sc0 + i), hpass_val);
+        __m256i v_acc0 = _mm256_add_epi32(sc1_vec, tmp);
+        _mm256_storeu_si256((__m256i*)(sc1 + i), tmp);
+
+        tmp = _mm256_add_epi32(sc2_vec, v_acc0);
+        _mm256_storeu_si256((__m256i*)(sc2 + i), v_acc0);
+        __m256i v_acc2 = _mm256_add_epi32(sc3_vec, tmp);
+        _mm256_storeu_si256((__m256i*)(sc3 + i), tmp);
+
+        if (do_output) {
+            __m256i blur_out = _mm256_srli_epi32(_mm256_add_epi32(v_acc2, rounding), 8);
+            __m256i packed   = _mm256_packs_epi32(blur_out, zero);
+            packed           = _mm256_permute4x64_epi64(packed, 0xD8);
+            _mm_storeu_si128((__m128i*)(blur_row + (i - blur_start)), _mm256_castsi256_si128(packed));
+        }
+    }
+
+    for (; i < alloc_width; i++) {
+        uint32_t tmp1 = hpass[i];
+        uint32_t tmp2 = sc0[i] + tmp1;
+        sc0[i]        = tmp1;
+        tmp1          = sc1[i] + tmp2;
+        sc1[i]        = tmp2;
+        tmp2          = sc2[i] + tmp1;
+        sc2[i]        = tmp1;
+        tmp1          = sc3[i] + tmp2;
+        sc3[i]        = tmp2;
+        if (do_output) {
+            blur_row[i - blur_start] = (int16_t)((tmp1 + 128u) >> 8);
+        }
+    }
+}
+#endif
+
 int32_t svt_estimate_noise_fp16_avx2(const uint8_t* src, uint16_t width, uint16_t height, uint16_t y_stride) {
     int64_t sum = 0;
     int64_t num = 0;

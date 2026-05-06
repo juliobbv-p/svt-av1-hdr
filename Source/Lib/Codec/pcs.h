@@ -1146,6 +1146,10 @@ typedef struct PictureParentControlSet {
 
     bool   sframe_ref_pruned;
     int8_t sframe_qp_offset;
+#if OPT_TUNE_VMAF
+    int     vmaf_sharpening_amount;
+    int32_t vmaf_max_delta;
+#endif
 } PictureParentControlSet;
 
 typedef struct TplDispResults {
