@@ -2353,7 +2353,7 @@ EB_API EbErrorType svt_av1_enc_parse_parameter(EbSvtAv1EncConfiguration* config_
         {"avif", &config_struct->avif},
         {"rtc", &config_struct->rtc},
         {"adaptive-film-grain", &config_struct->adaptive_film_grain},
-        {"enable-keyframe-filtering", &config_struct->enable_tf_key},
+        {"enable-kf-tf", &config_struct->enable_tf_key},
     };
     const size_t bool_opts_size = sizeof(bool_opts) / sizeof(bool_opts[0]);
 

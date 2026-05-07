@@ -95,7 +95,7 @@
 #define SCREEN_CONTENT_TOKEN "--scm"
 // --- start: ALTREF_FILTERING_SUPPORT
 #define ENABLE_TF_TOKEN "--enable-tf"
-#define ENABLE_TF_KEY_TOKEN "--enable-keyframe-filtering"
+#define ENABLE_TF_KEY_TOKEN "--enable-kf-tf"
 #define ENABLE_OVERLAYS "--enable-overlays"
 #define TUNE_TOKEN "--tune"
 // --- end: ALTREF_FILTERING_SUPPORT
