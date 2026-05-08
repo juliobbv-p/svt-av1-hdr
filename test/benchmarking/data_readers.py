@@ -275,7 +275,7 @@ class DataReaders:
         dir_path: str,
         files_info: Dict[str, List[str]],
         encoder: str,
-        speed: int,
+        speed: str,
         quality: int,
         threads: int,
     ) -> List[Dict]:
@@ -430,7 +430,7 @@ class DataReaders:
         return None
 
     def _build_encoded_directory_path(
-        self, encoder: str, speed: int, quality: int, threads: int
+        self, encoder: str, speed: str, quality: int, threads: int
     ) -> str:
         """
         Build the expected encoded file directory path using config or fallback patterns.

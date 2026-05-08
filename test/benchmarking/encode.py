@@ -57,7 +57,7 @@ enc_logger = utils.create_logger("enc_logger", ENC_LOG_PATH)
 class EncodeTask:
     encoder_type: str
     encoder_name: str
-    speed: int
+    speed: str
     quality: int
     threads: int
     input_file: str

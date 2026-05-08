@@ -164,7 +164,7 @@ def add_summary_table_to_pdf(
     pdf: PdfPages,
     summary_avg_bd_rates_df: pd.DataFrame,
     anchor_encoder: str,
-    anchor_speed: int,
+    anchor_speed: str,
     per_image_df: pd.DataFrame | None = None,
 ) -> None:
     """
@@ -191,7 +191,8 @@ def add_summary_table_to_pdf(
                     .groupby(["encoder", "speed"])[vbv_col]
                     .mean()
                 )
-                vbv_summary[vbv_col] = vbv_avg
+                if vbv_avg.notna().any():
+                    vbv_summary[vbv_col] = vbv_avg
 
     # Add VBV columns to the summary DataFrame
     display_df = summary_avg_bd_rates_df.copy()
@@ -387,7 +388,7 @@ def add_vbv_delay_chart(
 def create_bd_rate_plots_pdf(
     metric_results: Dict[str, pd.DataFrame],
     anchor_encoder: str,
-    anchor_speed: int,
+    anchor_speed: str,
     pdf_output_path: str,
     summary_avg_bd_rates_df: pd.DataFrame | None = None,
     summary_avg_perf_df: pd.DataFrame | None = None,
@@ -609,7 +610,7 @@ def _compute_bd_rates_for_metric(
     metric: str,
     per_image_csv_path: str,
     anchor_encoder: str,
-    anchor_speed: int,
+    anchor_speed: str,
     metrics_dir: str,
     per_image_df: pd.DataFrame,
 ) -> tuple:

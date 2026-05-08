@@ -23,7 +23,7 @@ had_psnr_cbcr_issues = False
 def compute_bd_rates_per_image(
     per_image_csv_path: str,
     anchor_encoder: str = "jpegli_enc",
-    anchor_speed: int = 3,
+    anchor_speed: str = "3",
     output_csv_path: str = "bd_rates_per_image.csv",
     quality_metric: str = "vmaf",
 ) -> pd.DataFrame:

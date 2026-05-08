@@ -64,7 +64,7 @@ qm_logger = utils.create_logger("qm_logger", QM_LOG_PATH)
 class DecodeTask:
     encoder_type: str
     encoder_name: str
-    speed: int
+    speed: str
     quality: int
     threads: int
     input_file: str
@@ -74,7 +74,7 @@ class DecodeTask:
 class DecodeResult:
     encoder_type: str
     encoder_name: str
-    speed: int
+    speed: str
     quality: int
     threads: int
     decode_time: float
@@ -273,7 +273,7 @@ def calculate_single_file_quality_metrics(
 def get_output_dir(
     encoder_type: str,
     encoder_name: str,
-    speed: int,
+    speed: str,
     quality: int,
     nthreads: int,
 ) -> str:
@@ -299,7 +299,7 @@ def get_output_dir(
 def get_sub_dir_name(
     encoder_type: str,
     encoder_name: str,
-    speed: int,
+    speed: str,
     quality: int,
     nthreads: int,
 ) -> str:
