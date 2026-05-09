@@ -5374,7 +5374,18 @@ static void perform_dct_dct_tx_light_pd1(PictureControlSet* pcs, ModeDecisionCon
                                                            full_lambda,
                                                            false);
 #if OPT_COEFF_SHAVING
-    if (cand_bf->eob.y[0] == 0) {
+    if (cand_bf->eob.y[0] == 0 &&
+        (ctx->rate_est_ctrls.coeff_rate_est_lvl >= 2 || ctx->rate_est_ctrls.coeff_rate_est_lvl == 0)) {
+        cand_bf->quant_dc.y[0]                  = 0;
+        cand_bf->y_has_coeff                    = 0;
+        y_full_distortion[DIST_CALC_RESIDUAL]   = 0;
+        y_full_distortion[DIST_CALC_PREDICTION] = 0;
+        *y_coeff_bits                           = 6000;
+        cand_bf->cand->transform_type[0]        = DCT_DCT;
+        // For Inter blocks, transform type of chroma follows luma transfrom type
+        if (is_inter_mode(cand_bf->cand->block_mi.mode)) {
+            cand_bf->cand->transform_type_uv = DCT_DCT;
+        }
         return;
     }
 #endif
@@ -6305,25 +6316,7 @@ static void full_loop_core_light_pd1(PictureControlSet* pcs, ModeDecisionContext
         ctx->uv_intra_comp_only = true;
         ctx->mds_do_chroma      = true;
     }
-#if OPT_COEFF_SHAVING
-    if (perform_tx) {
-        perform_dct_dct_tx_light_pd1(pcs, ctx, cand_bf, loc, &y_coeff_bits, y_full_distortion[DIST_SSD]);
-    }
 
-    if (perform_tx == false || cand_bf->eob.y[0] == 0) {
-        cand_bf->eob.y[0]                                 = 0;
-        cand_bf->quant_dc.y[0]                            = 0;
-        cand_bf->y_has_coeff                              = 0;
-        y_full_distortion[DIST_SSD][DIST_CALC_RESIDUAL]   = 0;
-        y_full_distortion[DIST_SSD][DIST_CALC_PREDICTION] = 0;
-        y_coeff_bits                                      = 6000;
-        cand_bf->cand->transform_type[0]                  = DCT_DCT;
-        // For Inter blocks, transform type of chroma follows luma transfrom type
-        if (is_inter_mode(cand_bf->cand->block_mi.mode)) {
-            cand_bf->cand->transform_type_uv = DCT_DCT;
-        }
-    }
-#else
     if (perform_tx) {
         perform_dct_dct_tx_light_pd1(pcs, ctx, cand_bf, loc, &y_coeff_bits, y_full_distortion[DIST_SSD]);
     } else {
@@ -6339,7 +6332,7 @@ static void full_loop_core_light_pd1(PictureControlSet* pcs, ModeDecisionContext
             cand_bf->cand->transform_type_uv = DCT_DCT;
         }
     }
-#endif
+
     // Update coeff info based on luma TX so that chroma can take advantage of most accurate info
     cand_bf->block_has_coeff        = (cand_bf->y_has_coeff) ? 1 : 0;
     cand_bf->cnt_nz_coeff           = cand_bf->eob.y[0];
@@ -6629,9 +6622,7 @@ static void full_loop_core(PictureControlSet* pcs, ModeDecisionContext* ctx, Mod
     }
     // Check if should perform TX type search
     if (ctx->blk_geom->sq_size <= 64 && start_tx_depth == 0 && end_tx_depth == 0 && // TXS off
-#if TUNE_SIMPLIFY_SETTINGS
-        (!pcs->ppcs->sc_class1 || pcs->scs->static_config.rtc) &&
-#else
+#if !TUNE_SIMPLIFY_SETTINGS
         !pcs->ppcs->sc_class1 && // Can't be SC b/c SC tries DCT_DCT and IDTX when only_dct_dct is 1
 #endif
         search_dct_dct_only(pcs,

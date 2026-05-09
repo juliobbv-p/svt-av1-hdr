@@ -408,9 +408,9 @@ typedef struct MdSubPelSearchCtrls {
     int round_dev_th;
     // Specifies the refinement accuracy for diagonal position(s).
     uint8_t skip_diag_refinement;
+#if !OPT_LPD1
     // Specifies whether the Sub-Pel search will be performed for around (0,0) or not (0: OFF, 1:
     // ON)
-#if !OPT_LPD1
     uint8_t skip_zz_mv;
 #endif
     uint8_t min_blk_sz; //blk size below which we skip subpel

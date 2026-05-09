@@ -55,15 +55,9 @@ Tasks & Questions
     -Need a ReconPicture for each candidate.
     -I don't see a way around doing the copies in temp memory and then copying it in...
 */
-#if TUNE_SIMPLIFY_SETTINGS
 EbErrorType svt_aom_largest_coding_unit_ctor(SuperBlock* larget_coding_unit_ptr, uint8_t sb_size_pix,
                                              uint16_t sb_origin_x, uint16_t sb_origin_y, uint16_t sb_index,
                                              EncMode enc_mode, bool rtc, bool allintra, PictureControlSet* pcs) {
-#else
-EbErrorType svt_aom_largest_coding_unit_ctor(SuperBlock* larget_coding_unit_ptr, uint8_t sb_size_pix,
-                                             uint16_t sb_origin_x, uint16_t sb_origin_y, uint16_t sb_index,
-                                             EncMode enc_mode, bool rtc, bool allintra, PictureControlSet* pcs) {
-#endif
     larget_coding_unit_ptr->dctor = svt_aom_largest_coding_unit_dctor;
 
     // ************ SB ***************

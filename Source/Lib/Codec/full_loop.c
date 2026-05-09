@@ -1380,10 +1380,6 @@ uint8_t svt_av1_compute_cul_level_c(const int16_t* const scan, const int32_t* co
 // Returns the updated EOB (0 = block became skip).
 static INLINE uint16_t shave_coeff(int32_t* quant_buf, int32_t* recon_buf, uint16_t eob, TxSize tx_size, TxType tx_type,
                                    const CoeffShavingCtrls* ctrls) {
-    if (eob <= 1) {
-        return eob;
-    }
-
     const int16_t* const scan = get_scan_order(tx_size, tx_type)->scan;
 
     const int level_th = ctrls->level_threshold;
@@ -1682,7 +1678,7 @@ uint8_t svt_aom_quantize_inv_quantize(PictureControlSet* pcs, ModeDecisionContex
     // Apply coefficient shaving for luma after all quantization/RDOQ is complete.
     // This catches all luma quantize paths (light PD1, regular TX, encode pass)
     // in a single place.
-    if (component_type == COMPONENT_LUMA && ctx->coeff_shaving_ctrls.enabled && *eob > 0) {
+    if (component_type == COMPONENT_LUMA && ctx->coeff_shaving_ctrls.enabled && *eob > 1) {
         *eob = shave_coeff(quant_coeff, recon_coeff, *eob, txsize, tx_type, &ctx->coeff_shaving_ctrls);
     }
 #endif
