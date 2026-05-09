@@ -1581,9 +1581,8 @@ void svt_aom_pad_input_pictures(SequenceControlSet* scs, EbPictureBufferDesc* in
  *then used to compute statistics
  *
  ********************************************************************************/
-void* svt_aom_picture_analysis_kernel(void* input_ptr) {
-    EbThreadContext*         thread_ctx = (EbThreadContext*)input_ptr;
-    PictureAnalysisContext*  pa_ctx     = (PictureAnalysisContext*)thread_ctx->priv;
+EbErrorType svt_aom_picture_analysis_kernel_iter(void* context) {
+    PictureAnalysisContext*  pa_ctx = (PictureAnalysisContext*)context;
     PictureParentControlSet* pcs;
 
     EbObjectWrapper*             in_results_wrapper_ptr;
@@ -1591,115 +1590,123 @@ void* svt_aom_picture_analysis_kernel(void* input_ptr) {
     EbObjectWrapper*             out_results_wrapper;
     EbPaReferenceObject*         pa_ref_obj_;
 
-    EbPictureBufferDesc* input_padded_pic;
     EbPictureBufferDesc* input_pic;
 
-    for (;;) {
-        // Get Input Full Object
-        EB_GET_FULL_OBJECT(pa_ctx->resource_coordination_results_input_fifo_ptr, &in_results_wrapper_ptr);
+    // Get Input Full Object
+    EB_GET_FULL_OBJECT(pa_ctx->resource_coordination_results_input_fifo_ptr, &in_results_wrapper_ptr);
 
-        in_results_ptr = (ResourceCoordinationResults*)in_results_wrapper_ptr->object_ptr;
-        pcs            = (PictureParentControlSet*)in_results_ptr->pcs_wrapper->object_ptr;
+    in_results_ptr = (ResourceCoordinationResults*)in_results_wrapper_ptr->object_ptr;
+    pcs            = (PictureParentControlSet*)in_results_ptr->pcs_wrapper->object_ptr;
 
-        // Mariana : save enhanced picture ptr, move this from here
-        pcs->enhanced_unscaled_pic = pcs->enhanced_pic;
+    // Mariana : save enhanced picture ptr, move this from here
+    pcs->enhanced_unscaled_pic = pcs->enhanced_pic;
 
-        // There is no need to do processing for overlay picture. Overlay and AltRef share the same
-        // results.
-        if (!pcs->is_overlay) {
-            SequenceControlSet* scs = pcs->scs;
-            input_pic               = pcs->enhanced_pic;
-            {
-                // Padding for input pictures
-                svt_aom_pad_input_pictures(scs, input_pic);
+    // There is no need to do processing for overlay picture. Overlay and AltRef share the same
+    // results.
+    if (!pcs->is_overlay) {
+        SequenceControlSet* scs = pcs->scs;
+        input_pic               = pcs->enhanced_pic;
+        EbPictureBufferDesc* input_padded_pic;
+        {
+            // Padding for input pictures
+            svt_aom_pad_input_pictures(scs, input_pic);
 
-                // Pre processing operations performed on the input picture
-                svt_aom_picture_pre_processing_operations(pcs, scs);
+            // Pre processing operations performed on the input picture
+            svt_aom_picture_pre_processing_operations(pcs, scs);
 
-                if (input_pic->color_format >= EB_YUV422) {
-                    // Jing: Do the conversion of 422/444=>420 here since it's multi-threaded kernel
-                    //       Reuse the Y, only add cb/cr in the newly created buffer desc
-                    //       NOTE: since denoise may change the src, so this part is after svt_aom_picture_pre_processing_operations()
-                    pcs->chroma_downsampled_pic->y_buffer = input_pic->y_buffer;
-                    svt_aom_down_sample_chroma(input_pic, pcs->chroma_downsampled_pic);
-                } else {
-                    pcs->chroma_downsampled_pic = input_pic;
-                }
-
-                //not passing through the DS pool, so 1/4 and 1/16 are not used
-                pcs->ds_pics.picture_ptr           = input_pic;
-                pcs->ds_pics.quarter_picture_ptr   = NULL;
-                pcs->ds_pics.sixteenth_picture_ptr = NULL;
-                pcs->ds_pics.picture_number        = pcs->picture_number;
-
-                // Original path
-                // Get PA ref, copy 8bit luma to pa_ref->input_padded_pic
-                pa_ref_obj_                 = (EbPaReferenceObject*)pcs->pa_ref_pic_wrapper->object_ptr;
-                pa_ref_obj_->picture_number = pcs->picture_number;
-                input_padded_pic            = pa_ref_obj_->input_padded_pic;
-                if (!scs->allintra) {
-                    // 1/4 & 1/16 input picture downsampling through filtering
-                    svt_aom_downsample_filtering_input_picture(pcs,
-                                                               input_padded_pic,
-                                                               pa_ref_obj_->quarter_downsampled_picture_ptr,
-                                                               pa_ref_obj_->sixteenth_downsampled_picture_ptr);
-
-                    pcs->ds_pics.quarter_picture_ptr   = pa_ref_obj_->quarter_downsampled_picture_ptr;
-                    pcs->ds_pics.sixteenth_picture_ptr = pa_ref_obj_->sixteenth_downsampled_picture_ptr;
-                }
-            }
-            // Gathering statistics of input picture, including Variance Calculation, Histogram Bins
-            {
-                svt_aom_gathering_picture_statistics(
-                    scs, pcs, input_padded_pic, pa_ref_obj_->sixteenth_downsampled_picture_ptr);
-
-                pa_ref_obj_->avg_luma = pcs->avg_luma;
+            if (input_pic->color_format >= EB_YUV422) {
+                // Jing: Do the conversion of 422/444=>420 here since it's multi-threaded kernel
+                //       Reuse the Y, only add cb/cr in the newly created buffer desc
+                //       NOTE: since denoise may change the src, so this part is after svt_aom_picture_pre_processing_operations()
+                pcs->chroma_downsampled_pic->y_buffer = input_pic->y_buffer;
+                svt_aom_down_sample_chroma(input_pic, pcs->chroma_downsampled_pic);
+            } else {
+                pcs->chroma_downsampled_pic = input_pic;
             }
 
-            // If running multi-threaded mode, perform SC detection in svt_aom_picture_analysis_kernel, else in svt_aom_picture_decision_kernel
-            if (scs->static_config.level_of_parallelism != 1) {
-                switch (scs->static_config.screen_content_mode) {
-#if OPT_SC_STILL_IMAGE
-                case 0:
-                    pcs->sc_class0 = pcs->sc_class1 = pcs->sc_class2 = pcs->sc_class3 = pcs->sc_class4 =
-                        pcs->sc_class5                                                = 0;
-                    break;
-                case 1:
-                    pcs->sc_class0 = pcs->sc_class1 = pcs->sc_class2 = pcs->sc_class3 = pcs->sc_class4 =
-                        pcs->sc_class5                                                = 1;
-                    break;
-#else
-                case 0:
-                    pcs->sc_class0 = pcs->sc_class1 = pcs->sc_class2 = pcs->sc_class3 = pcs->sc_class4 = 0;
-                    break;
-                case 1:
-                    pcs->sc_class0 = pcs->sc_class1 = pcs->sc_class2 = pcs->sc_class3 = pcs->sc_class4 = 1;
-                    break;
-#endif
-                case 2:
-                    // SC Detection is OFF for 4K and higher
-                    if (scs->input_resolution <= INPUT_SIZE_1080p_RANGE) {
-                        svt_aom_is_screen_content(pcs);
-                    }
-                    break;
-                case 3:
-                    svt_aom_is_screen_content_antialiasing_aware(pcs);
-                    break;
-                }
+            //not passing through the DS pool, so 1/4 and 1/16 are not used
+            pcs->ds_pics.picture_ptr           = input_pic;
+            pcs->ds_pics.quarter_picture_ptr   = NULL;
+            pcs->ds_pics.sixteenth_picture_ptr = NULL;
+            pcs->ds_pics.picture_number        = pcs->picture_number;
+
+            // Original path
+            // Get PA ref, copy 8bit luma to pa_ref->input_padded_pic
+            pa_ref_obj_                 = (EbPaReferenceObject*)pcs->pa_ref_pic_wrapper->object_ptr;
+            pa_ref_obj_->picture_number = pcs->picture_number;
+            input_padded_pic            = pa_ref_obj_->input_padded_pic;
+            if (!scs->allintra) {
+                // 1/4 & 1/16 input picture downsampling through filtering
+                svt_aom_downsample_filtering_input_picture(pcs,
+                                                           input_padded_pic,
+                                                           pa_ref_obj_->quarter_downsampled_picture_ptr,
+                                                           pa_ref_obj_->sixteenth_downsampled_picture_ptr);
+
+                pcs->ds_pics.quarter_picture_ptr   = pa_ref_obj_->quarter_downsampled_picture_ptr;
+                pcs->ds_pics.sixteenth_picture_ptr = pa_ref_obj_->sixteenth_downsampled_picture_ptr;
             }
         }
+        // Gathering statistics of input picture, including Variance Calculation, Histogram Bins
+        {
+            svt_aom_gathering_picture_statistics(
+                scs, pcs, input_padded_pic, pa_ref_obj_->sixteenth_downsampled_picture_ptr);
 
-        // Get Empty Results Object
-        svt_get_empty_object(pa_ctx->picture_analysis_results_output_fifo_ptr, &out_results_wrapper);
+            pa_ref_obj_->avg_luma = pcs->avg_luma;
+        }
 
-        PictureAnalysisResults* out_results = (PictureAnalysisResults*)out_results_wrapper->object_ptr;
-        out_results->pcs_wrapper            = in_results_ptr->pcs_wrapper;
+        // If running multi-threaded mode, perform SC detection in svt_aom_picture_analysis_kernel, else in svt_aom_picture_decision_kernel
+        if (scs->static_config.level_of_parallelism != 1) {
+            switch (scs->static_config.screen_content_mode) {
+#if OPT_SC_STILL_IMAGE
+            case 0:
+                pcs->sc_class0 = pcs->sc_class1 = pcs->sc_class2 = pcs->sc_class3 = pcs->sc_class4 = pcs->sc_class5 = 0;
+                break;
+            case 1:
+                pcs->sc_class0 = pcs->sc_class1 = pcs->sc_class2 = pcs->sc_class3 = pcs->sc_class4 = pcs->sc_class5 = 1;
+                break;
+#else
+            case 0:
+                pcs->sc_class0 = pcs->sc_class1 = pcs->sc_class2 = pcs->sc_class3 = pcs->sc_class4 = 0;
+                break;
+            case 1:
+                pcs->sc_class0 = pcs->sc_class1 = pcs->sc_class2 = pcs->sc_class3 = pcs->sc_class4 = 1;
+                break;
+#endif
+            case 2:
+                // SC Detection is OFF for 4K and higher
+                if (scs->input_resolution <= INPUT_SIZE_1080p_RANGE) {
+                    svt_aom_is_screen_content(pcs);
+                }
+                break;
+            case 3:
+                svt_aom_is_screen_content_antialiasing_aware(pcs);
+                break;
+            }
+        }
+    }
 
-        // Release the Input Results
-        svt_release_object(in_results_wrapper_ptr);
+    // Get Empty Results Object
+    svt_get_empty_object(pa_ctx->picture_analysis_results_output_fifo_ptr, &out_results_wrapper);
 
-        // Post the Full Results Object
-        svt_post_full_object(out_results_wrapper);
+    PictureAnalysisResults* out_results = (PictureAnalysisResults*)out_results_wrapper->object_ptr;
+    out_results->pcs_wrapper            = in_results_ptr->pcs_wrapper;
+
+    // Release the Input Results
+    svt_release_object(in_results_wrapper_ptr);
+
+    // Post the Full Results Object
+    svt_post_full_object(out_results_wrapper);
+
+    return EB_ErrorNone;
+}
+
+void* svt_aom_picture_analysis_kernel(void* input_ptr) {
+    EbThreadContext* thread_ctx = (EbThreadContext*)input_ptr;
+    for (;;) {
+        EbErrorType err = svt_aom_picture_analysis_kernel_iter(thread_ctx->priv);
+        if (err == EB_NoErrorFifoShutdown) {
+            return NULL;
+        }
     }
     return NULL;
 }

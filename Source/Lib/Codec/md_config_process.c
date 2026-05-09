@@ -882,223 +882,229 @@ static bool me_based_cdef_skip(PictureControlSet* pcs) {
  *  Initializations for various flags and variables
  *
  ********************************************************************************/
-void* svt_aom_mode_decision_configuration_kernel(void* input_ptr) {
+EbErrorType svt_aom_mode_decision_configuration_kernel_iter(void* context) {
     // Context & SCS & PCS
-    EbThreadContext*                  thread_ctx  = (EbThreadContext*)input_ptr;
-    ModeDecisionConfigurationContext* context_ptr = (ModeDecisionConfigurationContext*)thread_ctx->priv;
+    ModeDecisionConfigurationContext* context_ptr = (ModeDecisionConfigurationContext*)context;
     // Input
     EbObjectWrapper* rc_results_wrapper;
 
     // Output
     EbObjectWrapper* enc_dec_tasks_wrapper;
 
-    for (;;) {
-        // Get RateControl Results
-        EB_GET_FULL_OBJECT(context_ptr->rate_control_input_fifo_ptr, &rc_results_wrapper);
+    // Get RateControl Results
+    EB_GET_FULL_OBJECT(context_ptr->rate_control_input_fifo_ptr, &rc_results_wrapper);
 
-        RateControlResults* rc_results = (RateControlResults*)rc_results_wrapper->object_ptr;
-        PictureControlSet*  pcs        = (PictureControlSet*)rc_results->pcs_wrapper->object_ptr;
-        SequenceControlSet* scs        = pcs->scs;
-        pcs->min_me_clpx               = 0;
-        pcs->max_me_clpx               = 0;
-        pcs->avg_me_clpx               = 0;
-        if (pcs->slice_type != I_SLICE) {
-            uint32_t b64_idx;
-            uint64_t avg_me_clpx = 0;
-            uint64_t min_dist    = (uint64_t)~0;
-            uint64_t max_dist    = 0;
+    RateControlResults* rc_results = (RateControlResults*)rc_results_wrapper->object_ptr;
+    PictureControlSet*  pcs        = (PictureControlSet*)rc_results->pcs_wrapper->object_ptr;
+    SequenceControlSet* scs        = pcs->scs;
+    pcs->min_me_clpx               = 0;
+    pcs->max_me_clpx               = 0;
+    pcs->avg_me_clpx               = 0;
+    if (pcs->slice_type != I_SLICE) {
+        uint32_t b64_idx;
+        uint64_t avg_me_clpx = 0;
+        uint64_t min_dist    = (uint64_t)~0;
+        uint64_t max_dist    = 0;
 
-            for (b64_idx = 0; b64_idx < pcs->ppcs->b64_total_count; ++b64_idx) {
-                avg_me_clpx += pcs->ppcs->me_8x8_cost_variance[b64_idx];
-                min_dist = MIN(pcs->ppcs->me_8x8_cost_variance[b64_idx], min_dist);
-                max_dist = MAX(pcs->ppcs->me_8x8_cost_variance[b64_idx], max_dist);
-            }
-            pcs->min_me_clpx = min_dist;
-            pcs->max_me_clpx = max_dist;
-            pcs->avg_me_clpx = avg_me_clpx / pcs->ppcs->b64_total_count;
+        for (b64_idx = 0; b64_idx < pcs->ppcs->b64_total_count; ++b64_idx) {
+            avg_me_clpx += pcs->ppcs->me_8x8_cost_variance[b64_idx];
+            min_dist = MIN(pcs->ppcs->me_8x8_cost_variance[b64_idx], min_dist);
+            max_dist = MAX(pcs->ppcs->me_8x8_cost_variance[b64_idx], max_dist);
         }
-        pcs->coeff_lvl = INVALID_LVL;
-        if (scs->allintra) {
-            derive_intra_coeff_level(pcs);
+        pcs->min_me_clpx = min_dist;
+        pcs->max_me_clpx = max_dist;
+        pcs->avg_me_clpx = avg_me_clpx / pcs->ppcs->b64_total_count;
+    }
+    pcs->coeff_lvl = INVALID_LVL;
+    if (scs->allintra) {
+        derive_intra_coeff_level(pcs);
 #if TUNE_SIMPLIFY_SETTINGS
-        } else if (!scs->static_config.rtc && pcs->slice_type != I_SLICE) {
+    } else if (!scs->static_config.rtc && pcs->slice_type != I_SLICE) {
 #else
-        } else if (!scs->static_config.rtc && pcs->slice_type != I_SLICE && !pcs->ppcs->sc_class1) {
+    } else if (!scs->static_config.rtc && pcs->slice_type != I_SLICE && !pcs->ppcs->sc_class1) {
 #endif
-            derive_inter_coeff_level(pcs);
+        derive_inter_coeff_level(pcs);
+    }
+    // -------
+    // Scale references if resolution of the reference is different than the input
+    // super-res reference frame size is same as original input size, only check current frame scaled flag;
+    // reference scaling resizes reference frame to different size, need check each reference frame for scaling
+    // -------
+    if ((pcs->ppcs->frame_superres_enabled == 1 || scs->static_config.resize_mode != RESIZE_NONE) &&
+        pcs->slice_type != I_SLICE) {
+        if (pcs->ppcs->is_ref == true && pcs->ppcs->ref_pic_wrapper != NULL) {
+            // update mi_rows and mi_cols for the reference pic wrapper (used in mfmv for other
+            // pictures)
+            EbReferenceObject* ref_object = pcs->ppcs->ref_pic_wrapper->object_ptr;
+            ref_object->mi_rows           = pcs->ppcs->aligned_height >> MI_SIZE_LOG2;
+            ref_object->mi_cols           = pcs->ppcs->aligned_width >> MI_SIZE_LOG2;
         }
-        // -------
-        // Scale references if resolution of the reference is different than the input
-        // super-res reference frame size is same as original input size, only check current frame scaled flag;
-        // reference scaling resizes reference frame to different size, need check each reference frame for scaling
-        // -------
-        if ((pcs->ppcs->frame_superres_enabled == 1 || scs->static_config.resize_mode != RESIZE_NONE) &&
-            pcs->slice_type != I_SLICE) {
-            if (pcs->ppcs->is_ref == true && pcs->ppcs->ref_pic_wrapper != NULL) {
-                // update mi_rows and mi_cols for the reference pic wrapper (used in mfmv for other
-                // pictures)
-                EbReferenceObject* ref_object = pcs->ppcs->ref_pic_wrapper->object_ptr;
-                ref_object->mi_rows           = pcs->ppcs->aligned_height >> MI_SIZE_LOG2;
-                ref_object->mi_cols           = pcs->ppcs->aligned_width >> MI_SIZE_LOG2;
+
+        svt_aom_scale_rec_references(pcs, pcs->ppcs->enhanced_pic);
+    }
+
+    FrameHeader* frm_hdr = &pcs->ppcs->frm_hdr;
+    // Mode Decision Configuration Kernel Signal(s) derivation
+    if (scs->allintra) {
+        svt_aom_sig_deriv_mode_decision_config_allintra(scs, pcs);
+    } else if (scs->static_config.rtc) {
+        svt_aom_sig_deriv_mode_decision_config_rtc(scs, pcs);
+    } else {
+        svt_aom_sig_deriv_mode_decision_config_default(scs, pcs);
+    }
+
+    if (pcs->slice_type != I_SLICE && scs->mfmv_enabled) {
+        av1_setup_motion_field(pcs->ppcs->av1_cm, pcs);
+    }
+
+    pcs->intra_coded_area = 0;
+    pcs->skip_coded_area  = 0;
+    pcs->hp_coded_area    = 0;
+    pcs->avg_cnt_zeromv   = 0;
+    // Init block selection
+    set_global_motion_field(pcs);
+
+    svt_av1_qm_init(pcs->ppcs);
+    // Initialize the rate estimation tables for the frame
+    init_frame_rate_tables(pcs);
+    if (frm_hdr->allow_intrabc) {
+        IntrabcCtrls* intraBC_ctrls = &(pcs->ppcs->intrabc_ctrls);
+        // Generate hash table for intra-Bc if max block size is set
+        if (intraBC_ctrls->max_block_size_hash) {
+            generate_ibc_data(pcs);
+        }
+
+        // Initialize search sites for diamond/3-step search for intra-Bc
+        svt_av1_init3smotion_compensation(&pcs->ss_cfg, pcs->ppcs->enhanced_pic->y_stride);
+
+        if (intraBC_ctrls->mesh_qp_scaling) {
+            // QP-scaled thresholds
+            uint32_t q_weight, q_weight_denom;
+            svt_aom_get_qp_based_th_scaling_factors(pcs->scs->qp_based_th_scaling_ctrls.intra_bc_mesh_qp_scaling,
+                                                    &q_weight,
+                                                    &q_weight_denom,
+                                                    pcs->scs->static_config.qp);
+
+            MeshPattern* mesh_patterns = intraBC_ctrls->mesh_patterns;
+
+            for (int i = 0; i < MAX_MESH_STEP; i++) {
+                mesh_patterns[i].range = DIVIDE_AND_ROUND(mesh_patterns[i].range * q_weight, q_weight_denom);
             }
-
-            svt_aom_scale_rec_references(pcs, pcs->ppcs->enhanced_pic);
         }
-
-        FrameHeader* frm_hdr = &pcs->ppcs->frm_hdr;
-        // Mode Decision Configuration Kernel Signal(s) derivation
-        if (scs->allintra) {
-            svt_aom_sig_deriv_mode_decision_config_allintra(scs, pcs);
-        } else if (scs->static_config.rtc) {
-            svt_aom_sig_deriv_mode_decision_config_rtc(scs, pcs);
-        } else {
-            svt_aom_sig_deriv_mode_decision_config_default(scs, pcs);
-        }
-
-        if (pcs->slice_type != I_SLICE && scs->mfmv_enabled) {
-            av1_setup_motion_field(pcs->ppcs->av1_cm, pcs);
-        }
-
-        pcs->intra_coded_area = 0;
-        pcs->skip_coded_area  = 0;
-        pcs->hp_coded_area    = 0;
-        pcs->avg_cnt_zeromv   = 0;
-        // Init block selection
-        set_global_motion_field(pcs);
-
-        svt_av1_qm_init(pcs->ppcs);
-        // Initialize the rate estimation tables for the frame
-        init_frame_rate_tables(pcs);
-        if (frm_hdr->allow_intrabc) {
-            IntrabcCtrls* intraBC_ctrls = &(pcs->ppcs->intrabc_ctrls);
-            // Generate hash table for intra-Bc if max block size is set
-            if (intraBC_ctrls->max_block_size_hash) {
-                generate_ibc_data(pcs);
-            }
-
-            // Initialize search sites for diamond/3-step search for intra-Bc
-            svt_av1_init3smotion_compensation(&pcs->ss_cfg, pcs->ppcs->enhanced_pic->y_stride);
-
-            if (intraBC_ctrls->mesh_qp_scaling) {
-                // QP-scaled thresholds
-                uint32_t q_weight, q_weight_denom;
-                svt_aom_get_qp_based_th_scaling_factors(pcs->scs->qp_based_th_scaling_ctrls.intra_bc_mesh_qp_scaling,
-                                                        &q_weight,
-                                                        &q_weight_denom,
-                                                        pcs->scs->static_config.qp);
-
-                MeshPattern* mesh_patterns = intraBC_ctrls->mesh_patterns;
-
-                for (int i = 0; i < MAX_MESH_STEP; i++) {
-                    mesh_patterns[i].range = DIVIDE_AND_ROUND(mesh_patterns[i].range * q_weight, q_weight_denom);
-                }
-            }
-        }
-        CdefSearchControls* cdef_ctrls = &pcs->ppcs->cdef_search_ctrls;
-        const uint8_t       skip_perc  = pcs->ref_skip_percentage;
+    }
+    CdefSearchControls* cdef_ctrls = &pcs->ppcs->cdef_search_ctrls;
+    const uint8_t       skip_perc  = pcs->ref_skip_percentage;
 #if OPT_CDEF_SKIP_TH
-        // Adjust skip_th by QP: at low QP lower the threshold (skip CDEF more — picture already clean),
-        // at high QP raise it (keep CDEF — it helps with compression artifacts)
-        uint8_t cdef_skip_th = 0;
-        if (cdef_ctrls->skip_th) {
-            cdef_skip_th = (uint8_t)CLIP3(
-                25, 100, (int)cdef_ctrls->skip_th + ((int)pcs->ppcs->frm_hdr.quantization_params.base_q_idx - 128) / 4);
-        }
-        if (me_based_cdef_skip(pcs) || (cdef_ctrls->skip_th && skip_perc >= cdef_skip_th) ||
-            (scs->vq_ctrls.sharpness_ctrls.cdef && pcs->ppcs->is_noise_level)) {
+    // Adjust skip_th by QP: at low QP lower the threshold (skip CDEF more — picture already clean),
+    // at high QP raise it (keep CDEF — it helps with compression artifacts)
+    uint8_t cdef_skip_th = 0;
+    if (cdef_ctrls->skip_th) {
+        cdef_skip_th = (uint8_t)CLIP3(
+            25, 100, (int)cdef_ctrls->skip_th + ((int)pcs->ppcs->frm_hdr.quantization_params.base_q_idx - 128) / 4);
+    }
+    if (me_based_cdef_skip(pcs) || (cdef_ctrls->skip_th && skip_perc >= cdef_skip_th) ||
+        (scs->vq_ctrls.sharpness_ctrls.cdef && pcs->ppcs->is_noise_level)) {
 #else
-        if (me_based_cdef_skip(pcs) || (skip_perc > 75 && cdef_ctrls->use_skip_detector) ||
-            (scs->vq_ctrls.sharpness_ctrls.cdef && pcs->ppcs->is_noise_level)) {
+    if (me_based_cdef_skip(pcs) || (skip_perc > 75 && cdef_ctrls->use_skip_detector) ||
+        (scs->vq_ctrls.sharpness_ctrls.cdef && pcs->ppcs->is_noise_level)) {
 #endif
-            pcs->ppcs->cdef_level = 0;
-        } else if (cdef_ctrls->use_reference_cdef_fs || cdef_ctrls->search_best_ref_fs) {
-            update_cdef_filters_on_ref_info(pcs);
+        pcs->ppcs->cdef_level = 0;
+    } else if (cdef_ctrls->use_reference_cdef_fs || cdef_ctrls->search_best_ref_fs) {
+        update_cdef_filters_on_ref_info(pcs);
+    }
+
+    if (scs->vq_ctrls.sharpness_ctrls.restoration && pcs->ppcs->is_noise_level) {
+        pcs->ppcs->enable_restoration = 0;
+    }
+
+    pcs->mimic_only_tx_4x4 = 0;
+    if (frm_hdr->segmentation_params.segmentation_enabled) {
+        bool has_lossless_segment = 0;
+        // Loop through each segment to determine if it is coded losslessly
+        for (int segment_id = 0; segment_id < MAX_SEGMENTS; segment_id++) {
+            pcs->lossless[segment_id] = 0;
+            pcs->lossless[segment_id] =
+                ((int16_t)((int16_t)pcs->ppcs->frm_hdr.quantization_params.base_q_idx +
+                           pcs->ppcs->frm_hdr.segmentation_params.feature_data[segment_id][SEG_LVL_ALT_Q])) <= 0;
+            has_lossless_segment = has_lossless_segment || pcs->lossless[segment_id];
         }
-
-        if (scs->vq_ctrls.sharpness_ctrls.restoration && pcs->ppcs->is_noise_level) {
-            pcs->ppcs->enable_restoration = 0;
-        }
-
-        pcs->mimic_only_tx_4x4 = 0;
-        if (frm_hdr->segmentation_params.segmentation_enabled) {
-            bool has_lossless_segment = 0;
-            // Loop through each segment to determine if it is coded losslessly
-            for (int segment_id = 0; segment_id < MAX_SEGMENTS; segment_id++) {
-                pcs->lossless[segment_id] = 0;
-                pcs->lossless[segment_id] =
-                    ((int16_t)((int16_t)pcs->ppcs->frm_hdr.quantization_params.base_q_idx +
-                               pcs->ppcs->frm_hdr.segmentation_params.feature_data[segment_id][SEG_LVL_ALT_Q])) <= 0;
-                has_lossless_segment = has_lossless_segment || pcs->lossless[segment_id];
-            }
-            // Derive coded_lossless; true if the frame is fully lossless at the coded resolution.
-            frm_hdr->coded_lossless = 1;
-            for (int segment_id = 0; segment_id < MAX_SEGMENTS; segment_id++) {
-                if (!pcs->lossless[segment_id]) {
-                    frm_hdr->coded_lossless = 0;
-                    break;
-                }
-            }
-            // To Do: fix the case of lossy and lossless segments in the same frame
-            if (!frm_hdr->coded_lossless && has_lossless_segment) {
-                frm_hdr->segmentation_params.segmentation_enabled = 0;
-            }
-        }
-        if (!frm_hdr->segmentation_params.segmentation_enabled) {
-            frm_hdr->coded_lossless = pcs->lossless[0] = !pcs->ppcs->frm_hdr.quantization_params.base_q_idx;
-        }
-
-        // Derive all_lossless; if super-resolution is used, such a frame will still NOT be lossless at the upscaled resolution.
-        frm_hdr->all_lossless = frm_hdr->coded_lossless && av1_superres_unscaled(&(pcs->ppcs->av1_cm->frm_size));
-
-        if (frm_hdr->coded_lossless) {
-            pcs->ppcs->frm_hdr.delta_q_params.delta_q_present = 0;
-            frm_hdr->quantization_params.delta_q_dc[PLANE_Y]  = 0;
-            frm_hdr->quantization_params.delta_q_ac[PLANE_U]  = 0;
-            frm_hdr->quantization_params.delta_q_dc[PLANE_U]  = 0;
-            frm_hdr->quantization_params.delta_q_ac[PLANE_V]  = 0;
-            frm_hdr->quantization_params.delta_q_dc[PLANE_V]  = 0;
-            pcs->ppcs->dlf_ctrls.enabled                      = 0;
-            pcs->ppcs->cdef_level                             = 0;
-        }
-
-        if (frm_hdr->all_lossless) {
-            pcs->ppcs->enable_restoration = 0;
-        }
-
-        // The following shortcuts are necessary to enforce the use of block_4x4, block_8x8, and Tx_4x4,
-        // these cannot be controlled at the block level, so they are invoked even if only one segment is marked as lossless
-        if (frm_hdr
-                ->coded_lossless /*|| (frm_hdr->segmentation_params.segmentation_enabled && has_lossless_segment)*/) {
-            pcs->mimic_only_tx_4x4                      = 1;
-            frm_hdr->tx_mode                            = TX_MODE_SELECT;
-            pcs->pic_depth_removal_level                = 0;
-            pcs->pic_block_based_depth_refinement_level = 0;
-            pcs->pic_lpd0_lvl                           = 0;
-            pcs->pic_lpd1_lvl                           = 0;
-            pcs->pic_bypass_encdec = scs->static_config.encoder_bit_depth != EB_EIGHT_BIT ? 0 : pcs->pic_bypass_encdec;
-        }
-        // Post the results to the MD processes
-        uint16_t tg_count = pcs->ppcs->tile_group_cols * pcs->ppcs->tile_group_rows;
-        for (uint16_t tile_group_idx = 0; tile_group_idx < tg_count; tile_group_idx++) {
-            svt_get_empty_object(context_ptr->mode_decision_configuration_output_fifo_ptr, &enc_dec_tasks_wrapper);
-
-            EncDecTasks* enc_dec_tasks      = (EncDecTasks*)enc_dec_tasks_wrapper->object_ptr;
-            enc_dec_tasks->pcs_wrapper      = rc_results->pcs_wrapper;
-            enc_dec_tasks->input_type       = rc_results->superres_recode ? ENCDEC_TASKS_SUPERRES_INPUT
-                                                                          : ENCDEC_TASKS_MDC_INPUT;
-            enc_dec_tasks->tile_group_index = tile_group_idx;
-
-            // Post the Full Results Object
-            svt_post_full_object(enc_dec_tasks_wrapper);
-
-            if (rc_results->superres_recode) {
-                // for superres input, only send one task
+        // Derive coded_lossless; true if the frame is fully lossless at the coded resolution.
+        frm_hdr->coded_lossless = 1;
+        for (int segment_id = 0; segment_id < MAX_SEGMENTS; segment_id++) {
+            if (!pcs->lossless[segment_id]) {
+                frm_hdr->coded_lossless = 0;
                 break;
             }
         }
-        // Release Rate Control Results
-        svt_release_object(rc_results_wrapper);
+        // To Do: fix the case of lossy and lossless segments in the same frame
+        if (!frm_hdr->coded_lossless && has_lossless_segment) {
+            frm_hdr->segmentation_params.segmentation_enabled = 0;
+        }
+    }
+    if (!frm_hdr->segmentation_params.segmentation_enabled) {
+        frm_hdr->coded_lossless = pcs->lossless[0] = !pcs->ppcs->frm_hdr.quantization_params.base_q_idx;
     }
 
+    // Derive all_lossless; if super-resolution is used, such a frame will still NOT be lossless at the upscaled resolution.
+    frm_hdr->all_lossless = frm_hdr->coded_lossless && av1_superres_unscaled(&(pcs->ppcs->av1_cm->frm_size));
+
+    if (frm_hdr->coded_lossless) {
+        pcs->ppcs->frm_hdr.delta_q_params.delta_q_present = 0;
+        frm_hdr->quantization_params.delta_q_dc[PLANE_Y]  = 0;
+        frm_hdr->quantization_params.delta_q_ac[PLANE_U]  = 0;
+        frm_hdr->quantization_params.delta_q_dc[PLANE_U]  = 0;
+        frm_hdr->quantization_params.delta_q_ac[PLANE_V]  = 0;
+        frm_hdr->quantization_params.delta_q_dc[PLANE_V]  = 0;
+        pcs->ppcs->dlf_ctrls.enabled                      = 0;
+        pcs->ppcs->cdef_level                             = 0;
+    }
+
+    if (frm_hdr->all_lossless) {
+        pcs->ppcs->enable_restoration = 0;
+    }
+
+    // The following shortcuts are necessary to enforce the use of block_4x4, block_8x8, and Tx_4x4,
+    // these cannot be controlled at the block level, so they are invoked even if only one segment is marked as lossless
+    if (frm_hdr->coded_lossless /*|| (frm_hdr->segmentation_params.segmentation_enabled && has_lossless_segment)*/) {
+        pcs->mimic_only_tx_4x4                      = 1;
+        frm_hdr->tx_mode                            = TX_MODE_SELECT;
+        pcs->pic_depth_removal_level                = 0;
+        pcs->pic_block_based_depth_refinement_level = 0;
+        pcs->pic_lpd0_lvl                           = 0;
+        pcs->pic_lpd1_lvl                           = 0;
+        pcs->pic_bypass_encdec = scs->static_config.encoder_bit_depth != EB_EIGHT_BIT ? 0 : pcs->pic_bypass_encdec;
+    }
+    // Post the results to the MD processes
+    uint16_t tg_count = pcs->ppcs->tile_group_cols * pcs->ppcs->tile_group_rows;
+    for (uint16_t tile_group_idx = 0; tile_group_idx < tg_count; tile_group_idx++) {
+        svt_get_empty_object(context_ptr->mode_decision_configuration_output_fifo_ptr, &enc_dec_tasks_wrapper);
+
+        EncDecTasks* enc_dec_tasks = (EncDecTasks*)enc_dec_tasks_wrapper->object_ptr;
+        enc_dec_tasks->pcs_wrapper = rc_results->pcs_wrapper;
+        enc_dec_tasks->input_type  = rc_results->superres_recode ? ENCDEC_TASKS_SUPERRES_INPUT : ENCDEC_TASKS_MDC_INPUT;
+        enc_dec_tasks->tile_group_index = tile_group_idx;
+
+        // Post the Full Results Object
+        svt_post_full_object(enc_dec_tasks_wrapper);
+
+        if (rc_results->superres_recode) {
+            // for superres input, only send one task
+            break;
+        }
+    }
+    // Release Rate Control Results
+    svt_release_object(rc_results_wrapper);
+
+    return EB_ErrorNone;
+}
+
+void* svt_aom_mode_decision_configuration_kernel(void* input_ptr) {
+    EbThreadContext* thread_ctx = (EbThreadContext*)input_ptr;
+    for (;;) {
+        EbErrorType err = svt_aom_mode_decision_configuration_kernel_iter(thread_ctx->priv);
+        if (err == EB_NoErrorFifoShutdown) {
+            return NULL;
+        }
+    }
     return NULL;
 }

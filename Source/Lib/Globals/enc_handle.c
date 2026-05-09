@@ -1945,100 +1945,229 @@ EB_API EbErrorType svt_av1_enc_init(EbComponentType* svt_enc_component) {
     /************************************
     * Thread Handles
     ************************************/
-    // Resource Coordination
-    EB_CREATE_THREAD(enc_handle_ptr->resource_coordination_thread_handle,
-                     svt_aom_resource_coordination_kernel,
-                     enc_handle_ptr->resource_coordination_context_ptr);
-    EB_CREATE_THREAD_ARRAY(enc_handle_ptr->picture_analysis_thread_handle_array,
-                           scs->picture_analysis_process_init_count,
-                           svt_aom_picture_analysis_kernel,
-                           enc_handle_ptr->picture_analysis_context_ptr_array,
-                           "svt-picana");
+#if CONFIG_SINGLE_THREAD_KERNEL
+    // Single-thread kernel dispatch: at lp=1, register all kernels for
+    // cooperative dispatch instead of creating 16 OS threads.
+    svt_kernel_dispatcher_init(&enc_handle_ptr->kernel_dispatcher);
+    if (scs->lp == 1 && scs->static_config.pred_structure == LOW_DELAY) {
+        enc_handle_ptr->kernel_dispatcher.active = true;
 
-    // Picture Decision
-    EB_CREATE_THREAD(enc_handle_ptr->picture_decision_thread_handle,
-                     svt_aom_picture_decision_kernel,
-                     enc_handle_ptr->picture_decision_context_ptr);
+        // Enable non-blocking FIFO mode on all system resources
+        svt_system_resource_set_single_thread_mode(enc_handle_ptr->scs_pool_ptr);
+        svt_system_resource_set_single_thread_mode(enc_handle_ptr->picture_parent_control_set_pool_ptr);
+        svt_system_resource_set_single_thread_mode(enc_handle_ptr->me_pool_ptr);
+        svt_system_resource_set_single_thread_mode(enc_handle_ptr->picture_control_set_pool_ptr);
+        svt_system_resource_set_single_thread_mode(enc_handle_ptr->enc_dec_pool_ptr);
+        svt_system_resource_set_single_thread_mode(enc_handle_ptr->reference_picture_pool_ptr);
+        svt_system_resource_set_single_thread_mode(enc_handle_ptr->tpl_reference_picture_pool_ptr);
+        svt_system_resource_set_single_thread_mode(enc_handle_ptr->pa_reference_picture_pool_ptr);
+        svt_system_resource_set_single_thread_mode(enc_handle_ptr->overlay_input_picture_pool_ptr);
+        svt_system_resource_set_single_thread_mode(enc_handle_ptr->input_buffer_resource_ptr);
+        svt_system_resource_set_single_thread_mode(enc_handle_ptr->input_y8b_buffer_resource_ptr);
+        svt_system_resource_set_single_thread_mode(enc_handle_ptr->input_cmd_resource_ptr);
+        svt_system_resource_set_single_thread_mode(enc_handle_ptr->output_stream_buffer_resource_ptr);
+        if (enc_handle_ptr->output_recon_buffer_resource_ptr) {
+            svt_system_resource_set_single_thread_mode(enc_handle_ptr->output_recon_buffer_resource_ptr);
+        }
+        svt_system_resource_set_single_thread_mode(enc_handle_ptr->resource_coordination_results_resource_ptr);
+        svt_system_resource_set_single_thread_mode(enc_handle_ptr->picture_analysis_results_resource_ptr);
+        svt_system_resource_set_single_thread_mode(enc_handle_ptr->picture_decision_results_resource_ptr);
+        svt_system_resource_set_single_thread_mode(enc_handle_ptr->motion_estimation_results_resource_ptr);
+        svt_system_resource_set_single_thread_mode(enc_handle_ptr->initial_rate_control_results_resource_ptr);
+        svt_system_resource_set_single_thread_mode(enc_handle_ptr->picture_demux_results_resource_ptr);
+        svt_system_resource_set_single_thread_mode(enc_handle_ptr->tpl_disp_res_srm);
+        svt_system_resource_set_single_thread_mode(enc_handle_ptr->rate_control_tasks_resource_ptr);
+        svt_system_resource_set_single_thread_mode(enc_handle_ptr->rate_control_results_resource_ptr);
+        svt_system_resource_set_single_thread_mode(enc_handle_ptr->enc_dec_tasks_resource_ptr);
+        svt_system_resource_set_single_thread_mode(enc_handle_ptr->enc_dec_results_resource_ptr);
+        svt_system_resource_set_single_thread_mode(enc_handle_ptr->entropy_coding_results_resource_ptr);
+        svt_system_resource_set_single_thread_mode(enc_handle_ptr->dlf_results_resource_ptr);
+        svt_system_resource_set_single_thread_mode(enc_handle_ptr->cdef_results_resource_ptr);
+        svt_system_resource_set_single_thread_mode(enc_handle_ptr->rest_results_resource_ptr);
 
-    // Motion Estimation
-    EB_CREATE_THREAD_ARRAY(enc_handle_ptr->motion_estimation_thread_handle_array,
-                           scs->motion_estimation_process_init_count,
-                           svt_aom_motion_estimation_kernel,
-                           enc_handle_ptr->motion_estimation_context_ptr_array,
-                           "svt-me");
+        // Register all 16 pipeline kernels in stage order
+        SvtKernelDispatcher* d = &enc_handle_ptr->kernel_dispatcher;
+#define CONSUMER_FIFO(res) svt_system_resource_get_consumer_fifo(enc_handle_ptr->res, 0)
 
-    // Initial Rate Control
-    EB_CREATE_THREAD(enc_handle_ptr->initial_rate_control_thread_handle,
-                     svt_aom_initial_rate_control_kernel,
-                     enc_handle_ptr->initial_rate_control_context_ptr);
+        svt_kernel_dispatcher_register(d,
+                                       svt_aom_resource_coordination_kernel_iter,
+                                       enc_handle_ptr->resource_coordination_context_ptr->priv,
+                                       CONSUMER_FIFO(input_cmd_resource_ptr),
+                                       "ResCoord");
+        svt_kernel_dispatcher_register(d,
+                                       svt_aom_picture_analysis_kernel_iter,
+                                       enc_handle_ptr->picture_analysis_context_ptr_array[0]->priv,
+                                       CONSUMER_FIFO(resource_coordination_results_resource_ptr),
+                                       "PicAnalysis");
+        svt_kernel_dispatcher_register(d,
+                                       svt_aom_picture_decision_kernel_iter,
+                                       enc_handle_ptr->picture_decision_context_ptr->priv,
+                                       CONSUMER_FIFO(picture_analysis_results_resource_ptr),
+                                       "PicDecision");
+        svt_kernel_dispatcher_register(d,
+                                       svt_aom_motion_estimation_kernel_iter,
+                                       enc_handle_ptr->motion_estimation_context_ptr_array[0]->priv,
+                                       CONSUMER_FIFO(picture_decision_results_resource_ptr),
+                                       "ME");
+        svt_kernel_dispatcher_register(d,
+                                       svt_aom_initial_rate_control_kernel_iter,
+                                       enc_handle_ptr->initial_rate_control_context_ptr->priv,
+                                       CONSUMER_FIFO(motion_estimation_results_resource_ptr),
+                                       "InitRC");
+        svt_kernel_dispatcher_register(d,
+                                       svt_aom_source_based_operations_kernel_iter,
+                                       enc_handle_ptr->source_based_operations_context_ptr_array[0]->priv,
+                                       CONSUMER_FIFO(initial_rate_control_results_resource_ptr),
+                                       "SrcOps");
+        svt_kernel_dispatcher_register(d,
+                                       svt_aom_tpl_disp_kernel_iter,
+                                       enc_handle_ptr->tpl_disp_context_ptr_array[0]->priv,
+                                       CONSUMER_FIFO(tpl_disp_res_srm),
+                                       "TPL");
+        svt_kernel_dispatcher_register(d,
+                                       svt_aom_picture_manager_kernel_iter,
+                                       enc_handle_ptr->picture_manager_context_ptr->priv,
+                                       CONSUMER_FIFO(picture_demux_results_resource_ptr),
+                                       "PicMgr");
+        svt_kernel_dispatcher_register(d,
+                                       svt_aom_rate_control_kernel_iter,
+                                       enc_handle_ptr->rate_control_context_ptr->priv,
+                                       CONSUMER_FIFO(rate_control_tasks_resource_ptr),
+                                       "RC");
+        svt_kernel_dispatcher_register(d,
+                                       svt_aom_mode_decision_configuration_kernel_iter,
+                                       enc_handle_ptr->mode_decision_configuration_context_ptr_array[0]->priv,
+                                       CONSUMER_FIFO(rate_control_results_resource_ptr),
+                                       "MDConfig");
+        svt_kernel_dispatcher_register(d,
+                                       svt_aom_mode_decision_kernel_iter,
+                                       enc_handle_ptr->enc_dec_context_ptr_array[0]->priv,
+                                       CONSUMER_FIFO(enc_dec_tasks_resource_ptr),
+                                       "EncDec");
+        svt_kernel_dispatcher_register(d,
+                                       svt_aom_dlf_kernel_iter,
+                                       enc_handle_ptr->dlf_context_ptr_array[0]->priv,
+                                       CONSUMER_FIFO(enc_dec_results_resource_ptr),
+                                       "DLF");
+        svt_kernel_dispatcher_register(d,
+                                       svt_aom_cdef_kernel_iter,
+                                       enc_handle_ptr->cdef_context_ptr_array[0]->priv,
+                                       CONSUMER_FIFO(dlf_results_resource_ptr),
+                                       "CDEF");
+        svt_kernel_dispatcher_register(d,
+                                       svt_aom_rest_kernel_iter,
+                                       enc_handle_ptr->rest_context_ptr_array[0]->priv,
+                                       CONSUMER_FIFO(cdef_results_resource_ptr),
+                                       "Rest");
+        svt_kernel_dispatcher_register(d,
+                                       svt_aom_entropy_coding_kernel_iter,
+                                       enc_handle_ptr->entropy_coding_context_ptr_array[0]->priv,
+                                       CONSUMER_FIFO(rest_results_resource_ptr),
+                                       "EC");
+        svt_kernel_dispatcher_register(d,
+                                       svt_aom_packetization_kernel_iter,
+                                       enc_handle_ptr->packetization_context_ptr->priv,
+                                       CONSUMER_FIFO(entropy_coding_results_resource_ptr),
+                                       "Pack");
 
-    // Source Based Oprations
-    EB_CREATE_THREAD_ARRAY(enc_handle_ptr->source_based_operations_thread_handle_array,
-                           scs->source_based_operations_process_init_count,
-                           svt_aom_source_based_operations_kernel,
-                           enc_handle_ptr->source_based_operations_context_ptr_array,
-                           "svt-srcops");
+#undef CONSUMER_FIFO
+    } else
+#endif
+    {
+        EB_CREATE_THREAD(enc_handle_ptr->resource_coordination_thread_handle,
+                         svt_aom_resource_coordination_kernel,
+                         enc_handle_ptr->resource_coordination_context_ptr);
+        EB_CREATE_THREAD_ARRAY(enc_handle_ptr->picture_analysis_thread_handle_array,
+                               scs->picture_analysis_process_init_count,
+                               svt_aom_picture_analysis_kernel,
+                               enc_handle_ptr->picture_analysis_context_ptr_array,
+                               "svt-picana");
 
-    // TPL dispenser
-    EB_CREATE_THREAD_ARRAY(enc_handle_ptr->tpl_disp_thread_handle_array,
-                           scs->tpl_disp_process_init_count,
-                           svt_aom_tpl_disp_kernel, //TODOOMK
-                           enc_handle_ptr->tpl_disp_context_ptr_array,
-                           "svt-tpl");
-    // Picture Manager
-    EB_CREATE_THREAD(enc_handle_ptr->picture_manager_thread_handle,
-                     svt_aom_picture_manager_kernel,
-                     enc_handle_ptr->picture_manager_context_ptr);
-    // Rate Control
-    EB_CREATE_THREAD(enc_handle_ptr->rate_control_thread_handle,
-                     svt_aom_rate_control_kernel,
-                     enc_handle_ptr->rate_control_context_ptr);
+        // Picture Decision
+        EB_CREATE_THREAD(enc_handle_ptr->picture_decision_thread_handle,
+                         svt_aom_picture_decision_kernel,
+                         enc_handle_ptr->picture_decision_context_ptr);
 
-    // Mode Decision Configuration Process
-    EB_CREATE_THREAD_ARRAY(enc_handle_ptr->mode_decision_configuration_thread_handle_array,
-                           scs->mode_decision_configuration_process_init_count,
-                           svt_aom_mode_decision_configuration_kernel,
-                           enc_handle_ptr->mode_decision_configuration_context_ptr_array,
-                           "svt-mdcfg");
+        // Motion Estimation
+        EB_CREATE_THREAD_ARRAY(enc_handle_ptr->motion_estimation_thread_handle_array,
+                               scs->motion_estimation_process_init_count,
+                               svt_aom_motion_estimation_kernel,
+                               enc_handle_ptr->motion_estimation_context_ptr_array,
+                               "svt-me");
 
-    // EncDec Process
-    EB_CREATE_THREAD_ARRAY(enc_handle_ptr->enc_dec_thread_handle_array,
-                           scs->enc_dec_process_init_count,
-                           svt_aom_mode_decision_kernel,
-                           enc_handle_ptr->enc_dec_context_ptr_array,
-                           "svt-md");
+        // Initial Rate Control
+        EB_CREATE_THREAD(enc_handle_ptr->initial_rate_control_thread_handle,
+                         svt_aom_initial_rate_control_kernel,
+                         enc_handle_ptr->initial_rate_control_context_ptr);
 
-    // Dlf Process
-    EB_CREATE_THREAD_ARRAY(enc_handle_ptr->dlf_thread_handle_array,
-                           scs->dlf_process_init_count,
-                           svt_aom_dlf_kernel,
-                           enc_handle_ptr->dlf_context_ptr_array,
-                           "svt-dlf");
+        // Source Based Oprations
+        EB_CREATE_THREAD_ARRAY(enc_handle_ptr->source_based_operations_thread_handle_array,
+                               scs->source_based_operations_process_init_count,
+                               svt_aom_source_based_operations_kernel,
+                               enc_handle_ptr->source_based_operations_context_ptr_array,
+                               "svt-srcops");
 
-    // Cdef Process
-    EB_CREATE_THREAD_ARRAY(enc_handle_ptr->cdef_thread_handle_array,
-                           scs->cdef_process_init_count,
-                           svt_aom_cdef_kernel,
-                           enc_handle_ptr->cdef_context_ptr_array,
-                           "svt-cdef");
+        // TPL dispenser
+        EB_CREATE_THREAD_ARRAY(enc_handle_ptr->tpl_disp_thread_handle_array,
+                               scs->tpl_disp_process_init_count,
+                               svt_aom_tpl_disp_kernel, //TODOOMK
+                               enc_handle_ptr->tpl_disp_context_ptr_array,
+                               "svt-tpl");
+        // Picture Manager
+        EB_CREATE_THREAD(enc_handle_ptr->picture_manager_thread_handle,
+                         svt_aom_picture_manager_kernel,
+                         enc_handle_ptr->picture_manager_context_ptr);
+        // Rate Control
+        EB_CREATE_THREAD(enc_handle_ptr->rate_control_thread_handle,
+                         svt_aom_rate_control_kernel,
+                         enc_handle_ptr->rate_control_context_ptr);
 
-    // Rest Process
-    EB_CREATE_THREAD_ARRAY(enc_handle_ptr->rest_thread_handle_array,
-                           scs->rest_process_init_count,
-                           svt_aom_rest_kernel,
-                           enc_handle_ptr->rest_context_ptr_array,
-                           "svt-rest");
+        // Mode Decision Configuration Process
+        EB_CREATE_THREAD_ARRAY(enc_handle_ptr->mode_decision_configuration_thread_handle_array,
+                               scs->mode_decision_configuration_process_init_count,
+                               svt_aom_mode_decision_configuration_kernel,
+                               enc_handle_ptr->mode_decision_configuration_context_ptr_array,
+                               "svt-mdcfg");
 
-    // Entropy Coding Process
-    EB_CREATE_THREAD_ARRAY(enc_handle_ptr->entropy_coding_thread_handle_array,
-                           scs->entropy_coding_process_init_count,
-                           svt_aom_entropy_coding_kernel,
-                           enc_handle_ptr->entropy_coding_context_ptr_array,
-                           "svt-ec");
-    // Packetization
-    EB_CREATE_THREAD(enc_handle_ptr->packetization_thread_handle,
-                     svt_aom_packetization_kernel,
-                     enc_handle_ptr->packetization_context_ptr);
+        // EncDec Process
+        EB_CREATE_THREAD_ARRAY(enc_handle_ptr->enc_dec_thread_handle_array,
+                               scs->enc_dec_process_init_count,
+                               svt_aom_mode_decision_kernel,
+                               enc_handle_ptr->enc_dec_context_ptr_array,
+                               "svt-md");
+
+        // Dlf Process
+        EB_CREATE_THREAD_ARRAY(enc_handle_ptr->dlf_thread_handle_array,
+                               scs->dlf_process_init_count,
+                               svt_aom_dlf_kernel,
+                               enc_handle_ptr->dlf_context_ptr_array,
+                               "svt-dlf");
+
+        // Cdef Process
+        EB_CREATE_THREAD_ARRAY(enc_handle_ptr->cdef_thread_handle_array,
+                               scs->cdef_process_init_count,
+                               svt_aom_cdef_kernel,
+                               enc_handle_ptr->cdef_context_ptr_array,
+                               "svt-cdef");
+
+        // Rest Process
+        EB_CREATE_THREAD_ARRAY(enc_handle_ptr->rest_thread_handle_array,
+                               scs->rest_process_init_count,
+                               svt_aom_rest_kernel,
+                               enc_handle_ptr->rest_context_ptr_array,
+                               "svt-rest");
+
+        // Entropy Coding Process
+        EB_CREATE_THREAD_ARRAY(enc_handle_ptr->entropy_coding_thread_handle_array,
+                               scs->entropy_coding_process_init_count,
+                               svt_aom_entropy_coding_kernel,
+                               enc_handle_ptr->entropy_coding_context_ptr_array,
+                               "svt-ec");
+        // Packetization
+        EB_CREATE_THREAD(enc_handle_ptr->packetization_thread_handle,
+                         svt_aom_packetization_kernel,
+                         enc_handle_ptr->packetization_context_ptr);
+    } // end of thread creation block
 
     svt_print_memory_usage();
 
@@ -5463,6 +5592,14 @@ EB_API EbErrorType svt_av1_enc_send_picture(EbComponentType* svt_enc_component, 
     input_cmd_obj->y8b_wrapper          = y8b_wrapper;
     //Send to Lib
     svt_post_full_object(input_cmd_wrp);
+
+#if CONFIG_SINGLE_THREAD_KERNEL
+    // In single-thread mode, run the entire pipeline synchronously
+    if (enc_handle_ptr->kernel_dispatcher.active) {
+        svt_kernel_dispatcher_run(&enc_handle_ptr->kernel_dispatcher);
+    }
+#endif
+
     return return_val;
 }
 

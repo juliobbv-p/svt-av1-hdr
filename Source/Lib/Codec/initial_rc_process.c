@@ -695,158 +695,166 @@ static void set_1pvbr_param(PictureParentControlSet* pcs) {
  *  In the future we might decide to move it to Motion Analysis Process.
  *
  ********************************************************************************/
-void* svt_aom_initial_rate_control_kernel(void* input_ptr) {
-    EbThreadContext*           thread_ctx  = (EbThreadContext*)input_ptr;
-    InitialRateControlContext* context_ptr = (InitialRateControlContext*)thread_ctx->priv;
+EbErrorType svt_aom_initial_rate_control_kernel_iter(void* context) {
+    InitialRateControlContext* context_ptr = (InitialRateControlContext*)context;
 
     EbObjectWrapper* in_results_wrapper_ptr;
 
     // Segments
-    for (;;) {
-        // Get Input Full Object
-        EB_GET_FULL_OBJECT(context_ptr->motion_estimation_results_input_fifo_ptr, &in_results_wrapper_ptr);
 
-        MotionEstimationResults* in_results_ptr = (MotionEstimationResults*)in_results_wrapper_ptr->object_ptr;
-        PictureParentControlSet* pcs            = (PictureParentControlSet*)in_results_ptr->pcs_wrapper->object_ptr;
+    // Get Input Full Object
+    EB_GET_FULL_OBJECT(context_ptr->motion_estimation_results_input_fifo_ptr, &in_results_wrapper_ptr);
 
-        // Set the segment counter
-        pcs->me_segments_completion_count++;
+    MotionEstimationResults* in_results_ptr = (MotionEstimationResults*)in_results_wrapper_ptr->object_ptr;
+    PictureParentControlSet* pcs            = (PictureParentControlSet*)in_results_ptr->pcs_wrapper->object_ptr;
 
-        // If the picture is complete, proceed
-        if (pcs->me_segments_completion_count == pcs->me_segments_total_count) {
-            SequenceControlSet* scs = pcs->scs;
+    // Set the segment counter
+    pcs->me_segments_completion_count++;
 
-            pcs->norm_me_dist = 0;
-            if (pcs->slice_type != I_SLICE) {
-                uint32_t b64_idx;
-                uint64_t dist = 0;
-                for (b64_idx = 0; b64_idx < pcs->b64_total_count; ++b64_idx) {
-                    dist += pcs->me_8x8_distortion[b64_idx];
-                }
-                pcs->norm_me_dist = dist / pcs->b64_total_count;
+    // If the picture is complete, proceed
+    if (pcs->me_segments_completion_count == pcs->me_segments_total_count) {
+        SequenceControlSet* scs = pcs->scs;
+
+        pcs->norm_me_dist = 0;
+        if (pcs->slice_type != I_SLICE) {
+            uint32_t b64_idx;
+            uint64_t dist = 0;
+            for (b64_idx = 0; b64_idx < pcs->b64_total_count; ++b64_idx) {
+                dist += pcs->me_8x8_distortion[b64_idx];
             }
+            pcs->norm_me_dist = dist / pcs->b64_total_count;
+        }
 
-            pcs->tpl_params_ready = 0;
-            svt_aom_set_tpl_group(pcs,
-                                  svt_aom_get_tpl_group_level(scs->tpl, scs->static_config.enc_mode),
-                                  scs->max_input_luma_width,
-                                  scs->max_input_luma_height);
-            // If TPL results are needed for the current hierarchical layer, but are not available, shut r0-based QPS/QPM
-            if (!pcs->tpl_ctrls.enable ||
-                (pcs->tpl_ctrls.reduced_tpl_group >= 0 &&
-                 pcs->temporal_layer_index > pcs->tpl_ctrls.reduced_tpl_group)) {
-                pcs->r0_gen            = 0;
-                pcs->r0_qps            = 0;
-                pcs->r0_delta_qp_md    = 0;
-                pcs->r0_delta_qp_quant = 0;
+        pcs->tpl_params_ready = 0;
+        svt_aom_set_tpl_group(pcs,
+                              svt_aom_get_tpl_group_level(scs->tpl, scs->static_config.enc_mode),
+                              scs->max_input_luma_width,
+                              scs->max_input_luma_height);
+        // If TPL results are needed for the current hierarchical layer, but are not available, shut r0-based QPS/QPM
+        if (!pcs->tpl_ctrls.enable ||
+            (pcs->tpl_ctrls.reduced_tpl_group >= 0 && pcs->temporal_layer_index > pcs->tpl_ctrls.reduced_tpl_group)) {
+            pcs->r0_gen            = 0;
+            pcs->r0_qps            = 0;
+            pcs->r0_delta_qp_md    = 0;
+            pcs->r0_delta_qp_quant = 0;
 
-            } else {
-                // When another delta-QP modulator (e.g., Variance Boost) is active alongside TPL,
-                // r0_delta_qp_quant has no effect and is assumed equal to r0_delta_qp_md
-                pcs->r0_gen = 1;
-                if (pcs->hierarchical_levels == 5) { // 6L
-                    pcs->r0_qps            = pcs->r0_gen;
-                    pcs->r0_delta_qp_md    = pcs->r0_gen && pcs->temporal_layer_index <= 3;
-                    pcs->r0_delta_qp_quant = pcs->r0_delta_qp_md && pcs->temporal_layer_index == 0;
-                } else if (pcs->hierarchical_levels == 4) { // 5L
-                    pcs->r0_qps            = pcs->r0_gen;
-                    pcs->r0_delta_qp_md    = pcs->r0_gen && pcs->temporal_layer_index <= 2;
-                    pcs->r0_delta_qp_quant = pcs->r0_delta_qp_md && pcs->temporal_layer_index == 0;
-                } else if (pcs->hierarchical_levels == 3) { // 4L
-                    pcs->r0_qps            = pcs->r0_gen;
-                    pcs->r0_delta_qp_md    = pcs->r0_gen && pcs->temporal_layer_index <= 1;
-                    pcs->r0_delta_qp_quant = pcs->r0_delta_qp_md && pcs->slice_type == I_SLICE;
-                } else { // 3L
-                    pcs->r0_qps            = pcs->r0_gen && pcs->temporal_layer_index == 0;
-                    pcs->r0_delta_qp_md    = pcs->r0_gen && pcs->temporal_layer_index == 0;
-                    pcs->r0_delta_qp_quant = (pcs->r0_delta_qp_md && pcs->slice_type == I_SLICE);
-                }
+        } else {
+            // When another delta-QP modulator (e.g., Variance Boost) is active alongside TPL,
+            // r0_delta_qp_quant has no effect and is assumed equal to r0_delta_qp_md
+            pcs->r0_gen = 1;
+            if (pcs->hierarchical_levels == 5) { // 6L
+                pcs->r0_qps            = pcs->r0_gen;
+                pcs->r0_delta_qp_md    = pcs->r0_gen && pcs->temporal_layer_index <= 3;
+                pcs->r0_delta_qp_quant = pcs->r0_delta_qp_md && pcs->temporal_layer_index == 0;
+            } else if (pcs->hierarchical_levels == 4) { // 5L
+                pcs->r0_qps            = pcs->r0_gen;
+                pcs->r0_delta_qp_md    = pcs->r0_gen && pcs->temporal_layer_index <= 2;
+                pcs->r0_delta_qp_quant = pcs->r0_delta_qp_md && pcs->temporal_layer_index == 0;
+            } else if (pcs->hierarchical_levels == 3) { // 4L
+                pcs->r0_qps            = pcs->r0_gen;
+                pcs->r0_delta_qp_md    = pcs->r0_gen && pcs->temporal_layer_index <= 1;
+                pcs->r0_delta_qp_quant = pcs->r0_delta_qp_md && pcs->slice_type == I_SLICE;
+            } else { // 3L
+                pcs->r0_qps            = pcs->r0_gen && pcs->temporal_layer_index == 0;
+                pcs->r0_delta_qp_md    = pcs->r0_gen && pcs->temporal_layer_index == 0;
+                pcs->r0_delta_qp_quant = (pcs->r0_delta_qp_md && pcs->slice_type == I_SLICE);
             }
-            if (in_results_ptr->task_type == TASK_SUPERRES_RE_ME) {
-                // do necessary steps as normal routine
-                {
-                    // Release Pa Ref pictures when not needed
-                    // Don't release if superres recode loop is actived (auto-dual or auto-all mode)
-                    if (pcs->superres_total_recode_loop == 0) { // QThreshold or auto-solo mode
-                        if (pcs->tpl_ctrls.enable) {
-                            for (uint32_t i = 0; i < pcs->tpl_group_size; i++) {
-                                if (svt_aom_is_incomp_mg_frame(pcs->tpl_group[i])) {
-                                    if (pcs->tpl_group[i]->ext_mg_id == pcs->ext_mg_id + 1) {
-                                        svt_aom_release_pa_reference_objects(scs, pcs->tpl_group[i]);
-                                    }
-                                } else {
-                                    if (pcs->tpl_group[i]->ext_mg_id == pcs->ext_mg_id) {
-                                        svt_aom_release_pa_reference_objects(scs, pcs->tpl_group[i]);
-                                    }
+        }
+        if (in_results_ptr->task_type == TASK_SUPERRES_RE_ME) {
+            // do necessary steps as normal routine
+            {
+                // Release Pa Ref pictures when not needed
+                // Don't release if superres recode loop is actived (auto-dual or auto-all mode)
+                if (pcs->superres_total_recode_loop == 0) { // QThreshold or auto-solo mode
+                    if (pcs->tpl_ctrls.enable) {
+                        for (uint32_t i = 0; i < pcs->tpl_group_size; i++) {
+                            if (svt_aom_is_incomp_mg_frame(pcs->tpl_group[i])) {
+                                if (pcs->tpl_group[i]->ext_mg_id == pcs->ext_mg_id + 1) {
+                                    svt_aom_release_pa_reference_objects(scs, pcs->tpl_group[i]);
                                 }
-                                if (pcs->tpl_group[i]->non_tf_input) {
-                                    EB_DELETE(pcs->tpl_group[i]->non_tf_input);
+                            } else {
+                                if (pcs->tpl_group[i]->ext_mg_id == pcs->ext_mg_id) {
+                                    svt_aom_release_pa_reference_objects(scs, pcs->tpl_group[i]);
                                 }
                             }
-                        } else {
-                            svt_aom_release_pa_reference_objects(scs, pcs);
+                            if (pcs->tpl_group[i]->non_tf_input) {
+                                EB_DELETE(pcs->tpl_group[i]->non_tf_input);
+                            }
                         }
+                    } else {
+                        svt_aom_release_pa_reference_objects(scs, pcs);
                     }
-
-                    /*In case Look-Ahead is zero there is no need to place pictures in the
-                      re-order queue. this will cause an artificial delay since pictures come in dec-order*/
-                    pcs->frames_in_sw           = 0;
-                    pcs->end_of_sequence_region = false;
                 }
 
-                // post to downstream process
-                irc_send_picture_out(context_ptr, pcs, true);
-
-                // Release the Input Results
-                svt_release_object(in_results_wrapper_ptr);
-                continue;
-            }
-            // The quant/dequant params derivation is performaed 1 time per sequence assuming the qindex offset(s) are 0
-            // then adjusted per TU prior of the quantization at svt_aom_quantize_inv_quantize() depending on the qindex offset(s)
-            if (pcs->picture_number == 0) {
-                Quants* const   quants_8bit = &scs->enc_ctx->quants_8bit;
-                Dequants* const deq_8bit    = &scs->enc_ctx->deq_8bit;
-                svt_av1_build_quantizer(pcs, EB_EIGHT_BIT, 0, 0, 0, 0, 0, quants_8bit, deq_8bit);
-
-                if (scs->static_config.encoder_bit_depth == EB_TEN_BIT) {
-                    Quants* const   quants_bd = &scs->enc_ctx->quants_bd;
-                    Dequants* const deq_bd    = &scs->enc_ctx->deq_bd;
-                    svt_av1_build_quantizer(pcs, EB_TEN_BIT, 0, 0, 0, 0, 0, quants_bd, deq_bd);
-                }
-            }
-            // Set the one pass VBR parameters based on the look ahead data
-            if (scs->lap_rc) {
-                set_1pvbr_param(pcs);
-            }
-            // tpl_la can be performed on unscaled frames in super-res q-threshold and auto mode
-            if (pcs->tpl_ctrls.enable && !pcs->frame_superres_enabled) {
-                svt_set_cond_var(&pcs->me_ready, 1);
+                /*In case Look-Ahead is zero there is no need to place pictures in the
+                  re-order queue. this will cause an artificial delay since pictures come in dec-order*/
+                pcs->frames_in_sw           = 0;
+                pcs->end_of_sequence_region = false;
             }
 
-            // Release Pa Ref pictures when not needed
-            // Release Pa ref when
-            //   1. TPL is OFF and
-            //   2. super-res mode is NONE or FIXED or RANDOM.
-            //     For other super-res modes, pa_ref_objs are needed in TASK_SUPERRES_RE_ME task
-            if (pcs->tpl_ctrls.enable == 0 && scs->static_config.superres_mode <= SUPERRES_RANDOM) {
-                svt_aom_release_pa_reference_objects(scs, pcs);
-            }
+            // post to downstream process
+            irc_send_picture_out(context_ptr, pcs, true);
 
-            /*In case Look-Ahead is zero there is no need to place pictures in the
-              re-order queue. this will cause an artificial delay since pictures come in dec-order*/
-            pcs->frames_in_sw           = 0;
-            pcs->end_of_sequence_region = false;
-
-            push_to_lad_queue(pcs, context_ptr);
-#if LAD_MG_PRINT
-            print_lad_queue(context_ptr, 0);
-#endif
-            // tpl_la can be performed on unscaled frame when in super-res q-threshold and auto mode
-            uint8_t lad_queue_pass_thru = !(pcs->tpl_ctrls.enable && !pcs->frame_superres_enabled);
-            process_lad_queue(context_ptr, lad_queue_pass_thru);
+            // Release the Input Results
+            svt_release_object(in_results_wrapper_ptr);
+            return EB_ErrorNone;
         }
-        // Release the Input Results
-        svt_release_object(in_results_wrapper_ptr);
+        // The quant/dequant params derivation is performaed 1 time per sequence assuming the qindex offset(s) are 0
+        // then adjusted per TU prior of the quantization at svt_aom_quantize_inv_quantize() depending on the qindex offset(s)
+        if (pcs->picture_number == 0) {
+            Quants* const   quants_8bit = &scs->enc_ctx->quants_8bit;
+            Dequants* const deq_8bit    = &scs->enc_ctx->deq_8bit;
+            svt_av1_build_quantizer(pcs, EB_EIGHT_BIT, 0, 0, 0, 0, 0, quants_8bit, deq_8bit);
+
+            if (scs->static_config.encoder_bit_depth == EB_TEN_BIT) {
+                Quants* const   quants_bd = &scs->enc_ctx->quants_bd;
+                Dequants* const deq_bd    = &scs->enc_ctx->deq_bd;
+                svt_av1_build_quantizer(pcs, EB_TEN_BIT, 0, 0, 0, 0, 0, quants_bd, deq_bd);
+            }
+        }
+        // Set the one pass VBR parameters based on the look ahead data
+        if (scs->lap_rc) {
+            set_1pvbr_param(pcs);
+        }
+        // tpl_la can be performed on unscaled frames in super-res q-threshold and auto mode
+        if (pcs->tpl_ctrls.enable && !pcs->frame_superres_enabled) {
+            svt_set_cond_var(&pcs->me_ready, 1);
+        }
+
+        // Release Pa Ref pictures when not needed
+        // Release Pa ref when
+        //   1. TPL is OFF and
+        //   2. super-res mode is NONE or FIXED or RANDOM.
+        //     For other super-res modes, pa_ref_objs are needed in TASK_SUPERRES_RE_ME task
+        if (pcs->tpl_ctrls.enable == 0 && scs->static_config.superres_mode <= SUPERRES_RANDOM) {
+            svt_aom_release_pa_reference_objects(scs, pcs);
+        }
+
+        /*In case Look-Ahead is zero there is no need to place pictures in the
+          re-order queue. this will cause an artificial delay since pictures come in dec-order*/
+        pcs->frames_in_sw           = 0;
+        pcs->end_of_sequence_region = false;
+
+        push_to_lad_queue(pcs, context_ptr);
+#if LAD_MG_PRINT
+        print_lad_queue(context_ptr, 0);
+#endif
+        // tpl_la can be performed on unscaled frame when in super-res q-threshold and auto mode
+        uint8_t lad_queue_pass_thru = !(pcs->tpl_ctrls.enable && !pcs->frame_superres_enabled);
+        process_lad_queue(context_ptr, lad_queue_pass_thru);
+    }
+    // Release the Input Results
+    svt_release_object(in_results_wrapper_ptr);
+    return EB_ErrorNone;
+}
+
+void* svt_aom_initial_rate_control_kernel(void* input_ptr) {
+    EbThreadContext* thread_ctx = (EbThreadContext*)input_ptr;
+    for (;;) {
+        EbErrorType err = svt_aom_initial_rate_control_kernel_iter(thread_ctx->priv);
+        if (err == EB_NoErrorFifoShutdown) {
+            return NULL;
+        }
     }
     return NULL;
 }

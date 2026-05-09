@@ -18,6 +18,10 @@
 #include "sys_resource_manager.h"
 #include "sequence_control_set.h"
 #include "object.h"
+#include "EbConfigMacros.h"
+#if CONFIG_SINGLE_THREAD_KERNEL
+#include "kernel_dispatch.h"
+#endif
 
 struct _EbThreadContext {
     EbDctor dctor;
@@ -124,6 +128,10 @@ struct _EbEncHandle {
     bool eos_sent; // used to signal we sent the EOS to the app
     bool frame_received; // used to signal we received any frame from the app
     bool is_prev_valid; // whether the previous input is valid or not
+
+#if CONFIG_SINGLE_THREAD_KERNEL
+    SvtKernelDispatcher kernel_dispatcher;
+#endif
 };
 
 void set_segments_numbers(SequenceControlSet* scs);

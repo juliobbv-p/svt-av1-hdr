@@ -539,10 +539,9 @@ static void cdef_seg_search(PictureControlSet* pcs, SequenceControlSet* scs, uin
 /******************************************************
  * CDEF Kernel
  ******************************************************/
-void* svt_aom_cdef_kernel(void* input_ptr) {
+EbErrorType svt_aom_cdef_kernel_iter(void* context) {
     // Context & SCS & PCS
-    EbThreadContext*    thread_ctx  = (EbThreadContext*)input_ptr;
-    CdefContext*        context_ptr = (CdefContext*)thread_ctx->priv;
+    CdefContext*        context_ptr = (CdefContext*)context;
     PictureControlSet*  pcs;
     SequenceControlSet* scs;
 
@@ -552,126 +551,131 @@ void* svt_aom_cdef_kernel(void* input_ptr) {
 
     //// Output
     EbObjectWrapper* cdef_results_wrapper;
-    CdefResults*     cdef_results;
 
-    // SB Loop variables
+    FrameHeader* frm_hdr;
 
-    for (;;) {
-        FrameHeader* frm_hdr;
+    // Get DLF Results
+    EB_GET_FULL_OBJECT(context_ptr->cdef_input_fifo_ptr, &dlf_results_wrapper);
 
-        // Get DLF Results
-        EB_GET_FULL_OBJECT(context_ptr->cdef_input_fifo_ptr, &dlf_results_wrapper);
+    dlf_results                   = (DlfResults*)dlf_results_wrapper->object_ptr;
+    pcs                           = (PictureControlSet*)dlf_results->pcs_wrapper->object_ptr;
+    PictureParentControlSet* ppcs = pcs->ppcs;
+    scs                           = pcs->scs;
 
-        dlf_results                   = (DlfResults*)dlf_results_wrapper->object_ptr;
-        pcs                           = (PictureControlSet*)dlf_results->pcs_wrapper->object_ptr;
-        PictureParentControlSet* ppcs = pcs->ppcs;
-        scs                           = pcs->scs;
-
-        bool       is_16bit                   = scs->is_16bit_pipeline;
-        Av1Common* cm                         = pcs->ppcs->av1_cm;
-        frm_hdr                               = &pcs->ppcs->frm_hdr;
-        CdefSearchControls* cdef_search_ctrls = &pcs->ppcs->cdef_search_ctrls;
-        if (!cdef_search_ctrls->use_reference_cdef_fs && !cdef_search_ctrls->use_qp_strength) {
-            if (scs->seq_header.cdef_level && pcs->ppcs->cdef_level) {
-                cdef_seg_search(pcs, scs, dlf_results->segment_index);
-            }
+    bool       is_16bit                   = scs->is_16bit_pipeline;
+    Av1Common* cm                         = pcs->ppcs->av1_cm;
+    frm_hdr                               = &pcs->ppcs->frm_hdr;
+    CdefSearchControls* cdef_search_ctrls = &pcs->ppcs->cdef_search_ctrls;
+    if (!cdef_search_ctrls->use_reference_cdef_fs && !cdef_search_ctrls->use_qp_strength) {
+        if (scs->seq_header.cdef_level && pcs->ppcs->cdef_level) {
+            cdef_seg_search(pcs, scs, dlf_results->segment_index);
         }
-        //all seg based search is done. update total processed segments. if all done, finish the search and perfrom application.
-        svt_block_on_mutex(pcs->cdef_search_mutex);
-
-        pcs->tot_seg_searched_cdef++;
-        if (pcs->tot_seg_searched_cdef == pcs->cdef_segments_total_count) {
-            pcs->cdef_dist_dev = -1;
-            if (scs->seq_header.cdef_level && pcs->ppcs->cdef_level) {
-                finish_cdef_search(pcs);
-                if (ppcs->enable_restoration || pcs->ppcs->is_ref || scs->static_config.recon_enabled) {
-                    // Do application iff there are non-zero filters
-                    if (frm_hdr->cdef_params.cdef_y_strength[0] != 0 || frm_hdr->cdef_params.cdef_uv_strength[0] != 0 ||
-                        pcs->ppcs->nb_cdef_strengths != 1) {
-                        svt_av1_cdef_frame(scs, pcs);
-                    }
-                }
-            } else {
-                frm_hdr->cdef_params.cdef_bits           = 0;
-                frm_hdr->cdef_params.cdef_y_strength[0]  = 0;
-                pcs->ppcs->nb_cdef_strengths             = 1;
-                frm_hdr->cdef_params.cdef_uv_strength[0] = 0;
-            }
-
-            if (pcs->ppcs->nb_cdef_strengths == 1 && frm_hdr->cdef_params.cdef_y_strength[0] == 0 &&
-                frm_hdr->cdef_params.cdef_uv_strength[0] == 0) {
-                pcs->cdef_dist_dev = 0;
-            }
-
-            //restoration prep
-            bool is_lr = ppcs->enable_restoration && frm_hdr->allow_intrabc == 0;
-            if (is_lr) {
-                svt_av1_loop_restoration_save_boundary_lines(cm->frame_to_show, cm, 1);
-                if (is_16bit) {
-                    set_unscaled_input_16bit(pcs);
-                }
-            }
-
-            // ------- start: Normative upscaling - super-resolution tool
-            if (frm_hdr->allow_intrabc == 0 && pcs->ppcs->frame_superres_enabled) {
-                svt_av1_superres_upscale_frame(cm, pcs, scs);
-            }
-            if (scs->static_config.resize_mode != RESIZE_NONE) {
-                EbPictureBufferDesc* recon = NULL;
-                svt_aom_get_recon_pic(pcs, &recon, is_16bit);
-                recon->width  = pcs->ppcs->render_width;
-                recon->height = pcs->ppcs->render_height;
-                if (is_lr) {
-                    EbPictureBufferDesc* input_pic = is_16bit ? pcs->input_frame16bit
-                                                              : pcs->ppcs->enhanced_unscaled_pic;
-
-                    svt_aom_assert_err(pcs->scaled_input_pic == NULL, "pcs_ptr->scaled_input_pic is not desctoried!");
-                    EbPictureBufferDesc* scaled_input_pic = NULL;
-                    // downscale input picture if recon is resized
-                    bool is_resized = recon->width != input_pic->width || recon->height != input_pic->height;
-                    if (is_resized) {
-                        superres_params_type spr_params = {recon->width, recon->height, 0};
-                        svt_aom_downscaled_source_buffer_desc_ctor(&scaled_input_pic, input_pic, spr_params);
-                        svt_aom_resize_frame(input_pic,
-                                             scaled_input_pic,
-                                             scs->static_config.encoder_bit_depth,
-                                             av1_num_planes(&scs->seq_header.color_config),
-                                             scs->subsampling_x,
-                                             scs->subsampling_y,
-                                             input_pic->packed_flag,
-                                             PICTURE_BUFFER_DESC_FULL_MASK,
-                                             0); // is_2bcompress
-                        pcs->scaled_input_pic = scaled_input_pic;
-                    }
-                }
-            }
-            // ------- end: Normative upscaling - super-resolution tool
-
-            pcs->rest_segments_column_count = scs->rest_segment_column_count;
-            pcs->rest_segments_row_count    = scs->rest_segment_row_count;
-            pcs->rest_segments_total_count = (uint16_t)(pcs->rest_segments_column_count * pcs->rest_segments_row_count);
-            pcs->tot_seg_searched_rest     = 0;
-            pcs->ppcs->av1_cm->use_boundaries_in_rest_search = scs->use_boundaries_in_rest_search;
-            pcs->rest_extend_flag[0]                         = false;
-            pcs->rest_extend_flag[1]                         = false;
-            pcs->rest_extend_flag[2]                         = false;
-
-            uint32_t segment_index;
-            for (segment_index = 0; segment_index < pcs->rest_segments_total_count; ++segment_index) {
-                // Get Empty Cdef Results to Rest
-                svt_get_empty_object(context_ptr->cdef_output_fifo_ptr, &cdef_results_wrapper);
-                cdef_results                = (struct CdefResults*)cdef_results_wrapper->object_ptr;
-                cdef_results->pcs_wrapper   = dlf_results->pcs_wrapper;
-                cdef_results->segment_index = segment_index;
-                // Post Cdef Results
-                svt_post_full_object(cdef_results_wrapper);
-            }
-        }
-        svt_release_mutex(pcs->cdef_search_mutex);
-
-        // Release Dlf Results
-        svt_release_object(dlf_results_wrapper);
     }
+    //all seg based search is done. update total processed segments. if all done, finish the search and perfrom application.
+    svt_block_on_mutex(pcs->cdef_search_mutex);
 
+    pcs->tot_seg_searched_cdef++;
+    if (pcs->tot_seg_searched_cdef == pcs->cdef_segments_total_count) {
+        pcs->cdef_dist_dev = -1;
+        if (scs->seq_header.cdef_level && pcs->ppcs->cdef_level) {
+            finish_cdef_search(pcs);
+            if (ppcs->enable_restoration || pcs->ppcs->is_ref || scs->static_config.recon_enabled) {
+                // Do application iff there are non-zero filters
+                if (frm_hdr->cdef_params.cdef_y_strength[0] != 0 || frm_hdr->cdef_params.cdef_uv_strength[0] != 0 ||
+                    pcs->ppcs->nb_cdef_strengths != 1) {
+                    svt_av1_cdef_frame(scs, pcs);
+                }
+            }
+        } else {
+            frm_hdr->cdef_params.cdef_bits           = 0;
+            frm_hdr->cdef_params.cdef_y_strength[0]  = 0;
+            pcs->ppcs->nb_cdef_strengths             = 1;
+            frm_hdr->cdef_params.cdef_uv_strength[0] = 0;
+        }
+
+        if (pcs->ppcs->nb_cdef_strengths == 1 && frm_hdr->cdef_params.cdef_y_strength[0] == 0 &&
+            frm_hdr->cdef_params.cdef_uv_strength[0] == 0) {
+            pcs->cdef_dist_dev = 0;
+        }
+
+        //restoration prep
+        bool is_lr = ppcs->enable_restoration && frm_hdr->allow_intrabc == 0;
+        if (is_lr) {
+            svt_av1_loop_restoration_save_boundary_lines(cm->frame_to_show, cm, 1);
+            if (is_16bit) {
+                set_unscaled_input_16bit(pcs);
+            }
+        }
+
+        // ------- start: Normative upscaling - super-resolution tool
+        if (frm_hdr->allow_intrabc == 0 && pcs->ppcs->frame_superres_enabled) {
+            svt_av1_superres_upscale_frame(cm, pcs, scs);
+        }
+        if (scs->static_config.resize_mode != RESIZE_NONE) {
+            EbPictureBufferDesc* recon = NULL;
+            svt_aom_get_recon_pic(pcs, &recon, is_16bit);
+            recon->width  = pcs->ppcs->render_width;
+            recon->height = pcs->ppcs->render_height;
+            if (is_lr) {
+                EbPictureBufferDesc* input_pic = is_16bit ? pcs->input_frame16bit : pcs->ppcs->enhanced_unscaled_pic;
+
+                svt_aom_assert_err(pcs->scaled_input_pic == NULL, "pcs_ptr->scaled_input_pic is not desctoried!");
+                EbPictureBufferDesc* scaled_input_pic = NULL;
+                // downscale input picture if recon is resized
+                bool is_resized = recon->width != input_pic->width || recon->height != input_pic->height;
+                if (is_resized) {
+                    superres_params_type spr_params = {recon->width, recon->height, 0};
+                    svt_aom_downscaled_source_buffer_desc_ctor(&scaled_input_pic, input_pic, spr_params);
+                    svt_aom_resize_frame(input_pic,
+                                         scaled_input_pic,
+                                         scs->static_config.encoder_bit_depth,
+                                         av1_num_planes(&scs->seq_header.color_config),
+                                         scs->subsampling_x,
+                                         scs->subsampling_y,
+                                         input_pic->packed_flag,
+                                         PICTURE_BUFFER_DESC_FULL_MASK,
+                                         0); // is_2bcompress
+                    pcs->scaled_input_pic = scaled_input_pic;
+                }
+            }
+        }
+        // ------- end: Normative upscaling - super-resolution tool
+
+        pcs->rest_segments_column_count = scs->rest_segment_column_count;
+        pcs->rest_segments_row_count    = scs->rest_segment_row_count;
+        pcs->rest_segments_total_count  = (uint16_t)(pcs->rest_segments_column_count * pcs->rest_segments_row_count);
+        pcs->tot_seg_searched_rest      = 0;
+        pcs->ppcs->av1_cm->use_boundaries_in_rest_search = scs->use_boundaries_in_rest_search;
+        pcs->rest_extend_flag[0]                         = false;
+        pcs->rest_extend_flag[1]                         = false;
+        pcs->rest_extend_flag[2]                         = false;
+
+        uint32_t segment_index;
+        for (segment_index = 0; segment_index < pcs->rest_segments_total_count; ++segment_index) {
+            // Get Empty Cdef Results to Rest
+            svt_get_empty_object(context_ptr->cdef_output_fifo_ptr, &cdef_results_wrapper);
+            CdefResults* cdef_results   = (struct CdefResults*)cdef_results_wrapper->object_ptr;
+            cdef_results->pcs_wrapper   = dlf_results->pcs_wrapper;
+            cdef_results->segment_index = segment_index;
+            // Post Cdef Results
+            svt_post_full_object(cdef_results_wrapper);
+        }
+    }
+    svt_release_mutex(pcs->cdef_search_mutex);
+
+    // Release Dlf Results
+    svt_release_object(dlf_results_wrapper);
+
+    return EB_ErrorNone;
+}
+
+void* svt_aom_cdef_kernel(void* input_ptr) {
+    EbThreadContext* thread_ctx = (EbThreadContext*)input_ptr;
+    for (;;) {
+        EbErrorType err = svt_aom_cdef_kernel_iter(thread_ctx->priv);
+        if (err == EB_NoErrorFifoShutdown) {
+            return NULL;
+        }
+    }
     return NULL;
 }

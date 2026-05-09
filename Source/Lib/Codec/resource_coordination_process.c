@@ -63,6 +63,10 @@ typedef struct ResourceCoordinationContext {
     bool seq_param_change;
     bool video_res_change;
 
+    // Persistent state for _iter
+    bool             end_of_sequence_flag;
+    EbObjectWrapper* prev_pcs_wrapper_ptr;
+
 } ResourceCoordinationContext;
 
 static void resource_coordination_context_dctor(EbPtr p) {
@@ -893,15 +897,13 @@ static void set_eos_terminating_signals(PictureParentControlSet* pcs) {
  *picture type ...
  *
  ********************************************************************************/
-void* svt_aom_resource_coordination_kernel(void* input_ptr) {
-    EbThreadContext*             enc_contxt_ptr = (EbThreadContext*)input_ptr;
-    ResourceCoordinationContext* context_ptr    = (ResourceCoordinationContext*)enc_contxt_ptr->priv;
+EbErrorType svt_aom_resource_coordination_kernel_iter(void* context) {
+    ResourceCoordinationContext* context_ptr = (ResourceCoordinationContext*)context;
 
     EbObjectWrapper* pcs_wrapper;
 
     PictureParentControlSet* pcs;
     SequenceControlSet*      scs;
-    EbObjectWrapper*         prev_scs_wrapper;
 
     EbObjectWrapper*             eb_input_wrapper_ptr;
     EbBufferHeaderType*          eb_input_ptr;
@@ -912,388 +914,390 @@ void* svt_aom_resource_coordination_kernel(void* input_ptr) {
     EbObjectWrapper*             input_pic_wrapper;
     EbObjectWrapper*             ref_pic_wrapper;
 
-    bool             end_of_sequence_flag = false;
-    EbObjectWrapper* prev_pcs_wrapper_ptr = 0;
+    // Get the input command containing 2 input buffers: y8b & rest(uv8b+yuvbitInc)
+    EB_GET_FULL_OBJECT(context_ptr->input_cmd_fifo_ptr, &eb_input_cmd_wrapper);
 
-    for (;;) {
-        // Get the input command containing 2 input buffers: y8b & rest(uv8b+yuvbitInc)
-        EB_GET_FULL_OBJECT(context_ptr->input_cmd_fifo_ptr, &eb_input_cmd_wrapper);
+    input_cmd_obj = (InputCommand*)eb_input_cmd_wrapper->object_ptr;
 
-        input_cmd_obj = (InputCommand*)eb_input_cmd_wrapper->object_ptr;
+    EbObjectWrapper*    y8b_wrapper = input_cmd_obj->y8b_wrapper;
+    EbBufferHeaderType* y8b_header  = (EbBufferHeaderType*)y8b_wrapper->object_ptr;
+    uint8_t*            buff_y8b    = ((EbPictureBufferDesc*)y8b_header->p_buffer)->y_buffer;
+    eb_input_wrapper_ptr            = input_cmd_obj->eb_input_wrapper_ptr;
+    eb_input_ptr                    = (EbBufferHeaderType*)eb_input_wrapper_ptr->object_ptr;
 
-        EbObjectWrapper*    y8b_wrapper = input_cmd_obj->y8b_wrapper;
-        EbBufferHeaderType* y8b_header  = (EbBufferHeaderType*)y8b_wrapper->object_ptr;
-        uint8_t*            buff_y8b    = ((EbPictureBufferDesc*)y8b_header->p_buffer)->y_buffer;
-        eb_input_wrapper_ptr            = input_cmd_obj->eb_input_wrapper_ptr;
-        eb_input_ptr                    = (EbBufferHeaderType*)eb_input_wrapper_ptr->object_ptr;
+    // Set the SequenceControlSet
+    scs = context_ptr->scs_instance->scs;
+    // Update the input picture definitions: resolution of the sequence
+    update_input_pic_def(context_ptr, eb_input_ptr, scs);
+    // Update the target rate
+    update_rate_info(context_ptr, eb_input_ptr, scs);
+    // Update the frame rate
+    update_frame_rate_info(context_ptr, eb_input_ptr, scs);
+    // If config changes occurred since the last picture began encoding, then
+    //   prepare a new scs containing the new changes and update the state
+    //   of the previous Active scs
+    svt_block_on_mutex(context_ptr->scs_instance->config_mutex);
+    if (scs->enc_ctx->initial_picture || context_ptr->seq_param_change) {
+        // Update picture width, picture height, cropping right offset, cropping bottom offset,
+        // and conformance windows
+        scs->chroma_width  = (scs->max_input_luma_width >> 1);
+        scs->chroma_height = (scs->max_input_luma_height >> 1);
 
-        // Set the SequenceControlSet
-        scs = context_ptr->scs_instance->scs;
-        // Update the input picture definitions: resolution of the sequence
-        update_input_pic_def(context_ptr, eb_input_ptr, scs);
-        // Update the target rate
-        update_rate_info(context_ptr, eb_input_ptr, scs);
-        // Update the frame rate
-        update_frame_rate_info(context_ptr, eb_input_ptr, scs);
-        // If config changes occurred since the last picture began encoding, then
-        //   prepare a new scs containing the new changes and update the state
-        //   of the previous Active scs
-        svt_block_on_mutex(context_ptr->scs_instance->config_mutex);
-        if (scs->enc_ctx->initial_picture || context_ptr->seq_param_change) {
-            // Update picture width, picture height, cropping right offset, cropping bottom offset,
-            // and conformance windows
-            scs->chroma_width  = (scs->max_input_luma_width >> 1);
-            scs->chroma_height = (scs->max_input_luma_height >> 1);
+        scs->pad_right  = scs->max_input_pad_right;
+        scs->pad_bottom = scs->max_input_pad_bottom;
 
-            scs->pad_right  = scs->max_input_pad_right;
-            scs->pad_bottom = scs->max_input_pad_bottom;
+        // Pre-Analysis Signal(s) derivation
+        svt_aom_sig_deriv_pre_analysis_scs(scs);
 
-            // Pre-Analysis Signal(s) derivation
-            svt_aom_sig_deriv_pre_analysis_scs(scs);
+        // Init SB Params
+        const uint32_t input_size = scs->max_input_luma_width * scs->max_input_luma_height;
+        svt_aom_derive_input_resolution(&scs->input_resolution, input_size);
 
-            // Init SB Params
-            const uint32_t input_size = scs->max_input_luma_width * scs->max_input_luma_height;
-            svt_aom_derive_input_resolution(&scs->input_resolution, input_size);
+        scs->pic_width_in_b64  = DIVIDE_AND_CEIL(scs->max_input_luma_width, scs->b64_size);
+        scs->pic_height_in_b64 = DIVIDE_AND_CEIL(scs->max_input_luma_height, scs->b64_size);
+        scs->b64_total_count   = scs->pic_width_in_b64 * scs->pic_height_in_b64;
 
-            scs->pic_width_in_b64  = DIVIDE_AND_CEIL(scs->max_input_luma_width, scs->b64_size);
-            scs->pic_height_in_b64 = DIVIDE_AND_CEIL(scs->max_input_luma_height, scs->b64_size);
-            scs->b64_total_count   = scs->pic_width_in_b64 * scs->pic_height_in_b64;
+        scs->picture_width_in_sb  = DIVIDE_AND_CEIL(scs->max_input_luma_width, scs->sb_size);
+        scs->picture_height_in_sb = DIVIDE_AND_CEIL(scs->max_input_luma_height, scs->sb_size);
+        scs->sb_total_count       = scs->picture_width_in_sb * scs->picture_height_in_sb;
 
-            scs->picture_width_in_sb  = DIVIDE_AND_CEIL(scs->max_input_luma_width, scs->sb_size);
-            scs->picture_height_in_sb = DIVIDE_AND_CEIL(scs->max_input_luma_height, scs->sb_size);
-            scs->sb_total_count       = scs->picture_width_in_sb * scs->picture_height_in_sb;
+        b64_geom_init(scs, scs->max_input_luma_width, scs->max_input_luma_height, &scs->b64_geom);
+        sb_geom_init(scs, scs->max_input_luma_width, scs->max_input_luma_height, &scs->sb_geom);
 
-            b64_geom_init(scs, scs->max_input_luma_width, scs->max_input_luma_height, &scs->b64_geom);
-            sb_geom_init(scs, scs->max_input_luma_width, scs->max_input_luma_height, &scs->sb_geom);
+        // sf_identity
+        svt_av1_setup_scale_factors_for_frame(&scs->sf_identity,
+                                              scs->max_input_luma_width,
+                                              scs->max_input_luma_height,
+                                              scs->max_input_luma_width,
+                                              scs->max_input_luma_height);
 
-            // sf_identity
-            svt_av1_setup_scale_factors_for_frame(&scs->sf_identity,
-                                                  scs->max_input_luma_width,
-                                                  scs->max_input_luma_height,
-                                                  scs->max_input_luma_width,
-                                                  scs->max_input_luma_height);
-
-            if (scs->enc_ctx->initial_picture) {
-                if (scs->static_config.pass == ENC_SECOND_PASS) {
-                    svt_aom_read_stat(scs);
-                }
-                if (scs->static_config.pass != ENC_SINGLE_PASS || scs->lap_rc) {
-                    svt_aom_setup_two_pass(scs);
-                } else {
-                    svt_aom_set_rc_param(scs);
-                }
+        if (scs->enc_ctx->initial_picture) {
+            if (scs->static_config.pass == ENC_SECOND_PASS) {
+                svt_aom_read_stat(scs);
             }
-
-            // Copy previous Active SequenceControlSetPtr to a place holder
-            prev_scs_wrapper = context_ptr->scs_active;
-            // Get empty SequenceControlSet [BLOCKING]
-            svt_get_empty_object(context_ptr->scs_empty_fifo_ptr, &context_ptr->scs_active);
-
-            // Copy the contents of the active SequenceControlSet into the new empty SequenceControlSet
-            // if (scs->enc_ctx->initial_picture)
-            copy_sequence_control_set((SequenceControlSet*)context_ptr->scs_active->object_ptr,
-                                      context_ptr->scs_instance->scs);
-
-            // Disable releaseFlag of new SequenceControlSet
-            svt_object_release_disable(context_ptr->scs_active);
-
-            if (prev_scs_wrapper != NULL) {
-                // Enable releaseFlag of old SequenceControlSet
-                svt_object_release_enable(prev_scs_wrapper);
-
-                // Check to see if previous SequenceControlSet is already inactive, if true then release the SequenceControlSet
-                if (prev_scs_wrapper->live_count == 0) {
-                    svt_release_object(prev_scs_wrapper);
-                }
+            if (scs->static_config.pass != ENC_SINGLE_PASS || scs->lap_rc) {
+                svt_aom_setup_two_pass(scs);
+            } else {
+                svt_aom_set_rc_param(scs);
             }
         }
-        svt_release_mutex(context_ptr->scs_instance->config_mutex);
-        // Sequence Control Set is released by Rate Control after passing through MDC->MD->ENCDEC->Packetization->RateControl
-        //   and in the PictureManager
-        svt_object_inc_live_count( //EbObjectIncLiveCount(
-            context_ptr->scs_active,
-            1);
 
-        // Set the current SequenceControlSet
-        scs = (SequenceControlSet*)context_ptr->scs_active->object_ptr;
-        // Since at this stage we do not know the prediction structure and the location of ALT_REF
-        // pictures, for every picture (except first picture), we allocate two: 1. original
-        // picture, 2. potential Overlay picture. In Picture Decision Process, where the overlay
-        // frames are known, they extra pictures are released
-        uint8_t has_overlay = (scs->static_config.enable_overlays == false ||
-                               context_ptr->scs_instance->enc_ctx->initial_picture)
-            ? 0
-            : 1;
-        for (uint8_t loop_index = 0; loop_index <= has_overlay && !end_of_sequence_flag; loop_index++) {
-            // Get a New ParentPCS where we will hold the new input_picture
-            svt_get_empty_object(context_ptr->picture_control_set_fifo_ptr, &pcs_wrapper);
+        // Copy previous Active SequenceControlSetPtr to a place holder
+        EbObjectWrapper* prev_scs_wrapper = context_ptr->scs_active;
+        // Get empty SequenceControlSet [BLOCKING]
+        svt_get_empty_object(context_ptr->scs_empty_fifo_ptr, &context_ptr->scs_active);
 
-            // Parent PCS is released by the Rate Control after passing through
-            // MDC->MD->ENCDEC->Packetization
-            svt_object_inc_live_count(pcs_wrapper, 1);
+        // Copy the contents of the active SequenceControlSet into the new empty SequenceControlSet
+        // if (scs->enc_ctx->initial_picture)
+        copy_sequence_control_set((SequenceControlSet*)context_ptr->scs_active->object_ptr,
+                                  context_ptr->scs_instance->scs);
 
-            pcs      = (PictureParentControlSet*)pcs_wrapper->object_ptr;
-            pcs->scs = scs;
-            // if resolution has changed, and the pcs settings do not match scs settings, update ppcs params
-            if (pcs->frame_width != scs->max_input_luma_width || pcs->frame_height != scs->max_input_luma_height) {
-                ppcs_update_param(pcs);
+        // Disable releaseFlag of new SequenceControlSet
+        svt_object_release_disable(context_ptr->scs_active);
+
+        if (prev_scs_wrapper != NULL) {
+            // Enable releaseFlag of old SequenceControlSet
+            svt_object_release_enable(prev_scs_wrapper);
+
+            // Check to see if previous SequenceControlSet is already inactive, if true then release the SequenceControlSet
+            if (prev_scs_wrapper->live_count == 0) {
+                svt_release_object(prev_scs_wrapper);
             }
-            // - p_pcs_wrapper_ptr is a direct copy of pcs_wrapper (live_count == 1).
-            // - Most of p_pcs_wrapper_ptr in pre-allocated overlay candidates will be released &
-            // recycled to empty fifo
-            //     by altref candidate's
-            //     svt_release_object(pcs->overlay_ppcs_ptr->p_pcs_wrapper_ptr) in PictureDecision.
-            // - The recycled ppcs may be assigned a new picture_number in ResourceCoordination.
-            // - If the to-be-removed overlay candidate runs in svt_aom_picture_decision_kernel()
-            // after above release/recycle/assign,
-            //     picture_decision_reorder_queue will update by the same picture_number (of the
-            //     same ppcs ptr) twice and CHECK_REPORT_ERROR_NC occur.
-            // - So need ppcs live_count + 1 before post ResourceCoordinationResults, and release
-            // ppcs before end of PictureDecision,
-            //     to avoid recycling overlay candidate's ppcs to empty fifo too early.
-            pcs->p_pcs_wrapper_ptr = pcs_wrapper;
+        }
+    }
+    svt_release_mutex(context_ptr->scs_instance->config_mutex);
+    // Sequence Control Set is released by Rate Control after passing through MDC->MD->ENCDEC->Packetization->RateControl
+    //   and in the PictureManager
+    svt_object_inc_live_count( //EbObjectIncLiveCount(
+        context_ptr->scs_active,
+        1);
 
-            // reallocate sb_param_array and sb_geom for super-res or reference scaling mode on
-            if (scs->static_config.superres_mode > SUPERRES_NONE || scs->static_config.resize_mode > RESIZE_NONE) {
-                realloc_sb_param(scs, pcs);
-            } else {
-                pcs->b64_geom         = scs->b64_geom;
-                pcs->sb_geom          = scs->sb_geom;
-                pcs->is_pcs_sb_params = false;
-            }
-            pcs->input_resolution  = scs->input_resolution;
-            pcs->picture_sb_width  = scs->pic_width_in_b64;
-            pcs->picture_sb_height = scs->pic_height_in_b64;
+    // Set the current SequenceControlSet
+    scs = (SequenceControlSet*)context_ptr->scs_active->object_ptr;
+    // Since at this stage we do not know the prediction structure and the location of ALT_REF
+    // pictures, for every picture (except first picture), we allocate two: 1. original
+    // picture, 2. potential Overlay picture. In Picture Decision Process, where the overlay
+    // frames are known, they extra pictures are released
+    uint8_t has_overlay = (scs->static_config.enable_overlays == false ||
+                           context_ptr->scs_instance->enc_ctx->initial_picture)
+        ? 0
+        : 1;
+    for (uint8_t loop_index = 0; loop_index <= has_overlay && !context_ptr->end_of_sequence_flag; loop_index++) {
+        // Get a New ParentPCS where we will hold the new input_picture
+        svt_get_empty_object(context_ptr->picture_control_set_fifo_ptr, &pcs_wrapper);
 
-            pcs->overlay_ppcs_ptr   = NULL;
-            pcs->is_alt_ref         = 0;
-            pcs->transition_present = -1;
-            pcs->is_noise_level     = 0;
-            if (loop_index) {
-                pcs->is_overlay = 1;
-                // set the overlay_ppcs_ptr in the original (ALT_REF) ppcs to the current ppcs
-                EbObjectWrapper* alt_ref_picture_control_set_wrapper_ptr =
-                    (context_ptr->scs_instance->enc_ctx->initial_picture)
-                    ? pcs_wrapper
-                    : scs->enc_ctx->previous_picture_control_set_wrapper_ptr;
+        // Parent PCS is released by the Rate Control after passing through
+        // MDC->MD->ENCDEC->Packetization
+        svt_object_inc_live_count(pcs_wrapper, 1);
 
-                pcs->alt_ref_ppcs_ptr = ((PictureParentControlSet*)alt_ref_picture_control_set_wrapper_ptr->object_ptr);
-                pcs->alt_ref_ppcs_ptr->overlay_ppcs_ptr = pcs;
-            } else {
-                pcs->is_overlay       = 0;
-                pcs->alt_ref_ppcs_ptr = NULL;
-            }
-            // Set the Encoder mode
-            pcs->enc_mode = scs->static_config.enc_mode;
+        pcs      = (PictureParentControlSet*)pcs_wrapper->object_ptr;
+        pcs->scs = scs;
+        // if resolution has changed, and the pcs settings do not match scs settings, update ppcs params
+        if (pcs->frame_width != scs->max_input_luma_width || pcs->frame_height != scs->max_input_luma_height) {
+            ppcs_update_param(pcs);
+        }
+        // - p_pcs_wrapper_ptr is a direct copy of pcs_wrapper (live_count == 1).
+        // - Most of p_pcs_wrapper_ptr in pre-allocated overlay candidates will be released &
+        // recycled to empty fifo
+        //     by altref candidate's
+        //     svt_release_object(pcs->overlay_ppcs_ptr->p_pcs_wrapper_ptr) in PictureDecision.
+        // - The recycled ppcs may be assigned a new picture_number in ResourceCoordination.
+        // - If the to-be-removed overlay candidate runs in svt_aom_picture_decision_kernel()
+        // after above release/recycle/assign,
+        //     picture_decision_reorder_queue will update by the same picture_number (of the
+        //     same ppcs ptr) twice and CHECK_REPORT_ERROR_NC occur.
+        // - So need ppcs live_count + 1 before post ResourceCoordinationResults, and release
+        // ppcs before end of PictureDecision,
+        //     to avoid recycling overlay candidate's ppcs to empty fifo too early.
+        pcs->p_pcs_wrapper_ptr = pcs_wrapper;
 
-            // Keep track of the previous input for the ZZ SADs computation
-            pcs->previous_picture_control_set_wrapper_ptr = (context_ptr->scs_instance->enc_ctx->initial_picture)
+        // reallocate sb_param_array and sb_geom for super-res or reference scaling mode on
+        if (scs->static_config.superres_mode > SUPERRES_NONE || scs->static_config.resize_mode > RESIZE_NONE) {
+            realloc_sb_param(scs, pcs);
+        } else {
+            pcs->b64_geom         = scs->b64_geom;
+            pcs->sb_geom          = scs->sb_geom;
+            pcs->is_pcs_sb_params = false;
+        }
+        pcs->input_resolution  = scs->input_resolution;
+        pcs->picture_sb_width  = scs->pic_width_in_b64;
+        pcs->picture_sb_height = scs->pic_height_in_b64;
+
+        pcs->overlay_ppcs_ptr   = NULL;
+        pcs->is_alt_ref         = 0;
+        pcs->transition_present = -1;
+        pcs->is_noise_level     = 0;
+        if (loop_index) {
+            pcs->is_overlay = 1;
+            // set the overlay_ppcs_ptr in the original (ALT_REF) ppcs to the current ppcs
+            EbObjectWrapper* alt_ref_picture_control_set_wrapper_ptr =
+                (context_ptr->scs_instance->enc_ctx->initial_picture)
                 ? pcs_wrapper
                 : scs->enc_ctx->previous_picture_control_set_wrapper_ptr;
-            if (loop_index == 0) {
-                scs->enc_ctx->previous_picture_control_set_wrapper_ptr = pcs_wrapper;
-            }
-            // Copy data from the svt buffer to the input frame
-            // *Note - Assumes 4:2:0 planar
-            input_pic_wrapper = eb_input_wrapper_ptr;
-            pcs->enhanced_pic = (EbPictureBufferDesc*)eb_input_ptr->p_buffer;
-            // make pcs input buffer access the luma8bit part from the Luma8bit Pool
-            pcs->enhanced_pic->y_buffer = buff_y8b;
-            pcs->input_ptr              = eb_input_ptr;
-            end_of_sequence_flag        = (pcs->input_ptr->flags & EB_BUFFERFLAG_EOS) ? true : false;
-            // Check whether super-res is previously enabled in this recycled parent pcs and restore
-            // to non-scale-down default if so.
-            if (pcs->frame_superres_enabled || pcs->frame_resize_enabled) {
-                svt_aom_reset_resized_picture(scs, pcs, pcs->enhanced_pic);
-            }
-            pcs->superres_total_recode_loop = 0;
-            pcs->superres_recode_loop       = 0;
-            svt_av1_get_time(&pcs->start_time_seconds, &pcs->start_time_u_seconds);
-            pcs->seq_param_changed = (context_ptr->seq_param_change) ? true : false;
-            // set the scs wrapper to be released after the picture is done
-            pcs->scs_wrapper = context_ptr->scs_active;
-            // Reset seq_param_change and video_res_change to false
-            context_ptr->seq_param_change = false;
-            context_ptr->video_res_change = false;
-            pcs->scs                      = scs;
-            pcs->input_pic_wrapper        = input_pic_wrapper;
-            //store the y8b warapper to be used for release later
-            pcs->y8b_wrapper          = y8b_wrapper;
-            pcs->end_of_sequence_flag = end_of_sequence_flag;
-            pcs->rc_reset_flag        = false;
-            pcs->compute_psnr         = scs->static_config.stat_report;
-            pcs->compute_ssim         = scs->static_config.stat_report;
-            update_frame_event(pcs, context_ptr->picture_number);
-            pcs->is_not_scaled = (scs->static_config.superres_mode == SUPERRES_NONE) &&
-                scs->static_config.resize_mode == RESIZE_NONE;
-            if (loop_index == 1) {
-                // Get a new input picture for overlay.
-                EbObjectWrapper* input_pic_wrapper_ptr;
 
-                // Get a new input picture for overlay.
-                svt_get_empty_object(scs->enc_ctx->overlay_input_picture_pool_fifo_ptr, &input_pic_wrapper_ptr);
-                // if resolution has changed, and the overlay_buffer_header settings do not match scs settings, update overlay_buffer_header settings
-                if (buffer_update_needed((EbBufferHeaderType*)input_pic_wrapper_ptr->object_ptr, scs)) {
-                    svt_overlay_buffer_header_update(
-                        (EbBufferHeaderType*)input_pic_wrapper_ptr->object_ptr, scs, false);
-                }
+            pcs->alt_ref_ppcs_ptr = ((PictureParentControlSet*)alt_ref_picture_control_set_wrapper_ptr->object_ptr);
+            pcs->alt_ref_ppcs_ptr->overlay_ppcs_ptr = pcs;
+        } else {
+            pcs->is_overlay       = 0;
+            pcs->alt_ref_ppcs_ptr = NULL;
+        }
+        // Set the Encoder mode
+        pcs->enc_mode = scs->static_config.enc_mode;
 
-                // Copy from original picture (pcs->input_pic_wrapper), which is shared
-                // between overlay and alt_ref up to this point, to the new input picture.
-                if (pcs->alt_ref_ppcs_ptr->input_pic_wrapper->object_ptr != NULL) {
-                    copy_input_buffer_overlay(
-                        scs,
-                        (EbBufferHeaderType*)input_pic_wrapper_ptr->object_ptr,
-                        (EbBufferHeaderType*)pcs->alt_ref_ppcs_ptr->input_pic_wrapper->object_ptr);
-                }
-                // Assign the new picture to the new pointers
-                pcs->input_ptr         = (EbBufferHeaderType*)input_pic_wrapper_ptr->object_ptr;
-                pcs->enhanced_pic      = (EbPictureBufferDesc*)pcs->input_ptr->p_buffer;
-                pcs->input_pic_wrapper = input_pic_wrapper_ptr;
+        // Keep track of the previous input for the ZZ SADs computation
+        pcs->previous_picture_control_set_wrapper_ptr = (context_ptr->scs_instance->enc_ctx->initial_picture)
+            ? pcs_wrapper
+            : scs->enc_ctx->previous_picture_control_set_wrapper_ptr;
+        if (loop_index == 0) {
+            scs->enc_ctx->previous_picture_control_set_wrapper_ptr = pcs_wrapper;
+        }
+        // Copy data from the svt buffer to the input frame
+        // *Note - Assumes 4:2:0 planar
+        input_pic_wrapper = eb_input_wrapper_ptr;
+        pcs->enhanced_pic = (EbPictureBufferDesc*)eb_input_ptr->p_buffer;
+        // make pcs input buffer access the luma8bit part from the Luma8bit Pool
+        pcs->enhanced_pic->y_buffer       = buff_y8b;
+        pcs->input_ptr                    = eb_input_ptr;
+        context_ptr->end_of_sequence_flag = (pcs->input_ptr->flags & EB_BUFFERFLAG_EOS) ? true : false;
+        // Check whether super-res is previously enabled in this recycled parent pcs and restore
+        // to non-scale-down default if so.
+        if (pcs->frame_superres_enabled || pcs->frame_resize_enabled) {
+            svt_aom_reset_resized_picture(scs, pcs, pcs->enhanced_pic);
+        }
+        pcs->superres_total_recode_loop = 0;
+        pcs->superres_recode_loop       = 0;
+        svt_av1_get_time(&pcs->start_time_seconds, &pcs->start_time_u_seconds);
+        pcs->seq_param_changed = (context_ptr->seq_param_change) ? true : false;
+        // set the scs wrapper to be released after the picture is done
+        pcs->scs_wrapper = context_ptr->scs_active;
+        // Reset seq_param_change and video_res_change to false
+        context_ptr->seq_param_change = false;
+        context_ptr->video_res_change = false;
+        pcs->scs                      = scs;
+        pcs->input_pic_wrapper        = input_pic_wrapper;
+        //store the y8b warapper to be used for release later
+        pcs->y8b_wrapper          = y8b_wrapper;
+        pcs->end_of_sequence_flag = context_ptr->end_of_sequence_flag;
+        pcs->rc_reset_flag        = false;
+        pcs->compute_psnr         = scs->static_config.stat_report;
+        pcs->compute_ssim         = scs->static_config.stat_report;
+        update_frame_event(pcs, context_ptr->picture_number);
+        pcs->is_not_scaled = (scs->static_config.superres_mode == SUPERRES_NONE) &&
+            scs->static_config.resize_mode == RESIZE_NONE;
+        if (loop_index == 1) {
+            // Get a new input picture for overlay.
+            EbObjectWrapper* input_pic_wrapper_ptr;
 
-                // overlay does NOT use y8b buffer, set to NULL to avoid
-                // y8b_wrapper->live_count disorder
-                pcs->y8b_wrapper = NULL;
+            // Get a new input picture for overlay.
+            svt_get_empty_object(scs->enc_ctx->overlay_input_picture_pool_fifo_ptr, &input_pic_wrapper_ptr);
+            // if resolution has changed, and the overlay_buffer_header settings do not match scs settings, update overlay_buffer_header settings
+            if (buffer_update_needed((EbBufferHeaderType*)input_pic_wrapper_ptr->object_ptr, scs)) {
+                svt_overlay_buffer_header_update((EbBufferHeaderType*)input_pic_wrapper_ptr->object_ptr, scs, false);
             }
-            // Set Picture Control Flags
-            pcs->idr_flag          = scs->enc_ctx->initial_picture;
-            pcs->cra_flag          = 0;
-            pcs->scene_change_flag = false;
-            pcs->qp_on_the_fly     = false;
-            pcs->b64_total_count   = scs->b64_total_count;
-            if (scs->speed_control_flag) {
-                speed_buffer_control(context_ptr, pcs, scs);
-            } else {
-                pcs->enc_mode = (EncMode)scs->static_config.enc_mode;
-            }
-            //  If the mode of the second pass is not set from CLI, it is set to enc_mode
 
-            // Pre-Analysis Signal(s) derivation
-            svt_aom_sig_deriv_pre_analysis_pcs(pcs);
-            // Rate Control
+            // Copy from original picture (pcs->input_pic_wrapper), which is shared
+            // between overlay and alt_ref up to this point, to the new input picture.
+            if (pcs->alt_ref_ppcs_ptr->input_pic_wrapper->object_ptr != NULL) {
+                copy_input_buffer_overlay(scs,
+                                          (EbBufferHeaderType*)input_pic_wrapper_ptr->object_ptr,
+                                          (EbBufferHeaderType*)pcs->alt_ref_ppcs_ptr->input_pic_wrapper->object_ptr);
+            }
+            // Assign the new picture to the new pointers
+            pcs->input_ptr         = (EbBufferHeaderType*)input_pic_wrapper_ptr->object_ptr;
+            pcs->enhanced_pic      = (EbPictureBufferDesc*)pcs->input_ptr->p_buffer;
+            pcs->input_pic_wrapper = input_pic_wrapper_ptr;
 
-            // Picture Stats
-            if (loop_index == has_overlay || end_of_sequence_flag) {
-                pcs->picture_number = context_ptr->picture_number++;
-            } else {
-                pcs->picture_number = context_ptr->picture_number;
+            // overlay does NOT use y8b buffer, set to NULL to avoid
+            // y8b_wrapper->live_count disorder
+            pcs->y8b_wrapper = NULL;
+        }
+        // Set Picture Control Flags
+        pcs->idr_flag          = scs->enc_ctx->initial_picture;
+        pcs->cra_flag          = 0;
+        pcs->scene_change_flag = false;
+        pcs->qp_on_the_fly     = false;
+        pcs->b64_total_count   = scs->b64_total_count;
+        if (scs->speed_control_flag) {
+            speed_buffer_control(context_ptr, pcs, scs);
+        } else {
+            pcs->enc_mode = (EncMode)scs->static_config.enc_mode;
+        }
+        //  If the mode of the second pass is not set from CLI, it is set to enc_mode
+
+        // Pre-Analysis Signal(s) derivation
+        svt_aom_sig_deriv_pre_analysis_pcs(pcs);
+        // Rate Control
+
+        // Picture Stats
+        if (loop_index == has_overlay || context_ptr->end_of_sequence_flag) {
+            pcs->picture_number = context_ptr->picture_number++;
+        } else {
+            pcs->picture_number = context_ptr->picture_number;
+        }
+        if (scs->passes == 2 && !context_ptr->end_of_sequence_flag && scs->static_config.pass == ENC_SECOND_PASS &&
+            scs->static_config.rate_control_mode) {
+            pcs->stat_struct = (scs->twopass.stats_buf_ctx->stats_in_start + pcs->picture_number)->stat_struct;
+            if (pcs->stat_struct.poc != pcs->picture_number) {
+                SVT_LOG("Error reading data in multi pass encoding\n");
             }
-            if (scs->passes == 2 && !end_of_sequence_flag && scs->static_config.pass == ENC_SECOND_PASS &&
-                scs->static_config.rate_control_mode) {
-                pcs->stat_struct = (scs->twopass.stats_buf_ctx->stats_in_start + pcs->picture_number)->stat_struct;
-                if (pcs->stat_struct.poc != pcs->picture_number) {
-                    SVT_LOG("Error reading data in multi pass encoding\n");
-                }
-            }
-            if (scs->static_config.use_qp_file) {
-                pcs->qp_on_the_fly = true;
-                if (pcs->input_ptr->qp > MAX_QP_VALUE) {
-                    SVT_WARN("INPUT QP/CRF OUTSIDE OF RANGE\n");
-                    pcs->qp_on_the_fly = false;
-                }
-                pcs->picture_qp = (uint8_t)pcs->input_ptr->qp;
-            } else {
+        }
+        if (scs->static_config.use_qp_file) {
+            pcs->qp_on_the_fly = true;
+            if (pcs->input_ptr->qp > MAX_QP_VALUE) {
+                SVT_WARN("INPUT QP/CRF OUTSIDE OF RANGE\n");
                 pcs->qp_on_the_fly = false;
-                pcs->picture_qp    = (uint8_t)scs->static_config.qp;
             }
-            pcs->sframe_qp_offset = 0;
+            pcs->picture_qp = (uint8_t)pcs->input_ptr->qp;
+        } else {
+            pcs->qp_on_the_fly = false;
+            pcs->picture_qp    = (uint8_t)scs->static_config.qp;
+        }
+        pcs->sframe_qp_offset = 0;
 
-            // Initialize variables for calculating the average QP
-            pcs->tot_qindex               = 0;
-            pcs->valid_qindex_area        = 0;
-            pcs->ts_duration              = (double)10000000 / scs->frame_rate;
-            scs->enc_ctx->initial_picture = false;
-            pcs->sframe_ref_pruned        = false;
+        // Initialize variables for calculating the average QP
+        pcs->tot_qindex               = 0;
+        pcs->valid_qindex_area        = 0;
+        pcs->ts_duration              = (double)10000000 / scs->frame_rate;
+        scs->enc_ctx->initial_picture = false;
+        pcs->sframe_ref_pruned        = false;
 
-            // Get Empty Reference Picture Object
-            svt_get_empty_object(scs->enc_ctx->pa_reference_picture_pool_fifo_ptr, &ref_pic_wrapper);
+        // Get Empty Reference Picture Object
+        svt_get_empty_object(scs->enc_ctx->pa_reference_picture_pool_fifo_ptr, &ref_pic_wrapper);
 
-            pcs->pa_ref_pic_wrapper = ref_pic_wrapper;
-            // make pa_ref full sample buffer access the luma8bit part from the y8b Pool
-            EbPaReferenceObject* pa_ref_obj = (EbPaReferenceObject*)pcs->pa_ref_pic_wrapper->object_ptr;
-            // if resolution has changed, and the pa_ref settings do not match scs settings, update pa reference params
-            if (pa_ref_obj->input_padded_pic->max_width != scs->max_input_luma_width ||
-                pa_ref_obj->input_padded_pic->max_height != scs->max_input_luma_height) {
-                svt_pa_reference_param_update(pa_ref_obj, scs);
+        pcs->pa_ref_pic_wrapper = ref_pic_wrapper;
+        // make pa_ref full sample buffer access the luma8bit part from the y8b Pool
+        EbPaReferenceObject* pa_ref_obj = (EbPaReferenceObject*)pcs->pa_ref_pic_wrapper->object_ptr;
+        // if resolution has changed, and the pa_ref settings do not match scs settings, update pa reference params
+        if (pa_ref_obj->input_padded_pic->max_width != scs->max_input_luma_width ||
+            pa_ref_obj->input_padded_pic->max_height != scs->max_input_luma_height) {
+            svt_pa_reference_param_update(pa_ref_obj, scs);
+        }
+        EbPictureBufferDesc* input_padded_pic = (EbPictureBufferDesc*)pa_ref_obj->input_padded_pic;
+        input_padded_pic->y_buffer            = buff_y8b;
+        svt_object_inc_live_count(pcs->pa_ref_pic_wrapper, 1);
+        if (pcs->y8b_wrapper) {
+            // y8b follows longest life cycle of pa ref and input. so it needs to build on top of live count of pa ref
+            svt_object_inc_live_count(pcs->y8b_wrapper, 1);
+        }
+        // Get Empty Output Results Object
+        // For the low delay mode, buffering for receiving EOS does not happen
+        if (scs->static_config.pred_structure == LOW_DELAY || scs->static_config.pred_structure == ALL_INTRA) {
+            PictureParentControlSet* ppcs_out = pcs;
+
+            ppcs_out->end_of_sequence_flag = context_ptr->end_of_sequence_flag;
+            // since overlay frame has the end of sequence set properly, set the end of sequence to true in the alt ref picture
+            if (ppcs_out->is_overlay && context_ptr->end_of_sequence_flag) {
+                ppcs_out->alt_ref_ppcs_ptr->end_of_sequence_flag = true;
             }
-            EbPictureBufferDesc* input_padded_pic = (EbPictureBufferDesc*)pa_ref_obj->input_padded_pic;
-            input_padded_pic->y_buffer            = buff_y8b;
-            svt_object_inc_live_count(pcs->pa_ref_pic_wrapper, 1);
-            if (pcs->y8b_wrapper) {
-                // y8b follows longest life cycle of pa ref and input. so it needs to build on top of live count of pa ref
-                svt_object_inc_live_count(pcs->y8b_wrapper, 1);
+
+            reset_pcs_av1(ppcs_out);
+            if (!ppcs_out->end_of_sequence_flag) {
+                svt_get_empty_object(context_ptr->resource_coordination_results_output_fifo_ptr, &output_wrapper_ptr);
+                out_results = (ResourceCoordinationResults*)output_wrapper_ptr->object_ptr;
+
+                if (scs->static_config.enable_overlays == true) {
+                    // ppcs live_count + 1 for PictureAnalysis & PictureDecision, will svt_release_object(ppcs) at the end of picture_decision_kernel.
+                    svt_object_inc_live_count(pcs_wrapper, 1);
+                }
+
+                out_results->pcs_wrapper = pcs_wrapper;
+                // Post the finished Results Object
+                svt_post_full_object(output_wrapper_ptr);
+            } else {
+                // When the end of sequence received, there is no need to inject a new PCS.
+                // terminating_picture_number and terminating_sequence_flag_received are set. When all
+                // the pictures in the packetization queue are processed, EOS is signalled to the application.
+                set_eos_terminating_signals(ppcs_out);
             }
+        } else {
             // Get Empty Output Results Object
-            // For the low delay mode, buffering for receiving EOS does not happen
-            if (scs->static_config.pred_structure == LOW_DELAY || scs->static_config.pred_structure == ALL_INTRA) {
-                PictureParentControlSet* ppcs_out = pcs;
+            if (pcs->picture_number > 0 && (context_ptr->prev_pcs_wrapper_ptr != NULL)) {
+                PictureParentControlSet* ppcs_out = (PictureParentControlSet*)
+                                                        context_ptr->prev_pcs_wrapper_ptr->object_ptr;
 
-                ppcs_out->end_of_sequence_flag = end_of_sequence_flag;
+                ppcs_out->end_of_sequence_flag = context_ptr->end_of_sequence_flag;
                 // since overlay frame has the end of sequence set properly, set the end of sequence to true in the alt ref picture
-                if (ppcs_out->is_overlay && end_of_sequence_flag) {
+                if (ppcs_out->is_overlay && context_ptr->end_of_sequence_flag) {
                     ppcs_out->alt_ref_ppcs_ptr->end_of_sequence_flag = true;
                 }
 
                 reset_pcs_av1(ppcs_out);
-                if (!ppcs_out->end_of_sequence_flag) {
-                    svt_get_empty_object(context_ptr->resource_coordination_results_output_fifo_ptr,
-                                         &output_wrapper_ptr);
-                    out_results = (ResourceCoordinationResults*)output_wrapper_ptr->object_ptr;
 
-                    if (scs->static_config.enable_overlays == true) {
-                        // ppcs live_count + 1 for PictureAnalysis & PictureDecision, will svt_release_object(ppcs) at the end of picture_decision_kernel.
-                        svt_object_inc_live_count(pcs_wrapper, 1);
-                    }
+                svt_get_empty_object(context_ptr->resource_coordination_results_output_fifo_ptr, &output_wrapper_ptr);
+                out_results = (ResourceCoordinationResults*)output_wrapper_ptr->object_ptr;
 
-                    out_results->pcs_wrapper = pcs_wrapper;
-                    // Post the finished Results Object
-                    svt_post_full_object(output_wrapper_ptr);
-                } else {
-                    // When the end of sequence received, there is no need to inject a new PCS.
-                    // terminating_picture_number and terminating_sequence_flag_received are set. When all
-                    // the pictures in the packetization queue are processed, EOS is signalled to the application.
-                    set_eos_terminating_signals(ppcs_out);
+                if (scs->static_config.enable_overlays == true) {
+                    // ppcs live_count + 1 for PictureAnalysis & PictureDecision, will svt_release_object(ppcs) at the end of svt_aom_picture_decision_kernel.
+                    svt_object_inc_live_count(context_ptr->prev_pcs_wrapper_ptr, 1);
+                    svt_object_inc_live_count(
+                        ((PictureParentControlSet*)context_ptr->prev_pcs_wrapper_ptr->object_ptr)->scs_wrapper, 1);
                 }
-            } else {
-                // Get Empty Output Results Object
-                if (pcs->picture_number > 0 && (prev_pcs_wrapper_ptr != NULL)) {
-                    PictureParentControlSet* ppcs_out = (PictureParentControlSet*)prev_pcs_wrapper_ptr->object_ptr;
 
-                    ppcs_out->end_of_sequence_flag = end_of_sequence_flag;
-                    // since overlay frame has the end of sequence set properly, set the end of sequence to true in the alt ref picture
-                    if (ppcs_out->is_overlay && end_of_sequence_flag) {
-                        ppcs_out->alt_ref_ppcs_ptr->end_of_sequence_flag = true;
-                    }
-
-                    reset_pcs_av1(ppcs_out);
-
-                    svt_get_empty_object(context_ptr->resource_coordination_results_output_fifo_ptr,
-                                         &output_wrapper_ptr);
-                    out_results = (ResourceCoordinationResults*)output_wrapper_ptr->object_ptr;
-
-                    if (scs->static_config.enable_overlays == true) {
-                        // ppcs live_count + 1 for PictureAnalysis & PictureDecision, will svt_release_object(ppcs) at the end of svt_aom_picture_decision_kernel.
-                        svt_object_inc_live_count(prev_pcs_wrapper_ptr, 1);
-                        svt_object_inc_live_count(
-                            ((PictureParentControlSet*)prev_pcs_wrapper_ptr->object_ptr)->scs_wrapper, 1);
-                    }
-
-                    out_results->pcs_wrapper = prev_pcs_wrapper_ptr;
-                    // Post the finished Results Object
-                    svt_post_full_object(output_wrapper_ptr);
-                }
-                if (end_of_sequence_flag) {
-                    // When the end of sequence received, there is no need to inject a new PCS.
-                    // terminating_picture_number and terminating_sequence_flag_received are set. When all
-                    // the pictures in the packetization queue are processed, EOS is signalled to the application.
-                    set_eos_terminating_signals(pcs);
-                }
+                out_results->pcs_wrapper = context_ptr->prev_pcs_wrapper_ptr;
+                // Post the finished Results Object
+                svt_post_full_object(output_wrapper_ptr);
             }
-            prev_pcs_wrapper_ptr = pcs_wrapper;
+            if (context_ptr->end_of_sequence_flag) {
+                // When the end of sequence received, there is no need to inject a new PCS.
+                // terminating_picture_number and terminating_sequence_flag_received are set. When all
+                // the pictures in the packetization queue are processed, EOS is signalled to the application.
+                set_eos_terminating_signals(pcs);
+            }
         }
-        // Release the Input Command
-        svt_release_object(eb_input_cmd_wrapper);
+        context_ptr->prev_pcs_wrapper_ptr = pcs_wrapper;
     }
+    // Release the Input Command
+    svt_release_object(eb_input_cmd_wrapper);
+    return EB_ErrorNone;
+}
 
+void* svt_aom_resource_coordination_kernel(void* input_ptr) {
+    EbThreadContext* enc_contxt_ptr = (EbThreadContext*)input_ptr;
+    for (;;) {
+        EbErrorType err = svt_aom_resource_coordination_kernel_iter(enc_contxt_ptr->priv);
+        if (err == EB_NoErrorFifoShutdown) {
+            return NULL;
+        }
+    }
     return NULL;
 }

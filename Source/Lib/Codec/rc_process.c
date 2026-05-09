@@ -792,106 +792,113 @@ static void rc_process_packetization_feedback(PictureParentControlSet* ppcs,
     svt_release_object(rc_tasks->pcs_wrapper);
 }
 
-void* svt_aom_rate_control_kernel(void* input_ptr) {
-    // Context
-    EbThreadContext*         thread_ctx  = (EbThreadContext*)input_ptr;
-    RateControlContext*      context_ptr = (RateControlContext*)thread_ctx->priv;
-    SequenceControlSet*      scs;
-    PictureControlSet*       pcs;
-    PictureParentControlSet* ppcs;
+EbErrorType svt_aom_rate_control_kernel_iter(void* context) {
+    RateControlContext* context_ptr = (RateControlContext*)context;
 
-    for (;;) {
-        // Get RateControl Task
-        EbObjectWrapper* rate_control_tasks_wrapper_ptr;
-        EB_GET_FULL_OBJECT(context_ptr->rate_control_input_tasks_fifo_ptr, &rate_control_tasks_wrapper_ptr);
+    SequenceControlSet*      scs  = NULL;
+    PictureControlSet*       pcs  = NULL;
+    PictureParentControlSet* ppcs = NULL;
 
-        RateControlTasks*    rc_tasks                = (RateControlTasks*)rate_control_tasks_wrapper_ptr->object_ptr;
-        RateControlTaskTypes task_type               = rc_tasks->task_type;
-        bool                 is_superres_recode_task = (task_type == RC_INPUT_SUPERRES_RECODE) ? true : false;
+    // Get RateControl Task
+    EbObjectWrapper* rate_control_tasks_wrapper_ptr;
+    EB_GET_FULL_OBJECT(context_ptr->rate_control_input_tasks_fifo_ptr, &rate_control_tasks_wrapper_ptr);
 
-        // Modify these for different temporal layers later
-        switch (task_type) {
-        case RC_INPUT_SUPERRES_RECODE:
-            assert(scs->static_config.superres_mode == SUPERRES_QTHRESH ||
-                   scs->static_config.superres_mode == SUPERRES_AUTO);
-            // intentionally reuse code in RC_INPUT
-        case RC_INPUT:
-            pcs  = (PictureControlSet*)rc_tasks->pcs_wrapper->object_ptr;
-            ppcs = pcs->ppcs;
-            scs  = pcs->scs;
+    RateControlTasks*    rc_tasks                = (RateControlTasks*)rate_control_tasks_wrapper_ptr->object_ptr;
+    RateControlTaskTypes task_type               = rc_tasks->task_type;
+    bool                 is_superres_recode_task = (task_type == RC_INPUT_SUPERRES_RECODE) ? true : false;
 
-            rc_init_frame_stats(pcs, scs);
+    // Modify these for different temporal layers later
+    switch (task_type) {
+    case RC_INPUT_SUPERRES_RECODE:
+        assert(scs->static_config.superres_mode == SUPERRES_QTHRESH ||
+               scs->static_config.superres_mode == SUPERRES_AUTO);
+        // intentionally reuse code in RC_INPUT
+    case RC_INPUT:
+        pcs  = (PictureControlSet*)rc_tasks->pcs_wrapper->object_ptr;
+        ppcs = pcs->ppcs;
+        scs  = pcs->scs;
 
-            if (!is_superres_recode_task) {
-                ppcs->blk_lambda_tuning = false;
-            }
-            reset_rc_param(ppcs);
+        rc_init_frame_stats(pcs, scs);
 
-            if (ppcs->is_overlay) {
-                // overlay: ppcs->picture_qp has been updated by altref RC_INPUT
+        if (!is_superres_recode_task) {
+            ppcs->blk_lambda_tuning = false;
+        }
+        reset_rc_param(ppcs);
+
+        if (ppcs->is_overlay) {
+            // overlay: ppcs->picture_qp has been updated by altref RC_INPUT
+        } else {
+            if (scs->enc_ctx->rc_cfg.mode == AOM_Q) {
+                svt_av1_rc_calc_qindex_crf_cqp(pcs, scs);
+                svt_aom_setup_segmentation(pcs, scs);
+            } else if (use_rtc_cbr_path(scs)) {
+                svt_av1_rc_calc_qindex_rtc_cbr(pcs);
             } else {
-                if (scs->enc_ctx->rc_cfg.mode == AOM_Q) {
-                    svt_av1_rc_calc_qindex_crf_cqp(pcs, scs);
-                    svt_aom_setup_segmentation(pcs, scs);
-                } else if (use_rtc_cbr_path(scs)) {
-                    svt_av1_rc_calc_qindex_rtc_cbr(pcs);
-                } else {
-                    if (!is_superres_recode_task) {
-                        svt_av1_rc_process_rate_allocation(pcs, scs);
-                    }
-                    svt_av1_rc_calc_qindex_rate_control(pcs, scs);
+                if (!is_superres_recode_task) {
+                    svt_av1_rc_process_rate_allocation(pcs, scs);
                 }
-                ppcs->picture_qp = clamp_qp(scs, (ppcs->frm_hdr.quantization_params.base_q_idx + 2) >> 2);
+                svt_av1_rc_calc_qindex_rate_control(pcs, scs);
             }
+            ppcs->picture_qp = clamp_qp(scs, (ppcs->frm_hdr.quantization_params.base_q_idx + 2) >> 2);
+        }
 
-            if (ppcs->is_alt_ref) {
-                // overlay use the same QP with alt_ref, to align with
-                // rate_control_param_queue update code in below RC_PACKETIZATION_FEEDBACK_RESULT.
-                PictureParentControlSet* overlay_ppcs     = ppcs->overlay_ppcs_ptr;
-                overlay_ppcs->picture_qp                  = ppcs->picture_qp;
-                overlay_ppcs->frm_hdr.quantization_params = ppcs->frm_hdr.quantization_params;
+        if (ppcs->is_alt_ref) {
+            // overlay use the same QP with alt_ref, to align with
+            // rate_control_param_queue update code in below RC_PACKETIZATION_FEEDBACK_RESULT.
+            PictureParentControlSet* overlay_ppcs     = ppcs->overlay_ppcs_ptr;
+            overlay_ppcs->picture_qp                  = ppcs->picture_qp;
+            overlay_ppcs->frm_hdr.quantization_params = ppcs->frm_hdr.quantization_params;
+        }
+
+        if (!is_superres_recode_task) {
+            if (rc_handle_superres(pcs, context_ptr, rate_control_tasks_wrapper_ptr)) {
+                break;
             }
+        }
 
-            if (!is_superres_recode_task) {
-                if (rc_handle_superres(pcs, context_ptr, rate_control_tasks_wrapper_ptr)) {
-                    break;
-                }
-            }
+        generate_sb_qindex(pcs);
 
-            generate_sb_qindex(pcs);
+        // Get Empty Rate Control Results Buffer
+        EbObjectWrapper* rc_results_wrapper;
+        svt_get_empty_object(context_ptr->rate_control_output_results_fifo_ptr, &rc_results_wrapper);
+        RateControlResults* rc_results = (RateControlResults*)rc_results_wrapper->object_ptr;
+        rc_results->pcs_wrapper        = rc_tasks->pcs_wrapper;
+        rc_results->superres_recode    = is_superres_recode_task;
 
-            // Get Empty Rate Control Results Buffer
-            EbObjectWrapper* rc_results_wrapper;
-            svt_get_empty_object(context_ptr->rate_control_output_results_fifo_ptr, &rc_results_wrapper);
-            RateControlResults* rc_results = (RateControlResults*)rc_results_wrapper->object_ptr;
-            rc_results->pcs_wrapper        = rc_tasks->pcs_wrapper;
-            rc_results->superres_recode    = is_superres_recode_task;
+        // Post Full Rate Control Results
+        svt_post_full_object(rc_results_wrapper);
 
-            // Post Full Rate Control Results
-            svt_post_full_object(rc_results_wrapper);
+        // Release Rate Control Tasks
+        svt_release_object(rate_control_tasks_wrapper_ptr);
 
-            // Release Rate Control Tasks
-            svt_release_object(rate_control_tasks_wrapper_ptr);
+        break;
 
-            break;
+    case RC_PACKETIZATION_FEEDBACK_RESULT:
+        ppcs = (PictureParentControlSet*)rc_tasks->pcs_wrapper->object_ptr;
+        scs  = ppcs->scs;
 
-        case RC_PACKETIZATION_FEEDBACK_RESULT:
-            ppcs = (PictureParentControlSet*)rc_tasks->pcs_wrapper->object_ptr;
-            scs  = ppcs->scs;
+        rc_process_packetization_feedback(ppcs, rate_control_tasks_wrapper_ptr);
 
-            rc_process_packetization_feedback(ppcs, rate_control_tasks_wrapper_ptr);
+        // Release Rate Control Tasks
+        svt_release_object(rate_control_tasks_wrapper_ptr);
+        break;
 
-            // Release Rate Control Tasks
-            svt_release_object(rate_control_tasks_wrapper_ptr);
-            break;
+    default:
+        pcs = (PictureControlSet*)rc_tasks->pcs_wrapper->object_ptr;
+        scs = pcs->scs;
 
-        default:
-            pcs = (PictureControlSet*)rc_tasks->pcs_wrapper->object_ptr;
-            scs = pcs->scs;
+        break;
+    }
+    return EB_ErrorNone;
+}
 
-            break;
+void* svt_aom_rate_control_kernel(void* input_ptr) {
+    EbThreadContext* thread_ctx = (EbThreadContext*)input_ptr;
+    for (;;) {
+        EbErrorType err = svt_aom_rate_control_kernel_iter(thread_ctx->priv);
+        if (err == EB_NoErrorFifoShutdown) {
+            return NULL;
         }
     }
-
     return NULL;
 }

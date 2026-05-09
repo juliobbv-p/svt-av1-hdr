@@ -287,6 +287,8 @@ set(all_files
         svt_time.h
         sys_resource_manager.c
         sys_resource_manager.h
+        kernel_dispatch.c
+        kernel_dispatch.h
         temporal_filtering.c
         temporal_filtering.h
         transforms.c

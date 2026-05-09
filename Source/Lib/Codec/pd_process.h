@@ -137,6 +137,7 @@ typedef struct PictureDecisionContext {
     int32_t  sframe_hier_lvls;
     uint64_t sframe_last_arf;
     bool     next_arf_is_s;
+    int64_t  current_input_poc;
 } PictureDecisionContext;
 
 #endif // EbPictureDecision_h

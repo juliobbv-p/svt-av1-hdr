@@ -171,6 +171,9 @@ static const std::vector<EncTestSetting> default_enc_settings = {
     {"OverlayTest2", {{"EnableOverlays", "1"}, {"LevelOfParallelism", "1"}}, default_test_vectors},
     {"OverlayTest3", {{"EnableOverlays", "1"}, {"EncoderMode", "5"}}, default_test_vectors},
 
+    // test single-thread kernel dispatch (lp=1, low-delay only)
+    {"SingleThreadLDTest1", {{"LevelOfParallelism", "1"}, {"PredStructure", "1"}}, default_test_vectors},
+
     // test super resolution mode
     {"SuperResTest1", {{"SuperresMode", "2"}}, default_test_vectors},
     {"SuperResTest2", {{"SuperresMode", "4"}}, default_test_vectors},

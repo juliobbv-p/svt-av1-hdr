@@ -1958,125 +1958,132 @@ static EbErrorType tpl_mc_flow(EncodeContext* enc_ctx, SequenceControlSet* scs, 
    process one picture of TPL group
 */
 
-void* svt_aom_tpl_disp_kernel(void* input_ptr) {
-    EbThreadContext*     thread_ctx  = (EbThreadContext*)input_ptr;
-    TplDispenserContext* context_ptr = (TplDispenserContext*)thread_ctx->priv;
+EbErrorType svt_aom_tpl_disp_kernel_iter(void* context) {
+    TplDispenserContext* context_ptr = (TplDispenserContext*)context;
     EbObjectWrapper*     in_results_wrapper_ptr;
     TplDispResults*      in_results_ptr;
-    for (;;) {
-        // Get Input Full Object
-        EB_GET_FULL_OBJECT(context_ptr->tpl_disp_input_fifo_ptr, &in_results_wrapper_ptr);
+    // Get Input Full Object
+    EB_GET_FULL_OBJECT(context_ptr->tpl_disp_input_fifo_ptr, &in_results_wrapper_ptr);
 
-        in_results_ptr = (TplDispResults*)in_results_wrapper_ptr->object_ptr;
+    in_results_ptr = (TplDispResults*)in_results_wrapper_ptr->object_ptr;
 
-        PictureParentControlSet* pcs = in_results_ptr->pcs;
+    PictureParentControlSet* pcs = in_results_ptr->pcs;
 
-        SequenceControlSet* scs = (SequenceControlSet*)pcs->scs;
+    SequenceControlSet* scs = (SequenceControlSet*)pcs->scs;
 
-        int32_t frame_idx           = in_results_ptr->frame_index;
-        context_ptr->coded_sb_count = 0;
+    int32_t frame_idx           = in_results_ptr->frame_index;
+    context_ptr->coded_sb_count = 0;
 
-        uint16_t tile_group_width_in_sb = pcs->tile_group_info[0 /*context_ptr->tile_group_index*/] //  1 tile
-                                              .tile_group_width_in_sb;
-        EncDecSegments* segments_ptr;
+    uint16_t tile_group_width_in_sb = pcs->tile_group_info[0 /*context_ptr->tile_group_index*/] //  1 tile
+                                          .tile_group_width_in_sb;
+    EncDecSegments* segments_ptr;
 
-        segments_ptr = pcs->tpl_disp_segment_ctrl[0 /*context_ptr->tile_group_index*/]; //  1 tile
-        // Segments
-        uint16_t segment_index;
+    segments_ptr = pcs->tpl_disp_segment_ctrl[0 /*context_ptr->tile_group_index*/]; //  1 tile
+    // Segments
+    uint16_t segment_index;
 
-        uint8_t  b64_size        = (uint8_t)scs->b64_size;
-        uint8_t  sb_size_log2    = (uint8_t)svt_log2f(b64_size);
-        uint32_t pic_width_in_sb = (pcs->aligned_width + b64_size - 1) >> sb_size_log2;
+    uint8_t  b64_size        = (uint8_t)scs->b64_size;
+    uint8_t  sb_size_log2    = (uint8_t)svt_log2f(b64_size);
+    uint32_t pic_width_in_sb = (pcs->aligned_width + b64_size - 1) >> sb_size_log2;
 
-        segment_index = 0;
-        // no Tiles path
-        if (scs->static_config.tile_rows == 0 && scs->static_config.tile_columns == 0) {
-            // segments loop
-            while (assign_tpl_segments(
-                       segments_ptr, &segment_index, in_results_ptr, frame_idx, context_ptr->tpl_disp_fb_fifo_ptr) ==
-                   true) {
-                uint32_t x_sb_start_index;
-                uint32_t y_sb_start_index;
-                uint32_t sb_start_index;
-                uint32_t sb_segment_count;
-                uint32_t sb_segment_index;
-                uint32_t segment_row_index;
-                uint32_t segment_band_index;
-                uint32_t segment_band_size;
-                // SB Loop variables
-                uint32_t x_sb_index;
-                uint32_t y_sb_index;
+    segment_index = 0;
+    // no Tiles path
+    if (scs->static_config.tile_rows == 0 && scs->static_config.tile_columns == 0) {
+        // segments loop
+        while (assign_tpl_segments(
+                   segments_ptr, &segment_index, in_results_ptr, frame_idx, context_ptr->tpl_disp_fb_fifo_ptr) ==
+               true) {
+            uint32_t x_sb_start_index;
+            uint32_t y_sb_start_index;
+            uint32_t sb_start_index;
+            uint32_t sb_segment_count;
+            uint32_t sb_segment_index;
+            uint32_t segment_row_index;
+            uint32_t segment_band_index;
+            uint32_t segment_band_size;
+            // SB Loop variables
+            uint32_t x_sb_index;
+            uint32_t y_sb_index;
 
-                x_sb_start_index = segments_ptr->x_start_array[segment_index];
-                y_sb_start_index = segments_ptr->y_start_array[segment_index];
-                sb_start_index   = y_sb_start_index * tile_group_width_in_sb + x_sb_start_index;
-                sb_segment_count = segments_ptr->valid_sb_count_array[segment_index];
+            x_sb_start_index = segments_ptr->x_start_array[segment_index];
+            y_sb_start_index = segments_ptr->y_start_array[segment_index];
+            sb_start_index   = y_sb_start_index * tile_group_width_in_sb + x_sb_start_index;
+            sb_segment_count = segments_ptr->valid_sb_count_array[segment_index];
 
-                segment_row_index  = segment_index / segments_ptr->segment_band_count;
-                segment_band_index = segment_index - segment_row_index * segments_ptr->segment_band_count;
-                segment_band_size  = (segments_ptr->sb_band_count * (segment_band_index + 1) +
-                                     segments_ptr->segment_band_count - 1) /
-                    segments_ptr->segment_band_count;
+            segment_row_index  = segment_index / segments_ptr->segment_band_count;
+            segment_band_index = segment_index - segment_row_index * segments_ptr->segment_band_count;
+            segment_band_size  = (segments_ptr->sb_band_count * (segment_band_index + 1) +
+                                 segments_ptr->segment_band_count - 1) /
+                segments_ptr->segment_band_count;
 
-                for (y_sb_index = y_sb_start_index, sb_segment_index = sb_start_index;
+            for (y_sb_index = y_sb_start_index, sb_segment_index = sb_start_index;
+                 sb_segment_index < sb_start_index + sb_segment_count;
+                 ++y_sb_index) {
+                for (x_sb_index = x_sb_start_index;
+                     x_sb_index < tile_group_width_in_sb && (x_sb_index + y_sb_index < segment_band_size) &&
                      sb_segment_index < sb_start_index + sb_segment_count;
-                     ++y_sb_index) {
-                    for (x_sb_index = x_sb_start_index;
-                         x_sb_index < tile_group_width_in_sb && (x_sb_index + y_sb_index < segment_band_size) &&
-                         sb_segment_index < sb_start_index + sb_segment_count;
-                         ++x_sb_index, ++sb_segment_index) {
-                        uint16_t tile_group_y_sb_start =
-                            pcs->tile_group_info[0 /*context_ptr->tile_group_index*/] //  1 tile
-                                .tile_group_sb_start_y;
-                        uint16_t tile_group_x_sb_start =
-                            pcs->tile_group_info[0 /*context_ptr->tile_group_index*/] //  1 tile
-                                .tile_group_sb_start_x;
+                     ++x_sb_index, ++sb_segment_index) {
+                    uint16_t tile_group_y_sb_start =
+                        pcs->tile_group_info[0 /*context_ptr->tile_group_index*/] //  1 tile
+                            .tile_group_sb_start_y;
+                    uint16_t tile_group_x_sb_start =
+                        pcs->tile_group_info[0 /*context_ptr->tile_group_index*/] //  1 tile
+                            .tile_group_sb_start_x;
 
-                        context_ptr->sb_index = (uint16_t)((y_sb_index + tile_group_y_sb_start) * pic_width_in_sb +
-                                                           x_sb_index + tile_group_x_sb_start);
+                    context_ptr->sb_index = (uint16_t)((y_sb_index + tile_group_y_sb_start) * pic_width_in_sb +
+                                                       x_sb_index + tile_group_x_sb_start);
 
-                        // TPL dispenser per SB (64)
-                        B64Geom* b64_geom = &scs->b64_geom[context_ptr->sb_index];
-                        tpl_mc_flow_dispenser_sb_generic(pcs->scs->enc_ctx,
-                                                         scs,
-                                                         pcs,
-                                                         frame_idx,
-                                                         context_ptr->sb_index,
-                                                         in_results_ptr->qIndex,
-                                                         (b64_geom->width == 64 && b64_geom->height == 64)
-                                                             ? pcs->tpl_ctrls.dispenser_search_level
-                                                             : 0);
-                        context_ptr->coded_sb_count++;
-                    }
-
-                    x_sb_start_index = (x_sb_start_index > 0) ? x_sb_start_index - 1 : 0;
+                    // TPL dispenser per SB (64)
+                    B64Geom* b64_geom = &scs->b64_geom[context_ptr->sb_index];
+                    tpl_mc_flow_dispenser_sb_generic(
+                        pcs->scs->enc_ctx,
+                        scs,
+                        pcs,
+                        frame_idx,
+                        context_ptr->sb_index,
+                        in_results_ptr->qIndex,
+                        (b64_geom->width == 64 && b64_geom->height == 64) ? pcs->tpl_ctrls.dispenser_search_level : 0);
+                    context_ptr->coded_sb_count++;
                 }
-            }
 
-            svt_block_on_mutex(pcs->tpl_disp_mutex);
-            pcs->tpl_disp_coded_sb_count += (uint32_t)context_ptr->coded_sb_count;
-            bool last_sb_flag = (pcs->b64_total_count == pcs->tpl_disp_coded_sb_count);
+                x_sb_start_index = (x_sb_start_index > 0) ? x_sb_start_index - 1 : 0;
+            }
+        }
 
-            svt_release_mutex(pcs->tpl_disp_mutex);
-            if (last_sb_flag) {
-                svt_post_semaphore(pcs->tpl_disp_done_semaphore);
-            }
-        } else {
-            // Tiles path does not suupport segments
-            for (uint32_t sb_index = 0; sb_index < pcs->b64_total_count; ++sb_index) {
-                B64Geom* b64_geom = &scs->b64_geom[sb_index];
-                tpl_mc_flow_dispenser_sb_generic(
-                    pcs->scs->enc_ctx,
-                    scs,
-                    pcs,
-                    frame_idx,
-                    sb_index,
-                    in_results_ptr->qIndex,
-                    (b64_geom->width == 64 && b64_geom->height == 64) ? pcs->tpl_ctrls.dispenser_search_level : 0);
-            }
+        svt_block_on_mutex(pcs->tpl_disp_mutex);
+        pcs->tpl_disp_coded_sb_count += (uint32_t)context_ptr->coded_sb_count;
+        bool last_sb_flag = (pcs->b64_total_count == pcs->tpl_disp_coded_sb_count);
+
+        svt_release_mutex(pcs->tpl_disp_mutex);
+        if (last_sb_flag) {
             svt_post_semaphore(pcs->tpl_disp_done_semaphore);
         }
-        svt_release_object(in_results_wrapper_ptr);
+    } else {
+        // Tiles path does not suupport segments
+        for (uint32_t sb_index = 0; sb_index < pcs->b64_total_count; ++sb_index) {
+            B64Geom* b64_geom = &scs->b64_geom[sb_index];
+            tpl_mc_flow_dispenser_sb_generic(
+                pcs->scs->enc_ctx,
+                scs,
+                pcs,
+                frame_idx,
+                sb_index,
+                in_results_ptr->qIndex,
+                (b64_geom->width == 64 && b64_geom->height == 64) ? pcs->tpl_ctrls.dispenser_search_level : 0);
+        }
+        svt_post_semaphore(pcs->tpl_disp_done_semaphore);
+    }
+    svt_release_object(in_results_wrapper_ptr);
+    return EB_ErrorNone;
+}
+
+void* svt_aom_tpl_disp_kernel(void* input_ptr) {
+    EbThreadContext* thread_ctx = (EbThreadContext*)input_ptr;
+    for (;;) {
+        EbErrorType err = svt_aom_tpl_disp_kernel_iter(thread_ctx->priv);
+        if (err == EB_NoErrorFifoShutdown) {
+            return NULL;
+        }
     }
     return NULL;
 }
@@ -2200,49 +2207,57 @@ static void aom_av1_set_mb_ssim_rdmult_scaling(PictureParentControlSet* pcs) {
  * Source-based operations process involves a number of analysis algorithms
  * to identify spatiotemporal characteristics of the input pictures.
  ************************************************/
-void* svt_aom_source_based_operations_kernel(void* input_ptr) {
-    EbThreadContext*              thread_ctx  = (EbThreadContext*)input_ptr;
-    SourceBasedOperationsContext* context_ptr = (SourceBasedOperationsContext*)thread_ctx->priv;
+EbErrorType svt_aom_source_based_operations_kernel_iter(void* context) {
+    SourceBasedOperationsContext* context_ptr = (SourceBasedOperationsContext*)context;
     EbObjectWrapper*              in_results_wrapper_ptr;
 
-    for (;;) {
-        // Get Input Full Object
-        EB_GET_FULL_OBJECT(context_ptr->initial_rate_control_results_input_fifo_ptr, &in_results_wrapper_ptr);
+    // Get Input Full Object
+    EB_GET_FULL_OBJECT(context_ptr->initial_rate_control_results_input_fifo_ptr, &in_results_wrapper_ptr);
 
-        InitialRateControlResults* in_results_ptr = (InitialRateControlResults*)in_results_wrapper_ptr->object_ptr;
-        PictureParentControlSet*   pcs            = (PictureParentControlSet*)in_results_ptr->pcs_wrapper->object_ptr;
-        SequenceControlSet*        scs            = pcs->scs;
-        if (in_results_ptr->superres_recode) {
-            sbo_send_picture_out(context_ptr, pcs, true);
-
-            // Release the Input Results
-            svt_release_object(in_results_wrapper_ptr);
-            continue;
-        }
-
-        // Get TPL ME
-        if (pcs->tpl_ctrls.enable) {
-            // tpl ME can be performed on unscaled frames in super-res q-threshold and auto mode
-            if (!pcs->frame_superres_enabled && pcs->temporal_layer_index == 0) {
-                tpl_prep_info(pcs);
-                tpl_mc_flow(scs->enc_ctx, scs, pcs, context_ptr);
-            }
-            bool release_pa_ref = (scs->static_config.superres_mode <= SUPERRES_RANDOM) ? true : false;
-            // Release Pa Ref if lad_mg is 0 and P slice and not flat struct (not belonging to any TPL group)
-            if (release_pa_ref && /*scs->lad_mg == 0 &&*/ pcs->reference_released == 0) {
-                svt_aom_release_pa_reference_objects(scs, pcs);
-                // printf ("\n PIC \t %d\n",pcs->picture_number);
-            }
-        }
-        /*********************************************Picture-based operations**********************************************************/
-        if (scs->static_config.tune == TUNE_SSIM || scs->static_config.tune == TUNE_IQ ||
-            scs->static_config.tune == TUNE_MS_SSIM) {
-            aom_av1_set_mb_ssim_rdmult_scaling(pcs);
-        }
-        sbo_send_picture_out(context_ptr, pcs, false);
+    InitialRateControlResults* in_results_ptr = (InitialRateControlResults*)in_results_wrapper_ptr->object_ptr;
+    PictureParentControlSet*   pcs            = (PictureParentControlSet*)in_results_ptr->pcs_wrapper->object_ptr;
+    SequenceControlSet*        scs            = pcs->scs;
+    if (in_results_ptr->superres_recode) {
+        sbo_send_picture_out(context_ptr, pcs, true);
 
         // Release the Input Results
         svt_release_object(in_results_wrapper_ptr);
+        return EB_ErrorNone;
+    }
+
+    // Get TPL ME
+    if (pcs->tpl_ctrls.enable) {
+        // tpl ME can be performed on unscaled frames in super-res q-threshold and auto mode
+        if (!pcs->frame_superres_enabled && pcs->temporal_layer_index == 0) {
+            tpl_prep_info(pcs);
+            tpl_mc_flow(scs->enc_ctx, scs, pcs, context_ptr);
+        }
+        bool release_pa_ref = (scs->static_config.superres_mode <= SUPERRES_RANDOM) ? true : false;
+        // Release Pa Ref if lad_mg is 0 and P slice and not flat struct (not belonging to any TPL group)
+        if (release_pa_ref && /*scs->lad_mg == 0 &&*/ pcs->reference_released == 0) {
+            svt_aom_release_pa_reference_objects(scs, pcs);
+            // printf ("\n PIC \t %d\n",pcs->picture_number);
+        }
+    }
+    /*********************************************Picture-based operations**********************************************************/
+    if (scs->static_config.tune == TUNE_SSIM || scs->static_config.tune == TUNE_IQ ||
+        scs->static_config.tune == TUNE_MS_SSIM) {
+        aom_av1_set_mb_ssim_rdmult_scaling(pcs);
+    }
+    sbo_send_picture_out(context_ptr, pcs, false);
+
+    // Release the Input Results
+    svt_release_object(in_results_wrapper_ptr);
+    return EB_ErrorNone;
+}
+
+void* svt_aom_source_based_operations_kernel(void* input_ptr) {
+    EbThreadContext* thread_ctx = (EbThreadContext*)input_ptr;
+    for (;;) {
+        EbErrorType err = svt_aom_source_based_operations_kernel_iter(thread_ctx->priv);
+        if (err == EB_NoErrorFifoShutdown) {
+            return NULL;
+        }
     }
     return NULL;
 }

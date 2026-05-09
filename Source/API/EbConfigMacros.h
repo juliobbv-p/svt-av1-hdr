@@ -79,6 +79,13 @@
 #define CONFIG_ENABLE_HIGH_BIT_DEPTH        1
 #endif
 
+// Single-thread kernel dispatch: at lp=1, bypass thread creation and run all
+// pipeline kernels cooperatively on one thread. Eliminates 15 context switches
+// per frame and all inter-stage semaphore/mutex overhead.
+#ifndef CONFIG_SINGLE_THREAD_KERNEL
+#define CONFIG_SINGLE_THREAD_KERNEL         1
+#endif
+
 // clang-format on
 
 #endif // EbConfigMacros_h

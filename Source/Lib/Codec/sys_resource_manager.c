@@ -13,6 +13,7 @@
 #include <stdlib.h>
 
 #include "sys_resource_manager.h"
+#include "EbConfigMacros.h"
 #include "definitions.h"
 #include "svt_threads.h"
 #include "svt_nvtx.h"
@@ -308,6 +309,13 @@ static EbFifo* svt_muxing_queue_get_fifo(EbMuxingQueue* queue_ptr, uint32_t inde
 EbErrorType svt_object_release_enable(EbObjectWrapper* wrapper_ptr) {
     EbErrorType return_error = EB_ErrorNone;
 
+#if CONFIG_SINGLE_THREAD_KERNEL
+    if (wrapper_ptr->system_resource_ptr->empty_queue->single_thread_mode) {
+        wrapper_ptr->release_enable = true;
+        return EB_ErrorNone;
+    }
+#endif
+
     svt_block_on_mutex(wrapper_ptr->system_resource_ptr->empty_queue->lockout_mutex);
 
     wrapper_ptr->release_enable = true;
@@ -334,6 +342,13 @@ EbErrorType svt_object_release_enable(EbObjectWrapper* wrapper_ptr) {
 EbErrorType svt_object_release_disable(EbObjectWrapper* wrapper_ptr) {
     EbErrorType return_error = EB_ErrorNone;
 
+#if CONFIG_SINGLE_THREAD_KERNEL
+    if (wrapper_ptr->system_resource_ptr->empty_queue->single_thread_mode) {
+        wrapper_ptr->release_enable = false;
+        return EB_ErrorNone;
+    }
+#endif
+
     svt_block_on_mutex(wrapper_ptr->system_resource_ptr->empty_queue->lockout_mutex);
 
     wrapper_ptr->release_enable = false;
@@ -359,6 +374,15 @@ EbErrorType svt_object_release_disable(EbObjectWrapper* wrapper_ptr) {
  *********************************************************************/
 EbErrorType svt_object_inc_live_count(EbObjectWrapper* wrapper_ptr, uint32_t increment_number) {
     EbErrorType return_error = EB_ErrorNone;
+
+#if CONFIG_SINGLE_THREAD_KERNEL
+    if (wrapper_ptr->system_resource_ptr->empty_queue->single_thread_mode) {
+        svt_aom_assert_err(wrapper_ptr->live_count != EB_ObjectWrapperReleasedValue,
+                           "live_count should not be EB_ObjectWrapperReleasedValue when inc");
+        wrapper_ptr->live_count += increment_number;
+        return EB_ErrorNone;
+    }
+#endif
 
     svt_block_on_mutex(wrapper_ptr->system_resource_ptr->empty_queue->lockout_mutex);
 
@@ -509,7 +533,14 @@ EbErrorType svt_shutdown_process(const EbSystemResource* resource_ptr) {
     //notify all consumers we are shutting down
     for (unsigned int i = 0; i < resource_ptr->full_queue->process_total_count; i++) {
         EbFifo* fifo_ptr = svt_system_resource_get_consumer_fifo(resource_ptr, i);
-        svt_fifo_shutdown(fifo_ptr);
+#if CONFIG_SINGLE_THREAD_KERNEL
+        if (resource_ptr->full_queue->single_thread_mode) {
+            fifo_ptr->quit_signal = true;
+        } else
+#endif
+        {
+            svt_fifo_shutdown(fifo_ptr);
+        }
     }
     return EB_ErrorNone;
 }
@@ -548,6 +579,14 @@ static EbErrorType svt_release_process(EbFifo* process_fifo_ptr) {
 EbErrorType svt_post_full_object(EbObjectWrapper* object_ptr) {
     EbErrorType return_error = EB_ErrorNone;
 
+#if CONFIG_SINGLE_THREAD_KERNEL
+    if (object_ptr->system_resource_ptr->full_queue->single_thread_mode) {
+        // Direct push to the single consumer's FIFO — no lock, no semaphore
+        svt_fifo_push_back(object_ptr->system_resource_ptr->full_queue->process_fifo_ptr_array[0], object_ptr);
+        return EB_ErrorNone;
+    }
+#endif
+
     svt_block_on_mutex(object_ptr->system_resource_ptr->full_queue->lockout_mutex);
 
     svt_muxing_queue_object_push_back(object_ptr->system_resource_ptr->full_queue, object_ptr);
@@ -569,6 +608,19 @@ EbErrorType svt_post_full_object(EbObjectWrapper* object_ptr) {
  *********************************************************************/
 EbErrorType svt_release_object(EbObjectWrapper* object_ptr) {
     EbErrorType return_error = EB_ErrorNone;
+
+#if CONFIG_SINGLE_THREAD_KERNEL
+    if (object_ptr->system_resource_ptr->empty_queue->single_thread_mode) {
+        svt_aom_assert_err(object_ptr->live_count != EB_ObjectWrapperReleasedValue,
+                           "live_count should not be EB_ObjectWrapperReleasedValue when release");
+        object_ptr->live_count = (object_ptr->live_count == 0) ? object_ptr->live_count : object_ptr->live_count - 1;
+        if ((object_ptr->release_enable == true) && (object_ptr->live_count == 0)) {
+            object_ptr->live_count = EB_ObjectWrapperReleasedValue;
+            svt_circular_buffer_push_front(object_ptr->system_resource_ptr->empty_queue->object_queue, object_ptr);
+        }
+        return EB_ErrorNone;
+    }
+#endif
 
     svt_block_on_mutex(object_ptr->system_resource_ptr->empty_queue->lockout_mutex);
 
@@ -602,6 +654,18 @@ EbErrorType svt_release_object(EbObjectWrapper* object_ptr) {
 
 EbErrorType svt_release_dual_object(EbObjectWrapper* object_ptr, EbObjectWrapper* sec_object_ptr) {
     EbErrorType return_error = EB_ErrorNone;
+
+#if CONFIG_SINGLE_THREAD_KERNEL
+    if (object_ptr->system_resource_ptr->empty_queue->single_thread_mode) {
+        object_ptr->live_count = (object_ptr->live_count == 0) ? object_ptr->live_count : object_ptr->live_count - 1;
+        if ((object_ptr->release_enable == true) && (object_ptr->live_count == 0)) {
+            svt_release_object(sec_object_ptr);
+            object_ptr->live_count = EB_ObjectWrapperReleasedValue;
+            svt_circular_buffer_push_front(object_ptr->system_resource_ptr->empty_queue->object_queue, object_ptr);
+        }
+        return EB_ErrorNone;
+    }
+#endif
 
     svt_block_on_mutex(object_ptr->system_resource_ptr->empty_queue->lockout_mutex);
 
@@ -668,6 +732,19 @@ EbErrorType dump_srm_content(EbSystemResource* resource_ptr, uint8_t log) {
 EbErrorType svt_get_empty_object(EbFifo* empty_fifo_ptr, EbObjectWrapper** wrapper_dbl_ptr) {
     EbErrorType return_error = EB_ErrorNone;
 
+#if CONFIG_SINGLE_THREAD_KERNEL
+    if (empty_fifo_ptr->queue_ptr->single_thread_mode) {
+        // Pop directly from the object queue — no semaphore, no mutex
+        svt_circular_buffer_pop_front(empty_fifo_ptr->queue_ptr->object_queue, (void**)wrapper_dbl_ptr);
+        svt_aom_assert_err(
+            (*wrapper_dbl_ptr)->live_count == 0 || (*wrapper_dbl_ptr)->live_count == EB_ObjectWrapperReleasedValue,
+            "live_count should be 0 or EB_ObjectWrapperReleasedValue when get");
+        (*wrapper_dbl_ptr)->live_count     = 0;
+        (*wrapper_dbl_ptr)->release_enable = true;
+        return EB_ErrorNone;
+    }
+#endif
+
     // Queue the Fifo requesting the empty fifo
     svt_release_process(empty_fifo_ptr);
 
@@ -724,6 +801,19 @@ EbErrorType svt_get_empty_object(EbFifo* empty_fifo_ptr, EbObjectWrapper** wrapp
 EbErrorType svt_get_full_object(EbFifo* full_fifo_ptr, EbObjectWrapper** wrapper_dbl_ptr) {
     EbErrorType return_error = EB_ErrorNone;
 
+#if CONFIG_SINGLE_THREAD_KERNEL
+    if (full_fifo_ptr->queue_ptr->single_thread_mode) {
+        // Direct pop — no semaphore, no mutex.
+        // Caller (dispatcher) guarantees items are present.
+        if (full_fifo_ptr->quit_signal) {
+            *wrapper_dbl_ptr = NULL;
+            return EB_NoErrorFifoShutdown;
+        }
+        svt_fifo_pop_front(full_fifo_ptr, wrapper_dbl_ptr);
+        return EB_ErrorNone;
+    }
+#endif
+
     // NVTX "wait" range covers semaphore + mutex wait. The gap between
     // consecutive "wait" ranges on a stage thread reads as "busy" on the
     // Nsight Systems timeline.
@@ -767,7 +857,19 @@ static bool svt_fifo_peak_front(EbFifo* fifoPtr) {
 
 EbErrorType svt_get_full_object_non_blocking(EbFifo* full_fifo_ptr, EbObjectWrapper** wrapper_dbl_ptr) {
     EbErrorType return_error = EB_ErrorNone;
-    bool        fifo_empty;
+
+#if CONFIG_SINGLE_THREAD_KERNEL
+    if (full_fifo_ptr->queue_ptr->single_thread_mode) {
+        if (full_fifo_ptr->quit_signal || full_fifo_ptr->first_ptr == NULL) {
+            *wrapper_dbl_ptr = NULL;
+        } else {
+            svt_fifo_pop_front(full_fifo_ptr, wrapper_dbl_ptr);
+        }
+        return EB_ErrorNone;
+    }
+#endif
+
+    bool fifo_empty;
     // Queue the Fifo requesting the full fifo
     svt_release_process(full_fifo_ptr);
 
@@ -792,3 +894,23 @@ EbErrorType svt_get_full_object_non_blocking(EbFifo* full_fifo_ptr, EbObjectWrap
 
     return return_error;
 }
+
+#if CONFIG_SINGLE_THREAD_KERNEL
+bool svt_fifo_has_items_st(EbFifo* fifo_ptr) {
+    // In ST mode, svt_post_full_object pushes directly to the consumer FIFO.
+    // Check the linked list head.
+    return fifo_ptr->first_ptr != NULL;
+}
+
+void svt_system_resource_set_single_thread_mode(EbSystemResource* resource_ptr) {
+    if (!resource_ptr) {
+        return;
+    }
+    if (resource_ptr->empty_queue) {
+        resource_ptr->empty_queue->single_thread_mode = true;
+    }
+    if (resource_ptr->full_queue) {
+        resource_ptr->full_queue->single_thread_mode = true;
+    }
+}
+#endif

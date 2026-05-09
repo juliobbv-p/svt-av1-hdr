@@ -34,6 +34,7 @@ typedef struct PictureManagerContext {
     uint64_t* started_pics_dec_order; // Heap storage array
     int       started_pics_dec_order_size; // Maximum heap capacity
     int       started_pics_dec_order_count; // Current number of elements in the heap
+    uint64_t  decode_order; // Persistent state for _iter
 } PictureManagerContext;
 
 /***************************************
