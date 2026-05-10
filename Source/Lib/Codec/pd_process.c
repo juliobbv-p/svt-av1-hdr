@@ -36,6 +36,9 @@
 #include "aom_dsp_rtcd.h"
 
 #include "pic_operators.h"
+#if CONFIG_SINGLE_THREAD_KERNEL
+#include "me_process.h" // MotionEstimationContext_t for inline TF in ST mode
+#endif
 /************************************************
  * Defines
  ************************************************/
@@ -608,20 +611,33 @@ static void early_hme(PictureDecisionContext* ctx, PictureParentControlSet* src_
     src_pcs->dg_detector->metrics.tot_cplx       = 0;
     src_pcs->dg_detector->metrics.tot_active     = 0;
 
-    // create segments for the dg detector and send them to the motion estimation kernel
-    for (uint16_t seg_idx = 0; seg_idx < dg_detector_seg_total_count; ++seg_idx) {
-        EbObjectWrapper*        out_results_wrp;
-        PictureDecisionResults* out_results;
-        svt_get_empty_object(ctx->picture_decision_results_output_fifo_ptr, &out_results_wrp);
-        out_results                = (PictureDecisionResults*)out_results_wrp->object_ptr;
-        out_results->pcs_wrapper   = src_pcs->p_pcs_wrapper_ptr;
-        out_results->segment_index = seg_idx;
-        out_results->task_type     = TASK_DG_DETECTOR_HME;
-        svt_post_full_object(out_results_wrp);
-    }
+#if CONFIG_SINGLE_THREAD_KERNEL
+    if (src_pcs->scs->lp == 1) {
+        // ST mode: run DG detector segments inline to avoid dispatching to ME
+        // FIFO and blocking on the semaphore (same pattern as mctf_frame_st).
+        for (uint16_t seg_idx = 0; seg_idx < dg_detector_seg_total_count; ++seg_idx) {
+            dg_detector_hme_level0(src_pcs, seg_idx);
+        }
+        // dg_detector_hme_level0 posts frame_done_sem on the last segment — consume it.
+        svt_block_on_semaphore(src_pcs->dg_detector->frame_done_sem);
+    } else
+#endif
+    {
+        // create segments for the dg detector and send them to the motion estimation kernel
+        for (uint16_t seg_idx = 0; seg_idx < dg_detector_seg_total_count; ++seg_idx) {
+            EbObjectWrapper*        out_results_wrp;
+            PictureDecisionResults* out_results;
+            svt_get_empty_object(ctx->picture_decision_results_output_fifo_ptr, &out_results_wrp);
+            out_results                = (PictureDecisionResults*)out_results_wrp->object_ptr;
+            out_results->pcs_wrapper   = src_pcs->p_pcs_wrapper_ptr;
+            out_results->segment_index = seg_idx;
+            out_results->task_type     = TASK_DG_DETECTOR_HME;
+            svt_post_full_object(out_results_wrp);
+        }
 
-    // wait for all segments to complete before the frame based calculations can be performed using the dg metrics
-    svt_block_on_semaphore(src_pcs->dg_detector->frame_done_sem);
+        // wait for all segments to complete before the frame based calculations can be performed using the dg metrics
+        svt_block_on_semaphore(src_pcs->dg_detector->frame_done_sem);
+    }
 
     // 64x64 Block Loop
     uint32_t pic_width_in_b64  = (src_pcs->aligned_width + 63) / 64;
@@ -3763,6 +3779,26 @@ static void low_delay_release_tf_pictures(PictureDecisionContext* ctx) {
     ctx->tf_pic_arr_cnt = 0;
 }
 
+#if CONFIG_SINGLE_THREAD_KERNEL
+/*
+  Single-thread MCTF: run TF segments inline instead of dispatching to ME FIFO.
+*/
+static void mctf_frame_st(SequenceControlSet* scs, PictureParentControlSet* pcs) {
+    MotionEstimationContext_t* me_ctx_ptr = (MotionEstimationContext_t*)scs->enc_ctx->st_me_context;
+    me_ctx_ptr->me_ctx->me_type           = ME_MCTF;
+    svt_aom_sig_deriv_me_tf(pcs, me_ctx_ptr->me_ctx);
+    if (pcs->gm_ctrls.pp_enabled && pcs->gm_pp_enabled) {
+        svt_aom_gm_pre_processor(pcs, pcs->temp_filt_pcs_list);
+    }
+    for (int16_t seg_idx = 0; seg_idx < pcs->tf_segments_total_count; ++seg_idx) {
+        svt_av1_init_temporal_filtering(pcs->temp_filt_pcs_list, pcs, me_ctx_ptr, seg_idx);
+    }
+    // Consume the semaphore posted by svt_av1_init_temporal_filtering
+    // on the last segment (prevents assertion on semaphore disposal).
+    svt_block_on_semaphore(pcs->temp_filt_done_semaphore);
+}
+#endif
+
 /*
   Performs Motion Compensated Temporal Filtering in ME process
 */
@@ -3777,26 +3813,31 @@ static void mctf_frame(SequenceControlSet* scs, PictureParentControlSet* pcs, Pi
 
         // Start Filtering in ME processes
         {
-            int16_t seg_idx;
-
             // Initialize Segments
             pcs->tf_segments_column_count = scs->tf_segment_column_count;
             pcs->tf_segments_row_count    = scs->tf_segment_row_count;
             pcs->tf_segments_total_count  = (uint16_t)(pcs->tf_segments_column_count * pcs->tf_segments_row_count);
             pcs->temp_filt_seg_acc        = 0;
-            for (seg_idx = 0; seg_idx < pcs->tf_segments_total_count; ++seg_idx) {
-                EbObjectWrapper*        out_results_wrapper;
-                PictureDecisionResults* out_results;
+#if CONFIG_SINGLE_THREAD_KERNEL
+            if (scs->lp == 1) {
+                mctf_frame_st(scs, pcs);
+            } else
+#endif
+            {
+                for (int16_t seg_idx = 0; seg_idx < pcs->tf_segments_total_count; ++seg_idx) {
+                    EbObjectWrapper*        out_results_wrapper;
+                    PictureDecisionResults* out_results;
 
-                svt_get_empty_object(pd_ctx->picture_decision_results_output_fifo_ptr, &out_results_wrapper);
-                out_results                = (PictureDecisionResults*)out_results_wrapper->object_ptr;
-                out_results->pcs_wrapper   = pcs->p_pcs_wrapper_ptr;
-                out_results->segment_index = seg_idx;
-                out_results->task_type     = 1;
-                svt_post_full_object(out_results_wrapper);
+                    svt_get_empty_object(pd_ctx->picture_decision_results_output_fifo_ptr, &out_results_wrapper);
+                    out_results                = (PictureDecisionResults*)out_results_wrapper->object_ptr;
+                    out_results->pcs_wrapper   = pcs->p_pcs_wrapper_ptr;
+                    out_results->segment_index = seg_idx;
+                    out_results->task_type     = 1;
+                    svt_post_full_object(out_results_wrapper);
+                }
+
+                svt_block_on_semaphore(pcs->temp_filt_done_semaphore);
             }
-
-            svt_block_on_semaphore(pcs->temp_filt_done_semaphore);
         }
 
         if (pcs->tf_tot_horz_blks > pcs->tf_tot_vert_blks * 6 / 4) {
@@ -3903,7 +3944,12 @@ static void send_picture_out(SequenceControlSet* scs, PictureParentControlSet* p
     // NB: overlay frames should be non-ref
     // Before sending pics out to pic mgr, ensure that pic mgr can handle them
     if (pcs->is_ref) {
-        svt_block_on_semaphore(scs->ref_buffer_available_semaphore);
+#if CONFIG_SINGLE_THREAD_KERNEL
+        // In ST mode, ref buffer availability is guaranteed by the pool pump
+        // in svt_get_empty_object. Skip the semaphore to avoid imbalance at shutdown.
+        if (scs->lp != 1)
+#endif
+            svt_block_on_semaphore(scs->ref_buffer_available_semaphore);
     }
 
     for (uint32_t segment_index = 0; segment_index < pcs->me_segments_total_count; ++segment_index) {

@@ -174,6 +174,14 @@ static const std::vector<EncTestSetting> default_enc_settings = {
     // test single-thread kernel dispatch (lp=1, low-delay only)
     {"SingleThreadLDTest1", {{"LevelOfParallelism", "1"}, {"PredStructure", "1"}}, default_test_vectors},
 
+    // test single-thread kernel dispatch (lp=1, random access)
+    {"SingleThreadRATest1", {{"LevelOfParallelism", "1"}, {"PredStructure", "2"}, {"HierarchicalLevels", "3"}}, parkjoy},
+
+    // stress tests for single-thread mode with complex GOP and many coding tools
+    {"SingleThreadRAStressTest1", {{"LevelOfParallelism", "1"}, {"PredStructure", "2"}, {"HierarchicalLevels", "4"}, {"EncoderMode", "8"}, {"RateControlMode", "0"}, {"CRF", "30"}, {"ScreenContentMode", "2"}}, parkjoy},
+    {"SingleThreadRAStressTest2", {{"LevelOfParallelism", "1"}, {"PredStructure", "2"}, {"HierarchicalLevels", "3"}, {"EncoderMode", "10"}, {"RateControlMode", "1"}, {"TargetBitRate", "200"}}, parkjoy},
+    {"SingleThreadRAStressTest3", {{"LevelOfParallelism", "1"}, {"PredStructure", "2"}, {"HierarchicalLevels", "4"}, {"EncoderMode", "1"}, {"RateControlMode", "0"}, {"CRF", "30"}}, parkjoy},
+
     // test super resolution mode
     {"SuperResTest1", {{"SuperresMode", "2"}}, default_test_vectors},
     {"SuperResTest2", {{"SuperresMode", "4"}}, default_test_vectors},

@@ -915,7 +915,9 @@ EbErrorType svt_aom_picture_manager_kernel_iter(void* context) {
                 ref_entry->is_valid              = false;
                 ref_entry->frame_context_updated = false;
                 ref_entry->feedback_arrived      = false;
-                svt_post_semaphore(scs->ref_buffer_available_semaphore);
+                if (scs->ref_buffer_available_semaphore) {
+                    svt_post_semaphore(scs->ref_buffer_available_semaphore);
+                }
             }
         }
     }

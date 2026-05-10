@@ -17,6 +17,10 @@
 #include "definitions.h"
 #include "svt_threads.h"
 #include "svt_nvtx.h"
+#include "svt_log.h"
+#if CONFIG_SINGLE_THREAD_KERNEL
+#include "kernel_dispatch.h"
+#endif
 #if SRM_REPORT
 #include "svt_log.h"
 #endif
@@ -31,13 +35,17 @@ static void svt_fifo_dctor(EbPtr p) {
  **************************************/
 static EbErrorType svt_fifo_ctor(EbFifo* fifoPtr, uint32_t initial_count, uint32_t max_count,
                                  EbObjectWrapper* firstWrapperPtr, EbObjectWrapper* lastWrapperPtr,
-                                 EbMuxingQueue* queue_ptr) {
+                                 EbMuxingQueue* queue_ptr, bool single_thread) {
     fifoPtr->dctor = svt_fifo_dctor;
-    // Create Counting Semaphore
-    EB_CREATE_SEMAPHORE(fifoPtr->counting_semaphore, initial_count, max_count);
-
-    // Create Buffer Pool Mutex
-    EB_CREATE_MUTEX(fifoPtr->lockout_mutex);
+    // Create Counting Semaphore and Buffer Pool Mutex (skip in single-thread mode)
+#if CONFIG_SINGLE_THREAD_KERNEL
+    if (!single_thread)
+#endif
+    {
+        EB_CREATE_SEMAPHORE(fifoPtr->counting_semaphore, initial_count, max_count);
+        EB_CREATE_MUTEX(fifoPtr->lockout_mutex);
+    }
+    (void)single_thread;
 
     // Initialize Fifo First & Last ptrs
     fifoPtr->first_ptr = firstWrapperPtr;
@@ -198,15 +206,23 @@ void svt_muxing_queue_dctor(EbPtr p) {
  * svt_muxing_queue_ctor
  **************************************/
 static EbErrorType svt_muxing_queue_ctor(EbMuxingQueue* queue_ptr, uint32_t object_total_count,
-                                         uint32_t process_total_count) {
+                                         uint32_t process_total_count, bool single_thread) {
     uint32_t    process_index;
     EbErrorType return_error = EB_ErrorNone;
 
     queue_ptr->dctor               = svt_muxing_queue_dctor;
     queue_ptr->process_total_count = process_total_count;
 
-    // Lockout Mutex
-    EB_CREATE_MUTEX(queue_ptr->lockout_mutex);
+    // Lockout Mutex (skip in single-thread mode)
+#if CONFIG_SINGLE_THREAD_KERNEL
+    if (single_thread) {
+        queue_ptr->single_thread_mode = true;
+    } else
+#endif
+    {
+        EB_CREATE_MUTEX(queue_ptr->lockout_mutex);
+    }
+    (void)single_thread;
 
     // Construct Object Circular Buffer
     EB_NEW(queue_ptr->object_queue, svt_circular_buffer_ctor, object_total_count);
@@ -222,7 +238,8 @@ static EbErrorType svt_muxing_queue_ctor(EbMuxingQueue* queue_ptr, uint32_t obje
                object_total_count,
                NULL,
                NULL,
-               queue_ptr);
+               queue_ptr,
+               single_thread);
     }
 
     return return_error;
@@ -465,7 +482,8 @@ static void svt_system_resource_dctor(EbPtr p) {
  *********************************************************************/
 EbErrorType svt_system_resource_ctor(EbSystemResource* resource_ptr, uint32_t object_total_count,
                                      uint32_t producer_process_total_count, uint32_t consumer_process_total_count,
-                                     EbCreator object_creator, EbPtr object_init_data_ptr, EbDctor object_destroyer) {
+                                     EbCreator object_creator, EbPtr object_init_data_ptr, EbDctor object_destroyer,
+                                     bool single_thread) {
     uint32_t    wrapper_index;
     EbErrorType return_error = EB_ErrorNone;
     resource_ptr->dctor      = svt_system_resource_dctor;
@@ -493,7 +511,8 @@ EbErrorType svt_system_resource_ctor(EbSystemResource* resource_ptr, uint32_t ob
     EB_NEW(resource_ptr->empty_queue,
            svt_muxing_queue_ctor,
            resource_ptr->object_total_count,
-           producer_process_total_count);
+           producer_process_total_count,
+           single_thread);
     // Fill the Empty Fifo with every ObjectWrapper
     for (wrapper_index = 0; wrapper_index < resource_ptr->object_total_count; ++wrapper_index) {
         svt_muxing_queue_object_push_back(resource_ptr->empty_queue, resource_ptr->wrapper_ptr_pool[wrapper_index]);
@@ -508,7 +527,8 @@ EbErrorType svt_system_resource_ctor(EbSystemResource* resource_ptr, uint32_t ob
         EB_NEW(resource_ptr->full_queue,
                svt_muxing_queue_ctor,
                resource_ptr->object_total_count,
-               consumer_process_total_count);
+               consumer_process_total_count,
+               single_thread);
     } else {
         resource_ptr->full_queue = NULL;
     }
@@ -734,7 +754,20 @@ EbErrorType svt_get_empty_object(EbFifo* empty_fifo_ptr, EbObjectWrapper** wrapp
 
 #if CONFIG_SINGLE_THREAD_KERNEL
     if (empty_fifo_ptr->queue_ptr->single_thread_mode) {
-        // Pop directly from the object queue — no semaphore, no mutex
+        // Pop directly from the object queue — no semaphore, no mutex.
+        // If pool is empty, pump the dispatcher to free buffers.
+        if (svt_circular_buffer_empty_check(empty_fifo_ptr->queue_ptr->object_queue)) {
+            SvtKernelDispatcher* d = (SvtKernelDispatcher*)empty_fifo_ptr->queue_ptr->st_dispatcher;
+            if (!d) {
+                SVT_FATAL("ST mode: empty object pool exhausted (no dispatcher to pump)\n");
+                return EB_ErrorInsufficientResources;
+            }
+            svt_kernel_dispatcher_run(d);
+            if (svt_circular_buffer_empty_check(empty_fifo_ptr->queue_ptr->object_queue)) {
+                SVT_FATAL("ST mode: empty object pool exhausted after pumping dispatcher\n");
+                return EB_ErrorInsufficientResources;
+            }
+        }
         svt_circular_buffer_pop_front(empty_fifo_ptr->queue_ptr->object_queue, (void**)wrapper_dbl_ptr);
         svt_aom_assert_err(
             (*wrapper_dbl_ptr)->live_count == 0 || (*wrapper_dbl_ptr)->live_count == EB_ObjectWrapperReleasedValue,
@@ -902,15 +935,17 @@ bool svt_fifo_has_items_st(EbFifo* fifo_ptr) {
     return fifo_ptr->first_ptr != NULL;
 }
 
-void svt_system_resource_set_single_thread_mode(EbSystemResource* resource_ptr) {
+void svt_system_resource_set_single_thread_mode(EbSystemResource* resource_ptr, void* dispatcher) {
     if (!resource_ptr) {
         return;
     }
     if (resource_ptr->empty_queue) {
         resource_ptr->empty_queue->single_thread_mode = true;
+        resource_ptr->empty_queue->st_dispatcher      = dispatcher;
     }
     if (resource_ptr->full_queue) {
         resource_ptr->full_queue->single_thread_mode = true;
+        resource_ptr->full_queue->st_dispatcher      = dispatcher;
     }
 }
 #endif

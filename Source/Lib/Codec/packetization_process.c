@@ -420,7 +420,9 @@ void release_references_eos(SequenceControlSet* scs) {
             ref_entry->is_valid              = false;
             ref_entry->frame_context_updated = false;
             ref_entry->feedback_arrived      = false;
-            svt_post_semaphore(scs->ref_buffer_available_semaphore);
+            if (scs->ref_buffer_available_semaphore) {
+                svt_post_semaphore(scs->ref_buffer_available_semaphore);
+            }
         }
     }
     svt_release_mutex(enc_ctx->ref_pic_list_mutex);

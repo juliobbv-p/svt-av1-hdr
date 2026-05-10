@@ -1315,6 +1315,24 @@ static bool assign_tpl_segments(EncDecSegments* segmentPtr, uint16_t* segmentInO
     return continue_processing_flag;
 }
 
+/*
+  Process all SBs inline for TPL. Used by the single-thread path and the tiles path.
+*/
+static void tpl_dispenser_st(EncodeContext* enc_ctx, SequenceControlSet* scs, PictureParentControlSet* pcs,
+                             int32_t frame_idx, int32_t qIndex) {
+    for (uint32_t sb_index = 0; sb_index < pcs->b64_total_count; ++sb_index) {
+        B64Geom* b64_geom = &scs->b64_geom[sb_index];
+        tpl_mc_flow_dispenser_sb_generic(
+            enc_ctx,
+            scs,
+            pcs,
+            frame_idx,
+            sb_index,
+            qIndex,
+            (b64_geom->width == 64 && b64_geom->height == 64) ? pcs->tpl_ctrls.dispenser_search_level : 0);
+    }
+}
+
 /************************************************
  * Genrate TPL MC Flow Dispenser  Based on Lookahead
  ** LAD Window: sliding window size
@@ -1355,24 +1373,30 @@ static void tpl_mc_flow_dispenser(EncodeContext* enc_ctx, SequenceControlSet* sc
         {
             // reset number of TPLed sbs per pic
             pcs->tpl_disp_coded_sb_count = 0;
+#if CONFIG_SINGLE_THREAD_KERNEL
+            if (scs->lp == 1) {
+                tpl_dispenser_st(enc_ctx, scs, pcs, frame_idx, qIndex);
+            } else
+#endif
+            {
+                EbObjectWrapper* out_results_wrapper;
 
-            EbObjectWrapper* out_results_wrapper;
+                // TPL dispenser kernel
+                svt_get_empty_object(context_ptr->sbo_output_fifo_ptr, &out_results_wrapper);
 
-            // TPL dispenser kernel
-            svt_get_empty_object(context_ptr->sbo_output_fifo_ptr, &out_results_wrapper);
+                TplDispResults* out_results = (TplDispResults*)out_results_wrapper->object_ptr;
+                // out_results->pcs_wrapper = pcs->p_pcs_wrapper_ptr;
+                out_results->pcs              = pcs;
+                out_results->input_type       = TPL_TASKS_MDC_INPUT;
+                out_results->tile_group_index = /*tile_group_idx*/ 0;
 
-            TplDispResults* out_results = (TplDispResults*)out_results_wrapper->object_ptr;
-            // out_results->pcs_wrapper = pcs->p_pcs_wrapper_ptr;
-            out_results->pcs              = pcs;
-            out_results->input_type       = TPL_TASKS_MDC_INPUT;
-            out_results->tile_group_index = /*tile_group_idx*/ 0;
+                out_results->frame_index = frame_idx;
+                out_results->qIndex      = qIndex;
 
-            out_results->frame_index = frame_idx;
-            out_results->qIndex      = qIndex;
+                svt_post_full_object(out_results_wrapper);
 
-            svt_post_full_object(out_results_wrapper);
-
-            svt_block_on_semaphore(pcs->tpl_disp_done_semaphore); // we can do all in // ?
+                svt_block_on_semaphore(pcs->tpl_disp_done_semaphore); // we can do all in // ?
+            }
         }
     }
 
@@ -2060,17 +2084,7 @@ EbErrorType svt_aom_tpl_disp_kernel_iter(void* context) {
         }
     } else {
         // Tiles path does not suupport segments
-        for (uint32_t sb_index = 0; sb_index < pcs->b64_total_count; ++sb_index) {
-            B64Geom* b64_geom = &scs->b64_geom[sb_index];
-            tpl_mc_flow_dispenser_sb_generic(
-                pcs->scs->enc_ctx,
-                scs,
-                pcs,
-                frame_idx,
-                sb_index,
-                in_results_ptr->qIndex,
-                (b64_geom->width == 64 && b64_geom->height == 64) ? pcs->tpl_ctrls.dispenser_search_level : 0);
-        }
+        tpl_dispenser_st(pcs->scs->enc_ctx, scs, pcs, frame_idx, in_results_ptr->qIndex);
         svt_post_semaphore(pcs->tpl_disp_done_semaphore);
     }
     svt_release_object(in_results_wrapper_ptr);
