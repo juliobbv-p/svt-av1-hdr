@@ -10114,7 +10114,13 @@ uint8_t svt_aom_get_nsq_geom_level_rtc(EncMode enc_mode) {
 
 uint8_t svt_aom_get_nsq_geom_level_allintra(EncMode enc_mode) {
     uint8_t nsq_geom_level;
+#if FIX_MR_STILL_IMAGE
+    if (enc_mode <= ENC_MR) {
+        nsq_geom_level = 1;
+    } else if (enc_mode <= ENC_M3) {
+#else
     if (enc_mode <= ENC_M3) {
+#endif
         nsq_geom_level = 2;
 #if OPT_NSC_STILL_IMAGE
     } else if (enc_mode <= ENC_M6) {

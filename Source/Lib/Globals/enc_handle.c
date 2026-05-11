@@ -4210,10 +4210,14 @@ static void copy_api_from_app(SequenceControlSet* scs, EbSvtAv1EncConfiguration*
     scs->static_config.intra_refresh_type = config_struct->intra_refresh_type;
     scs->static_config.enc_mode           = config_struct->enc_mode;
     if (scs->allintra) {
+#if FIX_MR_STILL_IMAGE
+        if (scs->static_config.enc_mode > ENC_M9) {
+#else
         if (scs->static_config.enc_mode == ENC_MR) {
             SVT_WARN("The lowest supported preset for all-intra and still-image is M0.\n");
             scs->static_config.enc_mode = ENC_M0;
         } else if (scs->static_config.enc_mode > ENC_M9) {
+#endif
             SVT_WARN("Preset M%d is mapped to M9.\n", scs->static_config.enc_mode);
             scs->static_config.enc_mode = ENC_M9;
         }

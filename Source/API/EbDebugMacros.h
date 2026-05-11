@@ -74,6 +74,8 @@ extern "C" {
 #define TUNE_SIMPLIFY_SETTINGS     1 // Unify settings by removing differences across prediction structures (flat vs 3L), content types (SC vs non-SC), and resolutions
 #define TUNE_SHIFT_PRESETS_RTC     1 // Shift RTC presets: M10 -> M9, M11 -> M10, M12 -> M11; cap at M11
 
+#define FIX_MR_STILL_IMAGE         1 // Restore MR for still-image
+
 //FOR DEBUGGING - Do not remove
 #define LOG_ENC_DONE            0 // log encoder job one
 #define DEBUG_TPL               0 // Prints to debug TPL
