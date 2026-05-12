@@ -925,6 +925,8 @@ EbErrorType svt_av1_set_default_params(EbSvtAv1EncConfiguration* config_ptr) {
     config_ptr->under_shoot_pct          = (uint32_t)DEFAULT;
     config_ptr->over_shoot_pct           = (uint32_t)DEFAULT;
     config_ptr->mbr_over_shoot_pct       = 50;
+    config_ptr->max_intra_bitrate_pct    = 300;
+    config_ptr->max_inter_bitrate_pct    = 0;
     config_ptr->gop_constraint_rc        = 0;
     config_ptr->maximum_buffer_size_ms   = 1000; // default settings for CBR
     config_ptr->starting_buffer_level_ms = 600; // default settings for CBR
@@ -2205,6 +2207,8 @@ EB_API EbErrorType svt_av1_enc_parse_parameter(EbSvtAv1EncConfiguration* config_
         {"undershoot-pct", &config_struct->under_shoot_pct},
         {"overshoot-pct", &config_struct->over_shoot_pct},
         {"mbr-overshoot-pct", &config_struct->mbr_over_shoot_pct},
+        {"max-intra-bitrate-pct", &config_struct->max_intra_bitrate_pct},
+        {"max-inter-bitrate-pct", &config_struct->max_inter_bitrate_pct},
         {"recode-loop", &config_struct->recode_loop},
         {"enable-stat-report", &config_struct->stat_report},
         {"scm", &config_struct->screen_content_mode},

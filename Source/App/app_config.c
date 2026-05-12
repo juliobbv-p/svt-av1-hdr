@@ -124,6 +124,8 @@
 #define UNDER_SHOOT_PCT_TOKEN "--undershoot-pct"
 #define OVER_SHOOT_PCT_TOKEN "--overshoot-pct"
 #define MBR_OVER_SHOOT_PCT_TOKEN "--mbr-overshoot-pct"
+#define MAX_INTRA_BITRATE_PCT_TOKEN "--max-intra-bitrate-pct"
+#define MAX_INTER_BITRATE_PCT_TOKEN "--max-inter-bitrate-pct"
 #define GOP_CONSTRAINT_RC_TOKEN "--gop-constraint-rc"
 #define BUFFER_SIZE_TOKEN "--buf-sz"
 #define BUFFER_INITIAL_SIZE_TOKEN "--buf-initial-sz"
@@ -849,6 +851,10 @@ ConfigDescription config_entry_rc[] = {
     {MBR_OVER_SHOOT_PCT_TOKEN,
      "Only for Capped CRF, allowable datarate overshoot (max) target (percentage), default is 50, "
      "but can change based on rate control [0-100]"},
+    {MAX_INTRA_BITRATE_PCT_TOKEN,
+     "Max bitrate for intra frames as a percentage of the target bitrate, 0 to disable, default is 300"},
+    {MAX_INTER_BITRATE_PCT_TOKEN,
+     "Max bitrate for inter frames as a percentage of the target bitrate, 0 to disable, default is 0"},
     {GOP_CONSTRAINT_RC_TOKEN,
      "Enable GoP constraint rc.  When enabled, the rate control matches the target rate for each "
      "GoP, default is 0 [0-1]"},
@@ -1130,6 +1136,8 @@ ConfigEntry config_entry[] = {
     {UNDER_SHOOT_PCT_TOKEN, "UnderShootPct", set_cfg_generic_token},
     {OVER_SHOOT_PCT_TOKEN, "OverShootPct", set_cfg_generic_token},
     {MBR_OVER_SHOOT_PCT_TOKEN, "MbrOverShootPct", set_cfg_generic_token},
+    {MAX_INTRA_BITRATE_PCT_TOKEN, "MaxIntraBitratePct", set_cfg_generic_token},
+    {MAX_INTER_BITRATE_PCT_TOKEN, "MaxInterBitratePct", set_cfg_generic_token},
     {GOP_CONSTRAINT_RC_TOKEN, "GopConstraintRc", set_cfg_generic_token},
     {BUFFER_SIZE_TOKEN, "BufSz", set_cfg_generic_token},
     {BUFFER_INITIAL_SIZE_TOKEN, "BufInitialSz", set_cfg_generic_token},
