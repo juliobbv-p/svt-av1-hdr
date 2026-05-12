@@ -1464,6 +1464,31 @@ static EbErrorType str_to_crf(const char* nptr, EbSvtAv1EncConfiguration* config
     return EB_ErrorNone;
 }
 
+static EbErrorType str_to_cqp(const char* nptr, EbSvtAv1EncConfiguration* config_struct) {
+    double      cqp;
+    EbErrorType return_error;
+
+    return_error = str_to_double(nptr, &cqp, NULL);
+
+    if (return_error == EB_ErrorBadParameter) {
+        return return_error;
+    }
+    if (cqp < 0) {
+        return EB_ErrorBadParameter;
+    }
+
+    uint32_t extended_q_index           = (uint32_t)(cqp * 4);
+    uint32_t qp                         = AOMMIN(MAX_QP_VALUE, (uint32_t)cqp);
+    uint32_t extended_crf_qindex_offset = extended_q_index - qp * 4;
+
+    config_struct->qp                         = qp;
+    config_struct->rate_control_mode          = SVT_AV1_RC_MODE_CQP_OR_CRF;
+    config_struct->aq_mode                    = 0;
+    config_struct->extended_crf_qindex_offset = extended_crf_qindex_offset;
+
+    return EB_ErrorNone;
+}
+
 static EbErrorType str_to_keyint(const char* nptr, int32_t* out, bool* multi) {
     char*      suff;
     const long keyint = strtol(nptr, &suff, 0);
@@ -2063,6 +2088,10 @@ EB_API EbErrorType svt_av1_enc_parse_parameter(EbSvtAv1EncConfiguration* config_
     // options updating more than one field
     if (!strcmp(name, "crf")) {
         return str_to_crf(value, config_struct);
+    }
+
+    if (!strcmp(name, "cqp")) {
+        return str_to_cqp(value, config_struct);
     }
 
     if (!strcmp(name, "rc")) {

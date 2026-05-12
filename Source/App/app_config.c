@@ -165,6 +165,7 @@
 
 #define QP_LONG_TOKEN "--qp"
 #define CRF_LONG_TOKEN "--crf"
+#define CQP_LONG_TOKEN "--cqp"
 #define LOOP_FILTER_ENABLE "--enable-dlf"
 #define FORCED_MAX_FRAME_WIDTH_TOKEN "--forced-max-frame-width"
 #define FORCED_MAX_FRAME_HEIGHT_TOKEN "--forced-max-frame-height"
@@ -799,6 +800,10 @@ ConfigDescription config_entry_rc[] = {
      "Constant Rate Factor value, setting this value is similar to `--rc 0 --aq-mode 2 --qp "
      "x`.  Compared to `--qp`, `--crf` can take a value up to 70, and can be set in 0.25 increments, default is 35 "
      "[1-70]"},
+    {CQP_LONG_TOKEN,
+     "Constant Quality value, setting this value is similar to `--rc 0 --aq-mode 0 --qp "
+     "x`.  Compared to `--qp`, `--cqp` can take a value up to 70, and can be set in 0.25 increments, default is 35 "
+     "[1-70]"},
 
     {TARGET_BIT_RATE_TOKEN,
      "Target Bitrate (kbps), only applicable for VBR and CBR encoding, default is 7000 [1-100000]"},
@@ -1098,6 +1103,7 @@ ConfigEntry config_entry[] = {
     {QP_TOKEN, "QP", set_cfg_generic_token},
     {QP_LONG_TOKEN, "QP", set_cfg_generic_token},
     {CRF_LONG_TOKEN, "CRF", set_cfg_generic_token},
+    {CQP_LONG_TOKEN, "CQP", set_cfg_generic_token},
     {TARGET_BIT_RATE_TOKEN, "TargetBitRate", set_cfg_generic_token},
     {MAX_BIT_RATE_TOKEN, "MaxBitRate", set_cfg_generic_token},
 
