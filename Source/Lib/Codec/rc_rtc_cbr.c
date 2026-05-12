@@ -448,27 +448,40 @@ void svt_av1_rc_calc_qindex_rtc_cbr(PictureControlSet* pcs) {
         // c) maximum is irrelevant now, as buffer is clipped as max(0, buf)
         rc->maximum_buffer_size = maximum * bandwidth / 1000;
 
-        svt_av1_rc_init(scs);
+        if (pcs->picture_number == 0) {
+            // First frame: full initialization
+            svt_av1_rc_init(scs);
 
-        // d) invert current buffer level
-        rc->buffer_level = (maximum - starting) * bandwidth / 1000;
+            // d) invert current buffer level
+            rc->buffer_level = (maximum - starting) * bandwidth / 1000;
 
-        int num_layers = scs->static_config.hierarchical_levels + 1;
-        for (int k = 0; k < num_layers + 1; k++) {
-            rc->target_size_factors[k] = 1.0; // flat at start
-        }
-        rc->mini_qop_size = 1 << (num_layers - 1);
-        for (int k = 0; k < rc->mini_qop_size + 1; k++) {
-            rc->rcf_values[k]   = 0.7;
-            rc->rcf_kalman_P[k] = 1.0; // high initial uncertainty for fast convergence
-            rc->rcf_kalman_R[k] = 0.08;
-        }
-        if (scs->enc_ctx->rc_cfg.mode == AOM_CBR) {
-            // just to match existent CBR
-            rc->target_size_factors[0] = rc->starting_buffer_level / (2.0 * rc->avg_frame_bandwidth);
+            int num_layers = scs->static_config.hierarchical_levels + 1;
+            for (int k = 0; k < num_layers + 1; k++) {
+                rc->target_size_factors[k] = 1.0; // flat at start
+            }
+            rc->mini_qop_size = 1 << (num_layers - 1);
+            for (int k = 0; k < rc->mini_qop_size + 1; k++) {
+                rc->rcf_values[k]   = 0.7;
+                rc->rcf_kalman_P[k] = 1.0; // high initial uncertainty for fast convergence
+                rc->rcf_kalman_R[k] = 0.08;
+            }
+            if (scs->enc_ctx->rc_cfg.mode == AOM_CBR) {
+                // just to match existent CBR
+                rc->target_size_factors[0] = rc->starting_buffer_level / (2.0 * rc->avg_frame_bandwidth);
+            } else {
+                // TODO: VBR
+                rc->target_size_factors[0] = 10;
+            }
         } else {
-            // TODO: VBR
-            rc->target_size_factors[0] = 10;
+            // Bitrate change: incremental update preserving learned RC state
+            // Recompute frame bandwidth from new bitrate
+            double framerate = (double)scs->static_config.frame_rate_numerator /
+                (double)scs->static_config.frame_rate_denominator;
+            if (framerate < 0.1) {
+                framerate = 30.0;
+            }
+            rc->avg_frame_bandwidth = (int)(bandwidth / framerate);
+            rc->max_frame_bandwidth = AOMMAX(rc->avg_frame_bandwidth, rc->max_frame_bandwidth);
         }
     }
 

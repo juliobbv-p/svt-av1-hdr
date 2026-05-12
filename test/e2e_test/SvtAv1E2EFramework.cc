@@ -19,6 +19,7 @@
  *
  ******************************************************************************/
 #include <algorithm>
+#include <cstring>
 
 #include "EbSvtAv1Enc.h"
 #include "Y4mVideoSource.h"
@@ -388,6 +389,17 @@ void SvtAv1E2ETestFramework::gen_frame_event(const EncTestSetting &setting,
                 data->scale_kf_denom = std::stoi(std::get<3>(event)[2]);
                 new_node->size = sizeof(EbRefFrameScale);
                 new_node->node_type = REF_FRAME_SCALING_EVENT;
+                new_node->data = data;
+            } break;
+            case RATE_CHANGE_EVENT: {
+                SvtAv1RateInfo *data =
+                    (SvtAv1RateInfo *)malloc(sizeof(SvtAv1RateInfo));
+                ASSERT_NE(data, nullptr);
+                memset(data, 0, sizeof(SvtAv1RateInfo));
+                // parameter[0] = target bitrate in kbps
+                data->target_bit_rate = std::stoi(std::get<3>(event)[0]) * 1000;
+                new_node->size = sizeof(SvtAv1RateInfo);
+                new_node->node_type = RATE_CHANGE_EVENT;
                 new_node->data = data;
             } break;
             default: GTEST_FAIL() << "unhandled frame event"; break;

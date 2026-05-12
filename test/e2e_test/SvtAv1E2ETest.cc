@@ -748,3 +748,123 @@ static const std::vector<EncTestSetting> generate_aq_mode_1_settings() {
 INSTANTIATE_TEST_SUITE_P(SEGMENTTEST, SegmentTest,
                          ::testing::ValuesIn(generate_aq_mode_1_settings()),
                          EncTestSetting::GetSettingName);
+
+static std::vector<TestFrameEvent> generate_alternating_rate_events() {
+    std::vector<TestFrameEvent> events;
+    for (uint32_t f = 1; f < 100; f++) {
+        uint32_t target_kbps = (f % 2 == 1) ? 299 : 301;
+        events.push_back(std::make_tuple(
+            "RateChange@" + std::to_string(f),
+            f,
+            RATE_CHANGE_EVENT,
+            std::vector<std::string>{std::to_string(target_kbps)}));
+    }
+    return events;
+}
+
+static std::vector<TestVideoVector> rate_change_test_vectors = {
+    std::make_tuple("kirland_640_480_30.yuv", YUV_VIDEO_FILE, IMG_FMT_420, 640,
+                    480, 8, 0, 0, 100),
+};
+
+/* clang-format off */
+static const std::vector<EncTestSetting> rate_change_settings = {
+    // Baseline: no rate change events, static 300 kbps
+    {"RateChangeBaseline",
+     {{"EncoderMode", "11"},
+      {"RealTime", "1"},
+      {"HierarchicalLevels", "0"},
+      {"FrameRateNumerator", "15"},
+      {"FrameRateDenominator", "1"},
+      {"TargetBitRate", "300"},
+      {"RateControlMode", "2"},
+      {"Keyint", "3000"},
+      {"PredStructure", "1"},
+      {"LevelOfParallelism", "1"},
+      {"BufSz", "600"},
+      {"BufInitialSz", "599"},
+      {"BufOptimalSz", "400"},
+      {"UnderShootPct", "100"},
+      {"OverShootPct", "100"}},
+     rate_change_test_vectors},
+    // With rate change: alternate 299/301 on every frame
+    {"RateChangeTest1",
+     {{"EncoderMode", "11"},
+      {"RealTime", "1"},
+      {"HierarchicalLevels", "0"},
+      {"FrameRateNumerator", "15"},
+      {"FrameRateDenominator", "1"},
+      {"TargetBitRate", "300"},
+      {"RateControlMode", "2"},
+      {"Keyint", "3000"},
+      {"PredStructure", "1"},
+      {"LevelOfParallelism", "1"},
+      {"BufSz", "600"},
+      {"BufInitialSz", "599"},
+      {"BufOptimalSz", "400"},
+      {"UnderShootPct", "100"},
+      {"OverShootPct", "100"}},
+     rate_change_test_vectors,
+     generate_alternating_rate_events()},
+};
+/* clang-format on */
+
+class RateChangeOnFlyTest : public SvtAv1E2ETestFramework {
+  protected:
+    void config_test() override {
+        enable_stat = true;
+        enable_config = true;
+        enable_save_bitstream = true;
+        SvtAv1E2ETestFramework::config_test();
+    }
+};
+
+TEST_P(RateChangeOnFlyTest, BitrateWithinVBV) {
+    config_test();
+    for (auto test_vector : enc_setting.test_vectors) {
+        init_test(test_vector);
+        run_encode_process();
+
+        // Compute total compressed bytes from IVF file
+        uint64_t total_output_bytes = 0;
+        if (output_file_ && output_file_->file) {
+            long file_size = ftell(output_file_->file);
+            uint64_t overhead = IVF_STREAM_HEADER_SIZE +
+                                IVF_FRAME_HEADER_SIZE * output_file_->ivf_count;
+            if (file_size > (long)overhead)
+                total_output_bytes = file_size - overhead;
+        }
+
+        // Derive VBV parameters from the test settings
+        const auto &s = enc_setting.setting;
+        const double fps = std::stod(s.at("FrameRateNumerator")) /
+                           std::stod(s.at("FrameRateDenominator"));
+        const double buf_sz_ms = std::stod(s.at("BufSz"));
+        const double target_bps = std::stod(s.at("TargetBitRate")) * 1000.0;
+        const uint32_t num_frames = std::get<8>(test_vector);
+        const double duration_s = num_frames / fps;
+        const double max_bits = (duration_s + buf_sz_ms / 1000.0) * target_bps;
+        const uint64_t total_bits = total_output_bytes * 8;
+        const double actual_kbps = total_bits / duration_s / 1000.0;
+
+        printf("Total output: %llu bytes (%llu bits)\n",
+               (unsigned long long)total_output_bytes,
+               (unsigned long long)total_bits);
+        printf("Max allowed:  %.0f bits (%.1f kbps over %.2fs + %.0fms buf)\n",
+               max_bits,
+               target_bps / 1000.0,
+               duration_s,
+               buf_sz_ms);
+        printf("Actual bitrate: %.1f kbps\n", actual_kbps);
+
+        EXPECT_LE(total_bits, (uint64_t)max_bits)
+            << "Total bits " << total_bits << " exceeds VBV allowance "
+            << (uint64_t)max_bits << " (actual: " << actual_kbps << " kbps)";
+
+        deinit_test();
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(SvtAv1, RateChangeOnFlyTest,
+                         ::testing::ValuesIn(rate_change_settings),
+                         EncTestSetting::GetSettingName);
