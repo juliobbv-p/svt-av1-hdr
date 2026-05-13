@@ -1425,19 +1425,6 @@ static EbErrorType picture_parent_control_set_ctor(PictureParentControlSet* obje
     object_ptr->undershoot_seen = 0;
     object_ptr->low_cr_seen     = 0;
     EB_CREATE_MUTEX(object_ptr->pcs_total_rate_mutex);
-    ResolutionRange resolution;
-    svt_aom_derive_input_resolution(&resolution, init_data_ptr->picture_width * init_data_ptr->picture_height);
-    object_ptr->enable_me_16x16 = svt_aom_get_enable_me_16x16(init_data_ptr->enc_mode);
-
-    // 8x8 can only be used if 16x16 is enabled
-    object_ptr->enable_me_8x8 = object_ptr->enable_me_16x16
-#if TUNE_SIMPLIFY_SETTINGS
-        ? svt_aom_get_enable_me_8x8(init_data_ptr->enc_mode, resolution, init_data_ptr->static_config.rtc)
-#else
-        ? svt_aom_get_enable_me_8x8(
-              init_data_ptr->enc_mode, resolution, init_data_ptr->static_config.rtc, init_data_ptr->use_flat_ipp)
-#endif
-        : 0;
     EB_NEW(object_ptr->dg_detector, svt_aom_dg_detector_seg_ctor);
     return return_error;
 }

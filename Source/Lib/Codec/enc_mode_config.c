@@ -3716,6 +3716,19 @@ Input   : encoder mode and tune
 Output  : Pre-Analysis signal(s)
 ******************************************************/
 void svt_aom_sig_deriv_pre_analysis_pcs(PictureParentControlSet* pcs) {
+    SequenceControlSet* scs = pcs->scs;
+    // Derive ME enable flags based on current enc_mode
+    ResolutionRange resolution;
+    svt_aom_derive_input_resolution(&resolution, scs->max_input_luma_width * scs->max_input_luma_height);
+    pcs->enable_me_16x16 = svt_aom_get_enable_me_16x16(pcs->enc_mode);
+    pcs->enable_me_8x8   = pcs->enable_me_16x16
+#if TUNE_SIMPLIFY_SETTINGS
+        ? svt_aom_get_enable_me_8x8(pcs->enc_mode, resolution, scs->static_config.rtc)
+#else
+        ? svt_aom_get_enable_me_8x8(pcs->enc_mode, resolution, scs->static_config.rtc, scs->use_flat_ipp)
+#endif
+        : 0;
+
     // Derive HME Flag
     // Set here to allocate resources for the downsampled pictures used in HME (generated in PictureAnalysis)
     // Will be later updated for SC/NSC in PictureDecisionProcess

@@ -65,6 +65,10 @@ typedef struct ResourceCoordinationContext {
     bool bitrate_changed;
     bool frame_rate_changed;
 
+    // Runtime preset for on-the-fly PRESET_CHANGE_EVENT (init from static_config.enc_mode)
+    EncMode runtime_enc_mode;
+    bool    runtime_enc_mode_initialized;
+
     // Persistent state for _iter
     bool             end_of_sequence_flag;
     EbObjectWrapper* prev_pcs_wrapper_ptr;
@@ -816,6 +820,26 @@ static void update_frame_rate_info(ResourceCoordinationContext* ctx, EbBufferHea
     }
 }
 
+// Update the encoder preset (enc_mode) from PRESET_CHANGE_EVENT
+static void update_preset_info(ResourceCoordinationContext* ctx, EbBufferHeaderType* input_ptr,
+                               SequenceControlSet* scs) {
+    // Initialize runtime_enc_mode from config on first frame
+    if (!ctx->runtime_enc_mode_initialized) {
+        ctx->runtime_enc_mode             = scs->static_config.enc_mode;
+        ctx->runtime_enc_mode_initialized = true;
+    }
+    EbPrivDataNode* node = (EbPrivDataNode*)input_ptr->p_app_private;
+    while (node) {
+        if (node->node_type == PRESET_CHANGE_EVENT) {
+            svt_aom_assert_err(node->size == sizeof(SvtAv1PresetInfo) && node->data,
+                               "invalid private data of type PRESET_CHANGE_EVENT");
+            SvtAv1PresetInfo* preset_info = (SvtAv1PresetInfo*)node->data;
+            ctx->runtime_enc_mode         = preset_info->enc_mode;
+        }
+        node = node->next;
+    }
+}
+
 static void update_frame_event(PictureParentControlSet* pcs, uint64_t pic_num) {
     SequenceControlSet* scs  = pcs->scs;
     EbPrivDataNode*     node = (EbPrivDataNode*)pcs->input_ptr->p_app_private;
@@ -955,6 +979,8 @@ EbErrorType svt_aom_resource_coordination_kernel_iter(void* context) {
     update_rate_info(context_ptr, eb_input_ptr, scs);
     // Update the frame rate
     update_frame_rate_info(context_ptr, eb_input_ptr, scs);
+    // Update the encoder preset
+    update_preset_info(context_ptr, eb_input_ptr, scs);
     // If config changes occurred since the last picture began encoding, then
     //   prepare a new scs containing the new changes and update the state
     //   of the previous Active scs
@@ -1103,8 +1129,6 @@ EbErrorType svt_aom_resource_coordination_kernel_iter(void* context) {
             pcs->is_overlay       = 0;
             pcs->alt_ref_ppcs_ptr = NULL;
         }
-        // Set the Encoder mode
-        pcs->enc_mode = scs->static_config.enc_mode;
 
         // Keep track of the previous input for the ZZ SADs computation
         pcs->previous_picture_control_set_wrapper_ptr = (context_ptr->scs_instance->enc_ctx->initial_picture)
@@ -1186,7 +1210,7 @@ EbErrorType svt_aom_resource_coordination_kernel_iter(void* context) {
         if (scs->speed_control_flag) {
             speed_buffer_control(context_ptr, pcs, scs);
         } else {
-            pcs->enc_mode = (EncMode)scs->static_config.enc_mode;
+            pcs->enc_mode = context_ptr->runtime_enc_mode;
         }
         //  If the mode of the second pass is not set from CLI, it is set to enc_mode
 

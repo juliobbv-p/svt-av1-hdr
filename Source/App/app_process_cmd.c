@@ -381,6 +381,49 @@ static EbErrorType test_update_qp_info(uint64_t pic_num, EbBufferHeaderType* hea
     return EB_ErrorNone;
 }
 #endif
+#if FTR_PRESET_ON_FLY_SAMPLE
+// test_update_preset_info: sample test case for changing the preset (enc_mode) on the fly.
+// Cycles through faster presets every 'interval' frames.
+// The initial enc_mode (set via --preset) is the minimum (slowest) allowed;
+// PRESET_CHANGE_EVENT can only make it equal or larger (faster).
+static EbErrorType test_update_preset_info(uint64_t pic_num, int8_t init_enc_mode, EbBufferHeaderType* header_ptr) {
+    int    interval = 120;
+    int8_t new_mode;
+    if (pic_num == 0) {
+        return EB_ErrorNone;
+    } else if (pic_num % (4 * interval) == 0) {
+        new_mode = init_enc_mode; // back to initial (slowest)
+    } else if (pic_num % (3 * interval) == 0) {
+        new_mode = (int8_t)CLIP3(init_enc_mode, MAX_ENC_PRESET, init_enc_mode + 3);
+    } else if (pic_num % (2 * interval) == 0) {
+        new_mode = (int8_t)CLIP3(init_enc_mode, MAX_ENC_PRESET, init_enc_mode + 1);
+    } else if (pic_num % interval == 0) {
+        new_mode = (int8_t)CLIP3(init_enc_mode, MAX_ENC_PRESET, init_enc_mode + 2);
+    } else {
+        return EB_ErrorNone;
+    }
+    SvtAv1PresetInfo* data   = (SvtAv1PresetInfo*)malloc(sizeof(SvtAv1PresetInfo));
+    data->enc_mode           = new_mode;
+    EbPrivDataNode* new_node = (EbPrivDataNode*)malloc(sizeof(EbPrivDataNode));
+    new_node->size           = sizeof(SvtAv1PresetInfo);
+    new_node->node_type      = PRESET_CHANGE_EVENT;
+    new_node->data           = data;
+    new_node->next           = NULL;
+
+    // append to tail
+    if (header_ptr->p_app_private == NULL) {
+        header_ptr->p_app_private = new_node;
+    } else {
+        EbPrivDataNode* last = header_ptr->p_app_private;
+        while (last->next != NULL) {
+            last = last->next;
+        }
+        last->next = new_node;
+    }
+
+    return EB_ErrorNone;
+}
+#endif
 #if FTR_FRAME_RATE_ON_FLY_SAMPLE
 // test_update_frame_rate_info: sample test case for updating the rate info on the fly
 static EbErrorType test_update_frame_rate_info(uint64_t pic_num, EbBufferHeaderType* header_ptr) {
@@ -649,6 +692,9 @@ void process_input_buffer(EncChannel* channel) {
 #if FTR_RATE_ON_FLY_SAMPLE
             test_update_rate_info(header_ptr->pts, header_ptr);
             //  test_update_qp_info(header_ptr->pts, header_ptr);
+#endif
+#if FTR_PRESET_ON_FLY_SAMPLE
+            test_update_preset_info(header_ptr->pts, app_cfg->config.enc_mode, header_ptr);
 #endif
 #if FTR_FRAME_RATE_ON_FLY_SAMPLE
             test_update_frame_rate_info(header_ptr->pts, header_ptr);

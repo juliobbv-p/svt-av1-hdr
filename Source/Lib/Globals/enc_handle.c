@@ -5542,6 +5542,21 @@ static EbErrorType validate_on_the_fly_settings(EbBufferHeaderType* input_ptr, S
                     "must be greater than 0\n");
                 return EB_ErrorBadParameter;
             }
+        } else if (node->node_type == PRESET_CHANGE_EVENT) {
+            SvtAv1PresetInfo* node_data = (SvtAv1PresetInfo*)node->data;
+            if (!((scs->static_config.pred_structure == LOW_DELAY) &&
+                  (scs->static_config.rate_control_mode == SVT_AV1_RC_MODE_CBR) && scs->static_config.rtc)) {
+                input_ptr->flags = EB_BUFFERFLAG_EOS;
+                SVT_ERROR("Preset change on the fly not supported for any mode other than RTC Low-Delay CBR\n");
+                return EB_ErrorBadParameter;
+            }
+            if (node_data->enc_mode < scs->static_config.enc_mode || node_data->enc_mode > MAX_ENC_PRESET) {
+                input_ptr->flags = EB_BUFFERFLAG_EOS;
+                SVT_ERROR("Preset change on the fly requires enc_mode in range [%d, %d]\n",
+                          scs->static_config.enc_mode,
+                          MAX_ENC_PRESET);
+                return EB_ErrorBadParameter;
+            }
         }
         node = node->next;
     }

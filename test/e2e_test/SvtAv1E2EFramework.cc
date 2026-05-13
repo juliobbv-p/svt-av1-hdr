@@ -402,6 +402,15 @@ void SvtAv1E2ETestFramework::gen_frame_event(const EncTestSetting &setting,
                 new_node->node_type = RATE_CHANGE_EVENT;
                 new_node->data = data;
             } break;
+            case PRESET_CHANGE_EVENT: {
+                SvtAv1PresetInfo *data =
+                    (SvtAv1PresetInfo *)malloc(sizeof(SvtAv1PresetInfo));
+                ASSERT_NE(data, nullptr);
+                data->enc_mode = (int8_t)std::stoi(std::get<3>(event)[0]);
+                new_node->size = sizeof(SvtAv1PresetInfo);
+                new_node->node_type = PRESET_CHANGE_EVENT;
+                new_node->data = data;
+            } break;
             default: GTEST_FAIL() << "unhandled frame event"; break;
             }
             new_node->next = node;

@@ -244,6 +244,7 @@ typedef enum {
     RATE_CHANGE_EVENT, // Rate change data per picture
     FRAME_RATE_CHANGE_EVENT, // Frame rate change data per picture
     COMPUTE_QUALITY_EVENT, // Compute quality per frame
+    PRESET_CHANGE_EVENT, // Preset (enc_mode) change data per picture
     PRIVATE_DATA_TYPES // end of private data types
 } PrivDataType;
 
@@ -294,6 +295,11 @@ typedef struct SvtAv1FrameRateInfo {
     uint32_t frame_rate_numerator;
     uint32_t frame_rate_denominator;
 } SvtAv1FrameRateInfo;
+
+typedef struct SvtAv1PresetInfo {
+    // New encoder preset (enc_mode) to apply from this frame onwards.
+    int8_t enc_mode;
+} SvtAv1PresetInfo;
 
 typedef struct SvtAv1ComputeQualityInfo {
     bool compute_psnr;

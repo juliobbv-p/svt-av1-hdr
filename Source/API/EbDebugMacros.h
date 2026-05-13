@@ -93,6 +93,7 @@ extern "C" {
 #define FTR_KF_ON_FLY_SAMPLE         0 // Sample code to signal KF
 #define FTR_RES_ON_FLY_SAMPLE        0 // Sample functions to change the resolution on the fly
 #define FTR_RATE_ON_FLY_SAMPLE       0 // Sample functions to change bit rate
+#define FTR_PRESET_ON_FLY_SAMPLE     0 // Sample functions to change preset on the fly
 #define FTR_FRAME_RATE_ON_FLY_SAMPLE 0 // Sample functions to change frame rate
 #define FTR_PER_FRAME_QUALITY_SAMPLE 0 // Sample functions to compute PSNR per frame
 #endif

@@ -868,3 +868,102 @@ TEST_P(RateChangeOnFlyTest, BitrateWithinVBV) {
 INSTANTIATE_TEST_SUITE_P(SvtAv1, RateChangeOnFlyTest,
                          ::testing::ValuesIn(rate_change_settings),
                          EncTestSetting::GetSettingName);
+
+// Preset (enc_mode) change on-the-fly tests
+// Cycle through presets 9 -> 10 -> 11 -> 10 -> 9, switching every 20 frames
+static std::vector<TestFrameEvent> generate_cycling_preset_events() {
+    std::vector<TestFrameEvent> events;
+    // Preset sequence: 9, 10, 11, 10, 9 (cycle every 20 frames)
+    const int presets[] = {9, 10, 11, 10, 9};
+    const int num_phases = 5;
+    const int frames_per_phase = 20;
+    for (int phase = 0; phase < num_phases; phase++) {
+        uint32_t frame = phase * frames_per_phase;
+        if (frame == 0)
+            frame = 1;  // skip frame 0 (init frame)
+        events.push_back(std::make_tuple(
+            "PresetChange@" + std::to_string(frame) + "=M" +
+                std::to_string(presets[phase]),
+            frame,
+            PRESET_CHANGE_EVENT,
+            std::vector<std::string>{std::to_string(presets[phase])}));
+    }
+    return events;
+}
+
+static std::vector<TestVideoVector> preset_change_test_vectors = {
+    std::make_tuple("kirland_640_480_30.yuv", YUV_VIDEO_FILE, IMG_FMT_420, 640,
+                    480, 8, 0, 0, 100),
+};
+
+/* clang-format off */
+static const std::vector<EncTestSetting> preset_change_settings = {
+    // Baseline: static preset 9, no change events
+    {"PresetChangeBaseline",
+     {{"EncoderMode", "9"},
+      {"RealTime", "1"},
+      {"HierarchicalLevels", "0"},
+      {"FrameRateNumerator", "30"},
+      {"FrameRateDenominator", "1"},
+      {"TargetBitRate", "500"},
+      {"RateControlMode", "2"},
+      {"Keyint", "3000"},
+      {"PredStructure", "1"},
+      {"LevelOfParallelism", "1"},
+      {"BufSz", "1000"},
+      {"BufInitialSz", "600"},
+      {"BufOptimalSz", "600"},
+      {"UnderShootPct", "50"},
+      {"OverShootPct", "50"}},
+     preset_change_test_vectors},
+    // With preset cycling: 9 -> 10 -> 11 -> 10 -> 9
+    {"PresetCycleTest",
+     {{"EncoderMode", "9"},
+      {"RealTime", "1"},
+      {"HierarchicalLevels", "0"},
+      {"FrameRateNumerator", "30"},
+      {"FrameRateDenominator", "1"},
+      {"TargetBitRate", "500"},
+      {"RateControlMode", "2"},
+      {"Keyint", "3000"},
+      {"PredStructure", "1"},
+      {"LevelOfParallelism", "1"},
+      {"BufSz", "1000"},
+      {"BufInitialSz", "600"},
+      {"BufOptimalSz", "600"},
+      {"UnderShootPct", "50"},
+      {"OverShootPct", "50"}},
+     preset_change_test_vectors,
+     generate_cycling_preset_events()},
+};
+/* clang-format on */
+
+class PresetChangeOnFlyTest : public SvtAv1E2ETestFramework {
+  protected:
+    void config_test() override {
+        enable_stat = true;
+        enable_config = true;
+        SvtAv1E2ETestFramework::config_test();
+    }
+};
+
+TEST_P(PresetChangeOnFlyTest, NoCrashPresetCycling) {
+    config_test();
+    for (auto test_vector : enc_setting.test_vectors) {
+        init_test(test_vector);
+        run_encode_process();
+
+        // Verify encoding completed and produced output
+        if (output_file_ && output_file_->file) {
+            long file_size = ftell(output_file_->file);
+            EXPECT_GT(file_size, 0) << "Encoding with preset cycling should "
+                                       "produce non-zero output";
+        }
+
+        deinit_test();
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(SvtAv1, PresetChangeOnFlyTest,
+                         ::testing::ValuesIn(preset_change_settings),
+                         EncTestSetting::GetSettingName);
