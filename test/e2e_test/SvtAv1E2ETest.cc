@@ -814,7 +814,7 @@ class RateChangeOnFlyTest : public SvtAv1E2ETestFramework {
     void config_test() override {
         enable_stat = true;
         enable_config = true;
-        enable_save_bitstream = true;
+        enable_save_bitstream = false;
         SvtAv1E2ETestFramework::config_test();
     }
 };

@@ -482,26 +482,6 @@ typedef struct EbSvtAv1EncConfiguration {
     uint32_t mbr_over_shoot_pct;
 
     /**
-     * @brief Max Intra Bitrate Percentage
-     *
-     * Maximum bitrate for intra frames, expressed as a percentage of the
-     * target bitrate. 0 means no limit.
-     *
-     * Default is 300.
-     */
-    uint32_t max_intra_bitrate_pct;
-
-    /**
-     * @brief Max Inter Bitrate Percentage
-     *
-     * Maximum bitrate for inter frames, expressed as a percentage of the
-     * target bitrate. 0 means no limit.
-     *
-     * Default is 0.
-     */
-    uint32_t max_inter_bitrate_pct;
-
-    /**
      * @brief Starting Buffer Level in MilliSeconds
      *
      * Only applicable for CBR.
@@ -1001,6 +981,26 @@ typedef struct EbSvtAv1EncConfiguration {
      * 1 = on
      * Default is 1. */
     bool enable_tf_key;
+
+    /**
+     * @brief Max Intra Bitrate Percentage
+     *
+     * Maximum bitrate for intra frames, expressed as a percentage of the
+     * target bitrate. 0 means no limit.
+     *
+     * Default is 300.
+     */
+    uint32_t max_intra_bitrate_pct;
+
+    /**
+     * @brief Max Inter Bitrate Percentage
+     *
+     * Maximum bitrate for inter frames, expressed as a percentage of the
+     * target bitrate. 0 means no limit.
+     *
+     * Default is 0.
+     */
+    uint32_t max_inter_bitrate_pct;
 
     // clang-format off
     /* Add 128 Byte Padding to Struct to avoid changing the size of the public configuration struct */

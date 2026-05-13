@@ -1130,6 +1130,8 @@ typedef struct PictureParentControlSet {
     uint64_t tf_avg_luma;
     bool     tf_active_region_present;
     bool     seq_param_changed;
+    bool     bitrate_changed;
+    bool     frame_rate_changed;
     uint64_t norm_me_dist;
     uint8_t  tpl_params_ready;
     bool     is_startup_gop;

@@ -427,7 +427,9 @@ void svt_av1_rc_calc_qindex_rtc_cbr(PictureControlSet* pcs) {
     PictureParentControlSet* ppcs = pcs->ppcs;
     SequenceControlSet*      scs  = ppcs->scs;
 
-    if (pcs->picture_number == 0 || ppcs->seq_param_changed) {
+    bool full_update = pcs->picture_number == 0 || ppcs->seq_param_changed;
+    bool soft_update = ppcs->bitrate_changed || ppcs->frame_rate_changed;
+    if (full_update || soft_update) {
         RATE_CONTROL*   rc     = &scs->enc_ctx->rc;
         RateControlCfg* rc_cfg = &scs->enc_ctx->rc_cfg;
 
@@ -448,7 +450,7 @@ void svt_av1_rc_calc_qindex_rtc_cbr(PictureControlSet* pcs) {
         // c) maximum is irrelevant now, as buffer is clipped as max(0, buf)
         rc->maximum_buffer_size = maximum * bandwidth / 1000;
 
-        if (pcs->picture_number == 0) {
+        if (full_update) {
             // First frame: full initialization
             svt_av1_rc_init(scs);
 

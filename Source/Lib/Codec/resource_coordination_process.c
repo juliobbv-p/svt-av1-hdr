@@ -62,6 +62,8 @@ typedef struct ResourceCoordinationContext {
     // Sequence Parameter Change Flags
     bool seq_param_change;
     bool video_res_change;
+    bool bitrate_changed;
+    bool frame_rate_changed;
 
     // Persistent state for _iter
     bool             end_of_sequence_flag;
@@ -117,8 +119,11 @@ EbErrorType svt_aom_resource_coordination_context_ctor(EbThreadContext* thread_c
     context_ptr->previous_buffer_check1 = 0;
     context_ptr->prev_change_cond       = 0;
 
-    context_ptr->seq_param_change = 0;
-    context_ptr->video_res_change = 0;
+    context_ptr->seq_param_change   = false;
+    context_ptr->video_res_change   = false;
+    context_ptr->bitrate_changed    = false;
+    context_ptr->frame_rate_changed = false;
+
     return EB_ErrorNone;
 }
 
@@ -758,37 +763,54 @@ static void update_input_pic_def(ResourceCoordinationContext* ctx, EbBufferHeade
 // Update the target rate, sequence QP...
 static void update_rate_info(ResourceCoordinationContext* ctx, EbBufferHeaderType* input_ptr, SequenceControlSet* scs) {
     EbPrivDataNode* node = (EbPrivDataNode*)input_ptr->p_app_private;
+    // Also update the active SCS so the RC layer sees the new bitrate
+    // without needing a full copy_sequence_control_set
+    SequenceControlSet* active_scs = ctx->scs_active ? (SequenceControlSet*)ctx->scs_active->object_ptr : NULL;
     while (node) {
         if (node->node_type == RATE_CHANGE_EVENT) {
             svt_aom_assert_err(node->size == sizeof(SvtAv1RateInfo) && node->data,
                                "invalid private data of type RATE_CHANGE_EVENT");
-            SvtAv1RateInfo* input_pic_def = (SvtAv1RateInfo*)node->data;
-            if (input_pic_def->seq_qp != 0) {
-                scs->static_config.qp = input_pic_def->seq_qp;
+            SvtAv1RateInfo* info = (SvtAv1RateInfo*)node->data;
+            if (info->seq_qp != 0) {
+                scs->static_config.qp = info->seq_qp;
+                if (active_scs) {
+                    active_scs->static_config.qp = info->seq_qp;
+                }
             }
-            if (input_pic_def->target_bit_rate != 0) {
-                scs->static_config.target_bit_rate = input_pic_def->target_bit_rate;
+            if (info->target_bit_rate != 0) {
+                scs->static_config.target_bit_rate = info->target_bit_rate;
+                if (active_scs) {
+                    active_scs->static_config.target_bit_rate = info->target_bit_rate;
+                }
             }
-            ctx->seq_param_change = true;
+            ctx->bitrate_changed = true;
         }
         node = node->next;
     }
 }
 
-// Update the target rate, sequence QP...
+// Update the frame rate...
 static void update_frame_rate_info(ResourceCoordinationContext* ctx, EbBufferHeaderType* input_ptr,
                                    SequenceControlSet* scs) {
     EbPrivDataNode* node = (EbPrivDataNode*)input_ptr->p_app_private;
+    // Also update the active SCS so the RC layer sees the new frame rate
+    // without needing a full copy_sequence_control_set
+    SequenceControlSet* active_scs = ctx->scs_active ? (SequenceControlSet*)ctx->scs_active->object_ptr : NULL;
     while (node) {
         if (node->node_type == FRAME_RATE_CHANGE_EVENT) {
             svt_aom_assert_err(node->size == sizeof(SvtAv1FrameRateInfo) && node->data,
                                "invalid private data of type FRAME_RATE_CHANGE_EVENT");
-            SvtAv1FrameRateInfo* input_pic_def        = (SvtAv1FrameRateInfo*)node->data;
-            scs->static_config.frame_rate_numerator   = input_pic_def->frame_rate_numerator;
-            scs->static_config.frame_rate_denominator = input_pic_def->frame_rate_denominator;
+            SvtAv1FrameRateInfo* info                 = (SvtAv1FrameRateInfo*)node->data;
+            scs->static_config.frame_rate_numerator   = info->frame_rate_numerator;
+            scs->static_config.frame_rate_denominator = info->frame_rate_denominator;
             scs->frame_rate                           = (double)scs->static_config.frame_rate_numerator /
                 (double)scs->static_config.frame_rate_denominator;
-            ctx->seq_param_change = true;
+            if (active_scs) {
+                active_scs->static_config.frame_rate_numerator   = info->frame_rate_numerator;
+                active_scs->static_config.frame_rate_denominator = info->frame_rate_denominator;
+                active_scs->frame_rate                           = scs->frame_rate;
+            }
+            ctx->frame_rate_changed = true;
         }
         node = node->next;
     }
@@ -1107,14 +1129,18 @@ EbErrorType svt_aom_resource_coordination_kernel_iter(void* context) {
         pcs->superres_total_recode_loop = 0;
         pcs->superres_recode_loop       = 0;
         svt_av1_get_time(&pcs->start_time_seconds, &pcs->start_time_u_seconds);
-        pcs->seq_param_changed = (context_ptr->seq_param_change) ? true : false;
+        pcs->seq_param_changed  = context_ptr->seq_param_change;
+        pcs->bitrate_changed    = context_ptr->bitrate_changed;
+        pcs->frame_rate_changed = context_ptr->frame_rate_changed;
         // set the scs wrapper to be released after the picture is done
         pcs->scs_wrapper = context_ptr->scs_active;
         // Reset seq_param_change and video_res_change to false
-        context_ptr->seq_param_change = false;
-        context_ptr->video_res_change = false;
-        pcs->scs                      = scs;
-        pcs->input_pic_wrapper        = input_pic_wrapper;
+        context_ptr->seq_param_change   = false;
+        context_ptr->video_res_change   = false;
+        context_ptr->bitrate_changed    = false;
+        context_ptr->frame_rate_changed = false;
+        pcs->scs                        = scs;
+        pcs->input_pic_wrapper          = input_pic_wrapper;
         //store the y8b warapper to be used for release later
         pcs->y8b_wrapper          = y8b_wrapper;
         pcs->end_of_sequence_flag = context_ptr->end_of_sequence_flag;
