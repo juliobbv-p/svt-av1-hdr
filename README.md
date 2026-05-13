@@ -48,7 +48,7 @@ A custom curve specifically designed for HDR video and images with a Perceptual 
 
 An opinionated tune optimized for film grain retention and temporal consistency. The recommended CRF range to use tune 5 is 20 to 40.
 
-Tune 5 is equivalent to setting these parameters: `--tune 0 --enable-tf 0 --enable-restoration 0 --enable-cdef 0 --complex-hvs 1 --tx-bias 1 --ac-bias 4.00`.
+Tune 5 is equivalent to setting these parameters: `--tune 0 --enable-tf 0 --enable-restoration 0 --enable-cdef 0 --tx-bias 1 --ac-bias 4.00`.
 
 - `--cdef-scaling` *1 (0.06x) to 30 (2x)*
 
