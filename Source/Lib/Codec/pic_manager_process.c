@@ -663,7 +663,7 @@ EbErrorType svt_aom_picture_manager_kernel_iter(void* context) {
         // if resolution has changed, and the child_pcs settings do not match scs settings, update pcs params
         if (child_pcs->frame_width != child_pcs->scs->max_input_luma_width ||
             child_pcs->frame_height != child_pcs->scs->max_input_luma_height) {
-            pcs_update_param(child_pcs);
+            pcs_update_param(child_pcs, entry_ppcs->enc_mode);
         }
         child_pcs->picture_number       = entry_ppcs->picture_number;
         child_pcs->slice_type           = entry_ppcs->slice_type;

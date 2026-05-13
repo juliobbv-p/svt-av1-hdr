@@ -4237,7 +4237,7 @@ static void set_param_based_on_input(SequenceControlSet* scs) {
     // 0: Do not use boundary pixels in the restoration filter search.
     scs->use_boundaries_in_rest_search = 0;
 
-    svt_aom_set_mfmv_config(scs);
+    svt_aom_set_mfmv_config(scs, scs->static_config.enc_mode);
 
     scs->list0_only_base = scs->static_config.enc_mode > ENC_M2;
 

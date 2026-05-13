@@ -1216,7 +1216,7 @@ EbErrorType svt_aom_picture_parent_control_set_creator(EbPtr* object_dbl_ptr, Eb
 EbErrorType svt_aom_me_creator(EbPtr* object_dbl_ptr, EbPtr object_init_data_ptr);
 EbErrorType svt_aom_me_sb_results_ctor(MeSbResults* obj_ptr, PictureControlSetInitData* init_data_ptr);
 EbErrorType ppcs_update_param(PictureParentControlSet* ppcs);
-EbErrorType pcs_update_param(PictureControlSet* pcs);
+EbErrorType pcs_update_param(PictureControlSet* pcs, int8_t enc_mode);
 EbErrorType me_update_param(MotionEstimationData* me_data, struct SequenceControlSet* scs);
 EbErrorType recon_coef_update_param(EncDecSet* recon_coef, struct SequenceControlSet* scs);
 bool        svt_aom_is_pic_skipped(PictureParentControlSet* pcs);

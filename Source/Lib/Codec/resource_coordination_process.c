@@ -701,7 +701,7 @@ static EbErrorType svt_overlay_buffer_header_update(EbBufferHeaderType* input_bu
 /***********************************************************************
 * update_new_param: Update the parameters based on the on the fly changes
 ************************************************************************/
-static void update_new_param(SequenceControlSet* scs) {
+static void update_new_param(SequenceControlSet* scs, int8_t enc_mode) {
     uint16_t subsampling_x = scs->subsampling_x;
     uint16_t subsampling_y = scs->subsampling_y;
     // Update picture width, and picture height
@@ -734,7 +734,7 @@ static void update_new_param(SequenceControlSet* scs) {
 
     svt_aom_derive_input_resolution(&scs->input_resolution, scs->max_input_luma_width * scs->max_input_luma_height);
 
-    svt_aom_set_mfmv_config(scs);
+    svt_aom_set_mfmv_config(scs, enc_mode);
 
     // Update the number of segments based on the new resolution
     set_segments_numbers(scs);
@@ -757,7 +757,7 @@ static void update_input_pic_def(ResourceCoordinationContext* ctx, EbBufferHeade
                 scs->max_input_pad_bottom  = input_pic_def->input_pad_bottom;
                 ctx->seq_param_change      = true;
                 ctx->video_res_change      = true;
-                update_new_param(scs);
+                update_new_param(scs, ctx->runtime_enc_mode);
             }
         }
         node = node->next;
@@ -995,7 +995,7 @@ EbErrorType svt_aom_resource_coordination_kernel_iter(void* context) {
         scs->pad_bottom = scs->max_input_pad_bottom;
 
         // Pre-Analysis Signal(s) derivation
-        svt_aom_sig_deriv_pre_analysis_scs(scs);
+        svt_aom_sig_deriv_pre_analysis_scs(scs, context_ptr->runtime_enc_mode);
 
         // Init SB Params
         const uint32_t input_size = scs->max_input_luma_width * scs->max_input_luma_height;

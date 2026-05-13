@@ -497,7 +497,7 @@ void store_extended_group(PictureParentControlSet* pcs, InitialRateControlContex
 
     for (uint32_t pic_index = 0; pic_index < pcs->tpl_group_size; pic_index++) {
         if (!pcs->tpl_group[pic_index]->tpl_params_ready) {
-            set_tpl_params(pcs->tpl_group[pic_index], get_tpl_params_level(pcs->scs->static_config.enc_mode));
+            set_tpl_params(pcs->tpl_group[pic_index], get_tpl_params_level(pcs->enc_mode));
             pcs->tpl_group[pic_index]->tpl_params_ready = 1;
         }
     }
@@ -727,7 +727,7 @@ EbErrorType svt_aom_initial_rate_control_kernel_iter(void* context) {
 
         pcs->tpl_params_ready = 0;
         svt_aom_set_tpl_group(pcs,
-                              svt_aom_get_tpl_group_level(scs->tpl, scs->static_config.enc_mode),
+                              svt_aom_get_tpl_group_level(scs->tpl, pcs->enc_mode),
                               scs->max_input_luma_width,
                               scs->max_input_luma_height);
         // If TPL results are needed for the current hierarchical layer, but are not available, shut r0-based QPS/QPM

@@ -56,7 +56,7 @@ void    svt_aom_sig_deriv_mode_decision_config_rtc(SequenceControlSet* scs, Pict
 void    svt_aom_sig_deriv_mode_decision_config_allintra(SequenceControlSet* scs, PictureControlSet* pcs);
 void    svt_aom_sig_deriv_block(PictureControlSet* pcs, ModeDecisionContext* ctx);
 void    svt_aom_sig_deriv_pre_analysis_pcs(PictureParentControlSet* pcs);
-void    svt_aom_sig_deriv_pre_analysis_scs(SequenceControlSet* scs);
+void    svt_aom_sig_deriv_pre_analysis_scs(SequenceControlSet* scs, int8_t enc_mode);
 void    svt_aom_sig_deriv_multi_processes_default(SequenceControlSet* scs, PictureParentControlSet* pcs);
 void    svt_aom_sig_deriv_multi_processes_rtc(SequenceControlSet* scs, PictureParentControlSet* pcs);
 void    svt_aom_sig_deriv_multi_processes_allintra(SequenceControlSet* scs, PictureParentControlSet* pcs);
@@ -154,6 +154,6 @@ void    svt_aom_get_intra_mode_levels_allintra(EncMode enc_mode, uint32_t* intra
                                                uint32_t* dist_based_ang_intra_level_ptr);
 uint8_t svt_aom_get_tpl_synthesizer_block_size(int8_t tpl_level, uint32_t picture_width, uint32_t picture_height);
 
-void svt_aom_set_mfmv_config(SequenceControlSet* scs);
+void svt_aom_set_mfmv_config(SequenceControlSet* scs, int8_t enc_mode);
 void svt_aom_get_qp_based_th_scaling_factors(bool enable_qp_based_th_scaling, uint32_t* ret_q_weight,
                                              uint32_t* ret_q_weight_denom, uint32_t qp);

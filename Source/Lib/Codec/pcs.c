@@ -369,7 +369,7 @@ uint32_t svt_aom_get_out_buffer_size(uint32_t picture_width, uint32_t picture_he
 /*
 pcs_update_param: update the parameters in PictureParentControlSet for changing the resolution on the fly
 */
-EbErrorType pcs_update_param(PictureControlSet* pcs) {
+EbErrorType pcs_update_param(PictureControlSet* pcs, int8_t enc_mode) {
     SequenceControlSet* scs      = pcs->scs;
     const bool          rtc_tune = scs->static_config.rtc;
     const bool          allintra = scs->allintra;
@@ -397,17 +397,16 @@ EbErrorType pcs_update_param(PictureControlSet* pcs) {
     if ((is_16bit) || (scs->is_16bit_pipeline)) {
         svt_picture_buffer_desc_update(pcs->input_frame16bit, (EbPtr)&coeff_buffer_desc_init_data);
     }
-    if (allintra ? svt_aom_get_enable_restoration_allintra(scs->static_config.enc_mode,
-                                                           scs->static_config.enable_restoration_filtering)
+    if (allintra ? svt_aom_get_enable_restoration_allintra(enc_mode, scs->static_config.enable_restoration_filtering)
 #if TUNE_SIMPLIFY_SETTINGS
             : rtc_tune ? svt_aom_get_enable_restoration_rtc(
 #else
-            : rtc_tune ? svt_aom_get_enable_restoration_rtc(scs->static_config.enc_mode,
+            : rtc_tune ? svt_aom_get_enable_restoration_rtc(enc_mode,
 #endif
                              scs->static_config.enable_restoration_filtering,
                              scs->input_resolution,
                              scs->static_config.fast_decode)
-                       : svt_aom_get_enable_restoration_default(scs->static_config.enc_mode,
+                       : svt_aom_get_enable_restoration_default(enc_mode,
                                                                 scs->static_config.enable_restoration_filtering,
                                                                 scs->input_resolution,
                                                                 scs->static_config.fast_decode)) {

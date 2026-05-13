@@ -3749,10 +3749,9 @@ void svt_aom_sig_deriv_pre_analysis_pcs(PictureParentControlSet* pcs) {
 Input   : encoder mode and tune
 Output  : Pre-Analysis signal(s)
 ******************************************************/
-void svt_aom_sig_deriv_pre_analysis_scs(SequenceControlSet* scs) {
-    const int8_t enc_mode = scs->static_config.enc_mode;
-    const bool   rtc_tune = scs->static_config.rtc;
-    const bool   allintra = scs->allintra;
+void svt_aom_sig_deriv_pre_analysis_scs(SequenceControlSet* scs, int8_t enc_mode) {
+    const bool rtc_tune = scs->static_config.rtc;
+    const bool allintra = scs->allintra;
     // initialize sequence level enable_superres
     scs->seq_header.enable_superres = scs->static_config.superres_mode > SUPERRES_NONE ? 1 : 0;
     uint8_t ii_allowed              = 0;
@@ -3805,17 +3804,16 @@ void svt_aom_sig_deriv_pre_analysis_scs(SequenceControlSet* scs) {
         svt_aom_derive_input_resolution(&init_input_resolution,
                                         scs->max_initial_input_luma_width * scs->max_initial_input_luma_height);
         scs->seq_header.enable_restoration = allintra
-            ? svt_aom_get_enable_restoration_allintra(scs->static_config.enc_mode,
-                                                      scs->static_config.enable_restoration_filtering)
+            ? svt_aom_get_enable_restoration_allintra(enc_mode, scs->static_config.enable_restoration_filtering)
 #if TUNE_SIMPLIFY_SETTINGS
             : rtc_tune ? svt_aom_get_enable_restoration_rtc(
 #else
-            : rtc_tune ? svt_aom_get_enable_restoration_rtc(scs->static_config.enc_mode,
+            : rtc_tune ? svt_aom_get_enable_restoration_rtc(enc_mode,
 #endif
                              scs->static_config.enable_restoration_filtering,
                              init_input_resolution,
                              scs->static_config.fast_decode)
-                       : svt_aom_get_enable_restoration_default(scs->static_config.enc_mode,
+                       : svt_aom_get_enable_restoration_default(enc_mode,
                                                                 scs->static_config.enable_restoration_filtering,
                                                                 init_input_resolution,
                                                                 scs->static_config.fast_decode);
@@ -13094,13 +13092,13 @@ void svt_aom_sig_deriv_mode_decision_config_allintra(SequenceControlSet* scs, Pi
 /****************************************************
 * svt_aom_set_mfmv_config: enable/disable mfmv based on the enc_mode, input_res and pred_structure at sequence level
 ****************************************************/
-void svt_aom_set_mfmv_config(SequenceControlSet* scs) {
+void svt_aom_set_mfmv_config(SequenceControlSet* scs, int8_t enc_mode) {
     if (scs->static_config.enable_mfmv == DEFAULT) {
         const bool rtc_tune = scs->static_config.rtc;
         if (rtc_tune) {
             scs->mfmv_enabled = 0;
         } else {
-            if (scs->static_config.enc_mode <= ENC_M10) {
+            if (enc_mode <= ENC_M10) {
                 scs->mfmv_enabled = 1;
             } else {
                 scs->mfmv_enabled = 0;
