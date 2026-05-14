@@ -967,3 +967,129 @@ TEST_P(PresetChangeOnFlyTest, NoCrashPresetCycling) {
 INSTANTIATE_TEST_SUITE_P(SvtAv1, PresetChangeOnFlyTest,
                          ::testing::ValuesIn(preset_change_settings),
                          EncTestSetting::GetSettingName);
+
+// Post-encode recode VBV compliance tests for RTC CBR.
+// Encodes with a sharp rate drop to stress VBV, then compares max buffer
+// fullness WITH vs WITHOUT recode to verify the recode path helps.
+static std::vector<TestVideoVector> post_enc_recode_test_vectors = {
+    std::make_tuple("kirland_640_480_30.yuv", YUV_VIDEO_FILE, IMG_FMT_420, 640,
+                    480, 8, 0, 0, 60),
+};
+
+// Simulate the same VBV model as rtc_update_buffer_level in rc_rtc_cbr.c.
+// buffer_level += frame_size; buffer_level -= avg_frame_bandwidth;
+// buffer_level = max(0, buffer_level); overflow if buffer_level >
+// max_buffer_size. Returns the max buffer_level / max_buffer_size ratio
+// observed.
+static double simulate_vbv(const std::vector<uint32_t> &frame_sizes,
+                           double bitrate_bps, double fps, double buf_size_ms,
+                           double buf_initial_ms) {
+    double max_buffer_size = buf_size_ms / 1000.0 * bitrate_bps;
+    double buf_level = (buf_size_ms - buf_initial_ms) / 1000.0 * bitrate_bps;
+    double avg_frame_bandwidth = bitrate_bps / fps;
+    double max_fullness = 0.0;
+
+    for (size_t i = 0; i < frame_sizes.size(); i++) {
+        double frame_bits = frame_sizes[i] * 8.0;
+        buf_level += frame_bits;
+        buf_level -= avg_frame_bandwidth;
+        if (buf_level < 0)
+            buf_level = 0;
+        double fullness = buf_level / max_buffer_size;
+        if (fullness > max_fullness)
+            max_fullness = fullness;
+    }
+    return max_fullness;
+}
+
+// Base test settings shared between recode-enabled and recode-disabled runs
+static EncSetting make_post_enc_base_settings(const std::string &recode_loop) {
+    return {{"EncoderMode", "11"},
+            {"RealTime", "1"},
+            {"HierarchicalLevels", "0"},
+            {"FrameRateNumerator", "30"},
+            {"FrameRateDenominator", "1"},
+            {"TargetBitRate", "50"},
+            {"RateControlMode", "2"},
+            {"Keyint", "3000"},
+            {"PredStructure", "1"},
+            {"LevelOfParallelism", "1"},
+            {"BufSz", "100"},
+            {"BufInitialSz", "99"},
+            {"BufOptimalSz", "50"},
+            {"UnderShootPct", "100"},
+            {"OverShootPct", "100"},
+            {"RecodeLoop", recode_loop}};
+}
+
+/* clang-format off */
+static const std::vector<EncTestSetting> post_enc_recode_settings = {
+    // Recode disabled (baseline) — expected to have worse VBV
+    {"PostEncRecodeDisabled",
+     make_post_enc_base_settings("0"),
+     post_enc_recode_test_vectors},
+    // Recode enabled — expected to have better VBV
+    {"PostEncRecodeEnabled",
+     make_post_enc_base_settings("1"),
+     post_enc_recode_test_vectors},
+};
+/* clang-format on */
+
+class PostEncRecodeTest : public SvtAv1E2ETestFramework {
+  protected:
+    void config_test() override {
+        enable_stat = true;
+        enable_config = true;
+        enable_save_bitstream = true;
+        SvtAv1E2ETestFramework::config_test();
+    }
+};
+
+TEST_P(PostEncRecodeTest, VBVCompliance) {
+    config_test();
+    for (auto test_vector : enc_setting.test_vectors) {
+        init_test(test_vector);
+        run_encode_process();
+
+        ASSERT_GT(frame_sizes_.size(), 0u) << "No frames produced";
+
+        const auto &s = enc_setting.setting;
+        const double fps = std::stod(s.at("FrameRateNumerator")) /
+                           std::stod(s.at("FrameRateDenominator"));
+        const double target_bps = std::stod(s.at("TargetBitRate")) * 1000.0;
+        const double buf_sz_ms = std::stod(s.at("BufSz"));
+        const double buf_initial_ms = std::stod(s.at("BufInitialSz"));
+
+        // Simulate VBV frame-by-frame, skipping frame 0 (I-frame) which
+        // is exempt from recode and can cause large spikes
+        double max_fullness = simulate_vbv(
+            std::vector<uint32_t>(frame_sizes_.begin() + 1, frame_sizes_.end()),
+            target_bps,
+            fps,
+            buf_sz_ms,
+            buf_initial_ms);
+
+        printf("%s: %zu frames, max VBV fullness: %.1f%%\n",
+               enc_setting.name.c_str(),
+               frame_sizes_.size(),
+               max_fullness * 100.0);
+
+        if (s.at("RecodeLoop") != "0") {
+            // Recode-enabled run: must stay within 110%
+            EXPECT_LT(max_fullness, 1.1)
+                << "With recode enabled, VBV overflow exceeded 110%. "
+                << "Max fullness: " << max_fullness * 100.0 << "%";
+        } else {
+            // Recode-disabled run: we expect VBV overflow (fullness > 1.1)
+            EXPECT_GT(max_fullness, 1.1)
+                << "With recode disabled, VBV should overflow at least 110%. "
+                << "Max fullness: " << max_fullness * 100.0 << "%";
+        }
+
+        deinit_test();
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(SvtAv1, PostEncRecodeTest,
+                         ::testing::ValuesIn(post_enc_recode_settings),
+                         EncTestSetting::GetSettingName);

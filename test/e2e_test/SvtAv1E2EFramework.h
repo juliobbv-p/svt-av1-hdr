@@ -178,7 +178,9 @@ class SvtAv1E2ETestFramework : public ::testing::TestWithParam<EncTestSetting> {
     IvfFile *output_file_;     /**< file handle for save encoder output data */
     uint8_t obu_frame_header_size_; /**< size of obu frame header */
     PerformanceCollect *collect_;   /**< performance and time collection*/
-    VideoSource *psnr_src_;         /**< video source context for psnr */
+    std::vector<uint32_t>
+        frame_sizes_;            /**< per-frame compressed sizes (bytes) */
+    VideoSource *psnr_src_;      /**< video source context for psnr */
     ICompareQueue *ref_compare_; /**< sink of reference to compare with recon*/
     PsnrStatistics pnsr_statistics_; /**< psnr statistics recorder.*/
     bool use_ext_qp_; /**< flag of use external qp from video source or not*/

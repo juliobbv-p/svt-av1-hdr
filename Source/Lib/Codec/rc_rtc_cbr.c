@@ -158,7 +158,7 @@ static int av1_estimate_frame_size(PictureControlSet* pcs, int qindex, double rc
 
     // scale to resolution
     FrameSize* frm_size = &pcs->ppcs->av1_cm->frm_size;
-    return estimated_size * frm_size->frame_width * frm_size->frame_height / 512;
+    return AOMMAX(estimated_size * frm_size->frame_width * frm_size->frame_height / 512, 1);
 }
 
 typedef struct {
@@ -527,7 +527,7 @@ static void rtc_update_rate_correction_factors(PictureParentControlSet* ppcs) {
     int estimated_size = av1_estimate_frame_size(ppcs->child_pcs, base_q_idx, rcf, false);
 
     // Work out a size correction factor.
-    double correction_factor = 1.0 * ppcs->projected_frame_size / AOMMAX(estimated_size, 1);
+    double correction_factor = 1.0 * ppcs->projected_frame_size / estimated_size;
 
     // Clamp correction factor to prevent anything too extreme
     correction_factor = AOMMAX(correction_factor, 0.25);
@@ -578,6 +578,64 @@ static void rtc_update_buffer_level(PictureParentControlSet* ppcs, int encoded_f
 
     // Clip the buffer level.
     rc->buffer_level = AOMMAX(0, rc->buffer_level);
+}
+
+// Post-encode VBV recode decision for RTC CBR.
+// After EncDec finishes, evaluates whether the frame would overflow the VBV buffer.
+bool svt_av1_rc_recode_decision_rtc_cbr(PictureControlSet* pcs) {
+    PictureParentControlSet* ppcs = pcs->ppcs;
+    RATE_CONTROL*            rc   = &ppcs->scs->enc_ctx->rc;
+
+    // Do not recode keyframes yet
+    if (frame_is_intra_only(ppcs)) {
+        return false;
+    }
+
+    // Prevent re-entry: only one recode pass
+    if (ppcs->loop_count > 0) {
+        return false;
+    }
+
+    svt_block_on_mutex(ppcs->pcs_total_rate_mutex);
+    int projected_frame_size = (int)ROUND_POWER_OF_TWO(ppcs->pcs_total_rate, AV1_PROB_COST_SHIFT);
+    projected_frame_size += (ppcs->frm_hdr.frame_type == KEY_FRAME) ? 13 : 0;
+    svt_release_mutex(ppcs->pcs_total_rate_mutex);
+
+    // Project VBV buffer after this frame
+    int64_t projected_buffer = rc->buffer_level + projected_frame_size - rc->avg_frame_bandwidth;
+    if (projected_buffer <= rc->maximum_buffer_size) {
+        return false;
+    }
+
+    int new_q_idx = rc->worst_quality;
+
+    // Frame would overflow VBV. Compute target size that fits.
+    int target_size = (int)(rc->maximum_buffer_size - rc->buffer_level + rc->avg_frame_bandwidth);
+    if (target_size >= FRAME_OVERHEAD_BITS) {
+        // Use R-Q model to find the qindex that produces target_size
+        int    width  = ppcs->av1_cm->frm_size.frame_width;
+        int    height = ppcs->av1_cm->frm_size.frame_height;
+        double rcf    = rtc_get_rate_correction_factor(ppcs, width, height);
+
+        // Correct RCF based on actual vs estimated size ratio
+        // so the recode QP accounts for the model error
+        int    base_q_idx     = ppcs->frm_hdr.quantization_params.base_q_idx;
+        int    estimated_size = av1_estimate_frame_size(pcs, base_q_idx, rcf, false);
+        double correction     = (double)projected_frame_size / estimated_size;
+        rcf *= correction;
+
+        EvalFrameSizeCtx ctx = {pcs, rcf};
+        new_q_idx = find_closest_arg(target_size, rc->best_quality, rc->worst_quality, eval_frame_size, &ctx);
+
+        // New QP must be strictly higher than original, otherwise recode is pointless
+        new_q_idx = AOMMAX(base_q_idx + 4, new_q_idx);
+        new_q_idx = clamp_qindex(ppcs->scs, new_q_idx);
+    }
+
+    // Store new qindex for recode
+    ppcs->frm_hdr.quantization_params.base_q_idx = new_q_idx;
+
+    return true;
 }
 
 void svt_av1_rc_postencode_update_rtc_cbr(PictureParentControlSet* ppcs) {

@@ -170,6 +170,7 @@ void SvtAv1E2ETestFramework::post_process() {
 void SvtAv1E2ETestFramework::init_test(TestVideoVector &test_vector) {
     start_pos_ = std::get<7>(test_vector);
     frames_to_test_ = std::get<8>(test_vector);
+    frame_sizes_.clear();
     video_src_ = prepare_video_src(test_vector);
     psnr_src_ = prepare_video_src(test_vector);
 
@@ -270,7 +271,8 @@ void SvtAv1E2ETestFramework::init_test(TestVideoVector &test_vector) {
 
     // create IvfFile if required.
     if (enable_save_bitstream) {
-        std::string fn = std::get<0>(test_vector) + ".ivf";
+        std::string fn =
+            enc_setting.name + "_" + std::get<0>(test_vector) + ".ivf";
         output_file_ = new IvfFile(fn);
     }
 
@@ -660,6 +662,7 @@ void SvtAv1E2ETestFramework::write_compress_data(
 void SvtAv1E2ETestFramework::process_compress_data(
     const EbBufferHeaderType *data) {
     ASSERT_NE(data, nullptr);
+    frame_sizes_.push_back(data->n_filled_len);
     if (refer_dec_ == nullptr) {
         if (output_file_)
             write_compress_data(data);

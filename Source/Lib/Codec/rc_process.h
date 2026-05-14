@@ -264,6 +264,7 @@ void svt_av1_rc_postencode_update(struct PictureParentControlSet* ppcs);
 // RTC CBR
 void svt_av1_rc_calc_qindex_rtc_cbr(struct PictureControlSet* pcs);
 void svt_av1_rc_postencode_update_rtc_cbr(struct PictureParentControlSet* ppcs);
+bool svt_av1_rc_recode_decision_rtc_cbr(struct PictureControlSet* pcs);
 
 // common stuff
 void    svt_av1_rc_init(struct SequenceControlSet* scs);
