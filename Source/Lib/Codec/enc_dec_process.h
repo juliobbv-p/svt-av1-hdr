@@ -59,6 +59,7 @@ typedef struct EncDecContext {
     uint64_t tot_skip_coded_area;
     uint64_t tot_hp_coded_area;
     uint64_t tot_cnt_zero_mv;
+    uint64_t tot_total_rate;
     uint64_t three_quad_energy;
 
     uint16_t coded_area_sb;

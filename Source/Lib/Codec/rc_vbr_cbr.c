@@ -1855,11 +1855,9 @@ void recode_loop_update_q(PictureParentControlSet* ppcs, bool* const loop, int* 
                          !(rc_cfg->mode == AOM_Q && scs->static_config.max_bit_rate == 0)) ||
         rc_cfg->min_cr > 0;
     if (do_dummy_pack) {
-        svt_block_on_mutex(ppcs->pcs_total_rate_mutex);
         ppcs->projected_frame_size = (int)((ppcs->pcs_total_rate + (1 << (AV1_PROB_COST_SHIFT - 1))) >>
                                            AV1_PROB_COST_SHIFT) +
             (ppcs->frm_hdr.frame_type == KEY_FRAME ? 13 : 0);
-        svt_release_mutex(ppcs->pcs_total_rate_mutex);
     } else {
         ppcs->projected_frame_size = 0;
     }

@@ -596,10 +596,8 @@ bool svt_av1_rc_recode_decision_rtc_cbr(PictureControlSet* pcs) {
         return false;
     }
 
-    svt_block_on_mutex(ppcs->pcs_total_rate_mutex);
     int projected_frame_size = (int)ROUND_POWER_OF_TWO(ppcs->pcs_total_rate, AV1_PROB_COST_SHIFT);
     projected_frame_size += (ppcs->frm_hdr.frame_type == KEY_FRAME) ? 13 : 0;
-    svt_release_mutex(ppcs->pcs_total_rate_mutex);
 
     // Project VBV buffer after this frame
     int64_t projected_buffer = rc->buffer_level + projected_frame_size - rc->avg_frame_bandwidth;

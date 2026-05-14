@@ -1069,7 +1069,6 @@ typedef struct PictureParentControlSet {
     int         undershoot_seen;
     int         low_cr_seen;
     uint64_t    pcs_total_rate;
-    EbHandle    pcs_total_rate_mutex;
     uint8_t     first_pass_done;
     uint8_t     first_frame_in_minigop;
     TplControls tpl_ctrls;

@@ -1643,9 +1643,7 @@ static void update_b(PictureControlSet* pcs, EncDecContext* ctx, BlkStruct* blk_
         pcs->sb_min_sq_size[sb_index] = MIN(blk_geom->sq_size, pcs->sb_min_sq_size[sb_index]);
         pcs->sb_max_sq_size[sb_index] = MAX(blk_geom->sq_size, pcs->sb_max_sq_size[sb_index]);
     }
-    svt_block_on_mutex(pcs->ppcs->pcs_total_rate_mutex);
-    pcs->ppcs->pcs_total_rate += blk_ptr->total_rate;
-    svt_release_mutex(pcs->ppcs->pcs_total_rate_mutex);
+    ctx->tot_total_rate += blk_ptr->total_rate;
 
     // If needed, copy recon and qcoeffs from MD buffers to EC buffers and update coeff-related CDFs
     if (pcs->cdf_ctrl.update_coef || (md_ctx->bypass_encdec && !(md_ctx->fixed_partition))) {

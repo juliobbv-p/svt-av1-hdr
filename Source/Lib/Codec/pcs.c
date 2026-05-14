@@ -1222,7 +1222,6 @@ static void picture_parent_control_set_dctor(EbPtr ptr) {
     EB_DESTROY_MUTEX(obj->tpl_disp_mutex);
     uint16_t tile_cnt = 1; /*obj->tile_row_count * obj->tile_column_count;*/
     EB_DELETE_PTR_ARRAY(obj->tpl_disp_segment_ctrl, tile_cnt);
-    EB_DESTROY_MUTEX(obj->pcs_total_rate_mutex);
     if (obj->dg_detector) {
         EB_DELETE(obj->dg_detector);
     }
@@ -1423,7 +1422,6 @@ static EbErrorType picture_parent_control_set_ctor(PictureParentControlSet* obje
     object_ptr->overshoot_seen  = 0;
     object_ptr->undershoot_seen = 0;
     object_ptr->low_cr_seen     = 0;
-    EB_CREATE_MUTEX(object_ptr->pcs_total_rate_mutex);
     EB_NEW(object_ptr->dg_detector, svt_aom_dg_detector_seg_ctor);
     return return_error;
 }
