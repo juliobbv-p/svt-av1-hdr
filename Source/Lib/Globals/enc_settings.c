@@ -514,10 +514,11 @@ EbErrorType svt_av1_verify_settings(SequenceControlSet* scs) {
             config->tune);
         return_error = EB_ErrorBadParameter;
     }
+    // RC: SSIM, IQ, MS_SSIM, VMAF -> CRF only (VBR, CBR not supported)
     if (config->tune == TUNE_SSIM || config->tune == TUNE_IQ || config->tune == TUNE_MS_SSIM ||
         config->tune == TUNE_VMAF) {
-        if (config->rate_control_mode != 0 || config->pred_structure == LOW_DELAY) {
-            SVT_ERROR("tune %s only supports CRF rate control mode currently\n",
+        if (config->rate_control_mode != 0) {
+            SVT_ERROR("Tune %s only supports CRF rate control mode\n",
                       config->tune == TUNE_SSIM       ? "SSIM"
                           : config->tune == TUNE_IQ   ? "IQ"
                           : config->tune == TUNE_VMAF ? "VMAF"
@@ -525,13 +526,29 @@ EbErrorType svt_av1_verify_settings(SequenceControlSet* scs) {
             return_error = EB_ErrorBadParameter;
         }
     }
-    if (config->tune == TUNE_IQ && config->pred_structure != ALL_INTRA) {
-        SVT_ERROR("Tune IQ is validated for all-intra encoding only\n");
+
+    // pred_struct: SSIM, MS_SSIM -> ALL_INTRA and RA only (LOW_DELAY not supported)
+    if (config->tune == TUNE_SSIM || config->tune == TUNE_MS_SSIM) {
+        if (config->pred_structure == LOW_DELAY) {
+            SVT_ERROR("Tune %s only supports all-intra and random access prediction structures\n",
+                      config->tune == TUNE_SSIM ? "SSIM" : "MS_SSIM");
+            return_error = EB_ErrorBadParameter;
+        }
+    }
+
+    // pred_struct: VMAF -> RA only (ALL_INTRA and LOW_DELAY not supported)
+    if (config->tune == TUNE_VMAF && (config->pred_structure == ALL_INTRA || config->pred_structure == LOW_DELAY)) {
+        SVT_ERROR("Tune VMAF only supports random access prediction structure\n");
         return_error = EB_ErrorBadParameter;
     }
-    if (config->tune == TUNE_VMAF && config->pred_structure == ALL_INTRA) {
-        SVT_ERROR("Tune VMAF is validated for video encoding only\n");
+
+    // pred_struct: IQ -> ALL_INTRA and LOW_DELAY only (RA not supported); LOW_DELAY is experimental
+    if (config->tune == TUNE_IQ && config->pred_structure == RANDOM_ACCESS) {
+        SVT_ERROR("Tune IQ only supports all-intra and low delay (experimental) prediction structures\n");
         return_error = EB_ErrorBadParameter;
+    }
+    if (config->tune == TUNE_IQ && config->pred_structure == LOW_DELAY) {
+        SVT_WARN("Tune IQ with low delay prediction structure is experimental\n");
     }
 #else
     if (config->tune > TUNE_MS_SSIM) {
