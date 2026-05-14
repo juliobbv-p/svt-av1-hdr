@@ -433,7 +433,10 @@ void svt_av1_rc_calc_qindex_rtc_cbr(PictureControlSet* pcs) {
         RATE_CONTROL*   rc     = &scs->enc_ctx->rc;
         RateControlCfg* rc_cfg = &scs->enc_ctx->rc_cfg;
 
-        int32_t bandwidth = scs->static_config.target_bit_rate;
+        // Use per-PCS runtime rate values for thread-safe access; these are
+        // actual run time values which could be adjusted mid encoding via
+        // RATE_CHANGE_EVENT / FRAME_RATE_CHANGE_EVENT.
+        int32_t bandwidth = ppcs->target_bit_rate;
         int64_t starting  = rc_cfg->starting_buffer_level_ms;
         int64_t optimal   = rc_cfg->optimal_buffer_level_ms;
         int64_t maximum   = rc_cfg->maximum_buffer_size_ms;
@@ -476,9 +479,8 @@ void svt_av1_rc_calc_qindex_rtc_cbr(PictureControlSet* pcs) {
             }
         } else {
             // Bitrate change: incremental update preserving learned RC state
-            // Recompute frame bandwidth from new bitrate
-            double framerate = (double)scs->static_config.frame_rate_numerator /
-                (double)scs->static_config.frame_rate_denominator;
+            // Recompute frame bandwidth from runtime rate values
+            double framerate = (double)ppcs->frame_rate_numerator / (double)ppcs->frame_rate_denominator;
             if (framerate < 0.1) {
                 framerate = 30.0;
             }

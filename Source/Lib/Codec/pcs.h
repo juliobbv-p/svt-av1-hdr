@@ -1132,6 +1132,13 @@ typedef struct PictureParentControlSet {
     bool     seq_param_changed;
     bool     bitrate_changed;
     bool     frame_rate_changed;
+    // Runtime bitrate and frame rate values that may be adjusted mid-encoding
+    // via RATE_CHANGE_EVENT / FRAME_RATE_CHANGE_EVENT. These are per-frame
+    // snapshots stamped by resource coordination so downstream threads (RC)
+    // read thread-safe per-PCS values instead of the shared SCS.
+    uint32_t target_bit_rate;
+    uint32_t frame_rate_numerator;
+    uint32_t frame_rate_denominator;
     uint64_t norm_me_dist;
     uint8_t  tpl_params_ready;
     bool     is_startup_gop;

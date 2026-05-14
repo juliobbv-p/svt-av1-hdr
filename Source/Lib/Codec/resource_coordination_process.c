@@ -65,9 +65,14 @@ typedef struct ResourceCoordinationContext {
     bool bitrate_changed;
     bool frame_rate_changed;
 
+    // Runtime bitrate and frame rate, updated by RATE_CHANGE_EVENT /
+    // FRAME_RATE_CHANGE_EVENT and stamped onto each PCS for thread-safe access.
+    uint32_t runtime_target_bit_rate;
+    uint32_t runtime_frame_rate_numerator;
+    uint32_t runtime_frame_rate_denominator;
+
     // Runtime preset for on-the-fly PRESET_CHANGE_EVENT (init from static_config.enc_mode)
     EncMode runtime_enc_mode;
-    bool    runtime_enc_mode_initialized;
 
     // Persistent state for _iter
     bool             end_of_sequence_flag;
@@ -127,6 +132,13 @@ EbErrorType svt_aom_resource_coordination_context_ctor(EbThreadContext* thread_c
     context_ptr->video_res_change   = false;
     context_ptr->bitrate_changed    = false;
     context_ptr->frame_rate_changed = false;
+
+    // Initialize runtime rate values from the initial config
+    SequenceControlSet* init_scs                = enc_handle_ptr->scs_instance->scs;
+    context_ptr->runtime_enc_mode               = init_scs->static_config.enc_mode;
+    context_ptr->runtime_target_bit_rate        = init_scs->static_config.target_bit_rate;
+    context_ptr->runtime_frame_rate_numerator   = init_scs->static_config.frame_rate_numerator;
+    context_ptr->runtime_frame_rate_denominator = init_scs->static_config.frame_rate_denominator;
 
     return EB_ErrorNone;
 }
@@ -767,9 +779,6 @@ static void update_input_pic_def(ResourceCoordinationContext* ctx, EbBufferHeade
 // Update the target rate, sequence QP...
 static void update_rate_info(ResourceCoordinationContext* ctx, EbBufferHeaderType* input_ptr, SequenceControlSet* scs) {
     EbPrivDataNode* node = (EbPrivDataNode*)input_ptr->p_app_private;
-    // Also update the active SCS so the RC layer sees the new bitrate
-    // without needing a full copy_sequence_control_set
-    SequenceControlSet* active_scs = ctx->scs_active ? (SequenceControlSet*)ctx->scs_active->object_ptr : NULL;
     while (node) {
         if (node->node_type == RATE_CHANGE_EVENT) {
             svt_aom_assert_err(node->size == sizeof(SvtAv1RateInfo) && node->data,
@@ -777,15 +786,10 @@ static void update_rate_info(ResourceCoordinationContext* ctx, EbBufferHeaderTyp
             SvtAv1RateInfo* info = (SvtAv1RateInfo*)node->data;
             if (info->seq_qp != 0) {
                 scs->static_config.qp = info->seq_qp;
-                if (active_scs) {
-                    active_scs->static_config.qp = info->seq_qp;
-                }
             }
             if (info->target_bit_rate != 0) {
                 scs->static_config.target_bit_rate = info->target_bit_rate;
-                if (active_scs) {
-                    active_scs->static_config.target_bit_rate = info->target_bit_rate;
-                }
+                ctx->runtime_target_bit_rate       = info->target_bit_rate;
             }
             ctx->bitrate_changed = true;
         }
@@ -797,9 +801,6 @@ static void update_rate_info(ResourceCoordinationContext* ctx, EbBufferHeaderTyp
 static void update_frame_rate_info(ResourceCoordinationContext* ctx, EbBufferHeaderType* input_ptr,
                                    SequenceControlSet* scs) {
     EbPrivDataNode* node = (EbPrivDataNode*)input_ptr->p_app_private;
-    // Also update the active SCS so the RC layer sees the new frame rate
-    // without needing a full copy_sequence_control_set
-    SequenceControlSet* active_scs = ctx->scs_active ? (SequenceControlSet*)ctx->scs_active->object_ptr : NULL;
     while (node) {
         if (node->node_type == FRAME_RATE_CHANGE_EVENT) {
             svt_aom_assert_err(node->size == sizeof(SvtAv1FrameRateInfo) && node->data,
@@ -809,12 +810,9 @@ static void update_frame_rate_info(ResourceCoordinationContext* ctx, EbBufferHea
             scs->static_config.frame_rate_denominator = info->frame_rate_denominator;
             scs->frame_rate                           = (double)scs->static_config.frame_rate_numerator /
                 (double)scs->static_config.frame_rate_denominator;
-            if (active_scs) {
-                active_scs->static_config.frame_rate_numerator   = info->frame_rate_numerator;
-                active_scs->static_config.frame_rate_denominator = info->frame_rate_denominator;
-                active_scs->frame_rate                           = scs->frame_rate;
-            }
-            ctx->frame_rate_changed = true;
+            ctx->runtime_frame_rate_numerator   = info->frame_rate_numerator;
+            ctx->runtime_frame_rate_denominator = info->frame_rate_denominator;
+            ctx->frame_rate_changed             = true;
         }
         node = node->next;
     }
@@ -828,13 +826,7 @@ static void update_frame_rate_info(ResourceCoordinationContext* ctx, EbBufferHea
 //    That is faster presets don't have any additional features of memory allocations
 //    comparing to slower presets.
 // 3. Some settings are fixed at init time, e.g. SB size.
-static void update_preset_info(ResourceCoordinationContext* ctx, EbBufferHeaderType* input_ptr,
-                               SequenceControlSet* scs) {
-    // Initialize runtime_enc_mode from config on first frame
-    if (!ctx->runtime_enc_mode_initialized) {
-        ctx->runtime_enc_mode             = scs->static_config.enc_mode;
-        ctx->runtime_enc_mode_initialized = true;
-    }
+static void update_preset_info(ResourceCoordinationContext* ctx, EbBufferHeaderType* input_ptr) {
     EbPrivDataNode* node = (EbPrivDataNode*)input_ptr->p_app_private;
     while (node) {
         if (node->node_type == PRESET_CHANGE_EVENT) {
@@ -987,7 +979,7 @@ EbErrorType svt_aom_resource_coordination_kernel_iter(void* context) {
     // Update the frame rate
     update_frame_rate_info(context_ptr, eb_input_ptr, scs);
     // Update the encoder preset
-    update_preset_info(context_ptr, eb_input_ptr, scs);
+    update_preset_info(context_ptr, eb_input_ptr);
     // If config changes occurred since the last picture began encoding, then
     //   prepare a new scs containing the new changes and update the state
     //   of the previous Active scs
@@ -1163,6 +1155,10 @@ EbErrorType svt_aom_resource_coordination_kernel_iter(void* context) {
         pcs->seq_param_changed  = context_ptr->seq_param_change;
         pcs->bitrate_changed    = context_ptr->bitrate_changed;
         pcs->frame_rate_changed = context_ptr->frame_rate_changed;
+        // Stamp runtime rate values onto PCS for thread-safe downstream access
+        pcs->target_bit_rate        = context_ptr->runtime_target_bit_rate;
+        pcs->frame_rate_numerator   = context_ptr->runtime_frame_rate_numerator;
+        pcs->frame_rate_denominator = context_ptr->runtime_frame_rate_denominator;
         // set the scs wrapper to be released after the picture is done
         pcs->scs_wrapper = context_ptr->scs_active;
         // Reset seq_param_change and video_res_change to false
