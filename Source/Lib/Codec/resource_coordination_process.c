@@ -821,6 +821,13 @@ static void update_frame_rate_info(ResourceCoordinationContext* ctx, EbBufferHea
 }
 
 // Update the encoder preset (enc_mode) from PRESET_CHANGE_EVENT
+// NOTE:
+// 1. Value must be within [EbSvtAv1EncConfiguration.enc_mode, MAX_ENC_PRESET],
+//    this is  enforced in enc_handle.c.
+// 2. Current assumption is that faster presets are strict subsets of slower presets.
+//    That is faster presets don't have any additional features of memory allocations
+//    comparing to slower presets.
+// 3. Some settings are fixed at init time, e.g. SB size.
 static void update_preset_info(ResourceCoordinationContext* ctx, EbBufferHeaderType* input_ptr,
                                SequenceControlSet* scs) {
     // Initialize runtime_enc_mode from config on first frame
