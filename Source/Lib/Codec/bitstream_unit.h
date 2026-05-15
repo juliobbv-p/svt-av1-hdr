@@ -180,6 +180,7 @@ typedef struct OdEcEnc {
 void svt_od_ec_enc_init(OdEcEnc* enc, uint32_t size) OD_ARG_NONNULL(1);
 void svt_od_ec_enc_reset(OdEcEnc* enc) OD_ARG_NONNULL(1);
 void svt_od_ec_enc_clear(OdEcEnc* enc) OD_ARG_NONNULL(1);
+void svt_od_ec_enc_ensure_capacity(OdEcEnc* enc, uint32_t min_free) OD_ARG_NONNULL(1);
 void svt_od_ec_encode_bool_q15(OdEcEnc* enc, int32_t val, unsigned f_q15) OD_ARG_NONNULL(1);
 void svt_od_ec_encode_cdf_q15(OdEcEnc* enc, int32_t s, const uint16_t* cdf, int32_t nsyms) OD_ARG_NONNULL(1)
     OD_ARG_NONNULL(3);
@@ -274,30 +275,6 @@ static inline uint64_t BSwap64(uint64_t x) {
 #endif // HAVE_BUILTIN_BSWAP64
 }
 
-// buf is the frame bitbuffer, offs is where carry to be added
-static inline void propagate_carry_bwd(unsigned char* buf, uint32_t offs) {
-    uint16_t carry = 1;
-    do {
-        uint16_t sum = (uint16_t)buf[offs] + 1;
-        buf[offs--]  = (unsigned char)sum;
-        carry        = sum >> 8;
-    } while (carry);
-}
-
-// Convert to big-endian byte order and write data to buffer adding the
-// carry-bit
-static inline void write_enc_data_to_out_buf(unsigned char* out, uint32_t offs, uint64_t output, uint64_t carry,
-                                             uint32_t* enc_offs, uint8_t num_bytes_ready) {
-    const uint64_t reg = HToBE64(output << ((8 - num_bytes_ready) << 3));
-    memcpy(&out[offs], &reg, 8);
-    // Propagate carry backwards if exists
-    if (carry) {
-        assert(offs > 0);
-        propagate_carry_bwd(out, offs - 1);
-    }
-    *enc_offs = offs + num_bytes_ready;
-}
-
 /********************************************************************************************************************************/
 //bitwriter.h
 typedef struct AomWriter {
@@ -315,7 +292,7 @@ static INLINE void aom_start_encode(AomWriter* br, OutputBitstreamUnit* source) 
     br->buffer_size   = source->size;
     br->buffer_parent = source;
     br->pos           = 0;
-    svt_od_ec_enc_init(&br->ec, 62025);
+    svt_od_ec_enc_reset(&br->ec);
 }
 
 EbErrorType svt_realloc_output_bitstream_unit(OutputBitstreamUnit* output_bitstream_ptr, uint32_t sz);
@@ -324,7 +301,6 @@ static INLINE int32_t aom_stop_encode(AomWriter* w) {
     uint32_t bytes = 0;
     uint8_t* data  = svt_od_ec_enc_done(&w->ec, &bytes);
     if (!data) {
-        svt_od_ec_enc_clear(&w->ec);
         return -1;
     }
     int32_t nb_bits = svt_od_ec_enc_tell(&w->ec);
@@ -342,7 +318,6 @@ static INLINE int32_t aom_stop_encode(AomWriter* w) {
     }
 
     w->pos = bytes;
-    svt_od_ec_enc_clear(&w->ec);
     return nb_bits;
 }
 

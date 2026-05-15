@@ -515,11 +515,7 @@ static int32_t av1_write_coeffs_txb_1d(PictureParentControlSet* ppcs, FRAME_CONT
         int       eob_shift = eob_offset_bits - 1;
         int       bit       = (eob_extra & (1 << eob_shift)) ? 1 : 0;
         aom_write_symbol(ec_writer, bit, frame_context->eob_extra_cdf[txs_ctx][component_type][eob_ctx], 2);
-        for (int i = 1; i < eob_offset_bits; i++) {
-            eob_shift = eob_offset_bits - 1 - i;
-            bit       = (eob_extra & (1 << eob_shift)) ? 1 : 0;
-            aom_write_bit(ec_writer, bit);
-        }
+        aom_write_literal(ec_writer, eob_extra, eob_offset_bits - 1);
     }
 
 #if OPT_EC_DC_ONLY
@@ -528,8 +524,9 @@ static int32_t av1_write_coeffs_txb_1d(PictureParentControlSet* ppcs, FRAME_CONT
     // br_ctx=0 (DC position with all-zero neighbors).
     // Skips txb_init_levels and get_nz_map_contexts entirely.
     if (eob == 1) {
-        const int32_t v     = coeff_buffer_ptr[scan[0]];
-        int32_t       level = ABS(v);
+        const int32_t v         = coeff_buffer_ptr[scan[0]];
+        int32_t       level     = ABS(v);
+        AomCdfProb*   dc_br_cdf = frame_context->coeff_br_cdf[AOMMIN(txs_ctx, TX_32X32)][component_type][0];
 
         aom_write_symbol(
             ec_writer, AOMMIN(level, 3) - 1, frame_context->coeff_base_eob_cdf[txs_ctx][component_type][0], 3);
@@ -537,10 +534,7 @@ static int32_t av1_write_coeffs_txb_1d(PictureParentControlSet* ppcs, FRAME_CONT
             int32_t base_range = level - 1 - NUM_BASE_LEVELS;
             for (int32_t idx = 0; idx < COEFF_BASE_RANGE; idx += BR_CDF_SIZE - 1) {
                 const int32_t k = AOMMIN(base_range - idx, BR_CDF_SIZE - 1);
-                aom_write_symbol(ec_writer,
-                                 k,
-                                 frame_context->coeff_br_cdf[AOMMIN(txs_ctx, TX_32X32)][component_type][0],
-                                 BR_CDF_SIZE);
+                aom_write_symbol(ec_writer, k, dc_br_cdf, BR_CDF_SIZE);
                 if (k < BR_CDF_SIZE - 1) {
                     break;
                 }
@@ -567,9 +561,16 @@ static int32_t av1_write_coeffs_txb_1d(PictureParentControlSet* ppcs, FRAME_CONT
     const TxClass tx_class   = tx_type_to_class[tx_type];
     const int32_t br_txs_ctx = AOMMIN(txs_ctx, TX_32X32);
 
+    // Pre-compute CDF base pointers (loop-invariant outer dimensions)
+    AomCdfProb(*base_cdf)[CDF_SIZE(4)]         = frame_context->coeff_base_cdf[txs_ctx][component_type];
+    AomCdfProb(*base_eob_cdf)[CDF_SIZE(3)]     = frame_context->coeff_base_eob_cdf[txs_ctx][component_type];
+    AomCdfProb(*br_cdf)[CDF_SIZE(BR_CDF_SIZE)] = frame_context->coeff_br_cdf[br_txs_ctx][component_type];
+
     // Cache: store level and sign for each scan position 0..eob-1
-    int16_t cached_level[MAX_TX_SQUARE];
-    uint8_t cached_sign[MAX_TX_SQUARE];
+    // VLA sized to eob (guaranteed >= 2 here) instead of MAX_TX_SQUARE (4096)
+    // to reduce stack usage from ~12KB to a few bytes for typical small blocks.
+    int16_t cached_level[eob];
+    uint8_t cached_sign[eob];
     int32_t cul_level = 0;
 
     // Backward pass: base levels + base_range + cache
@@ -584,15 +585,13 @@ static int32_t av1_write_coeffs_txb_1d(PictureParentControlSet* ppcs, FRAME_CONT
         cached_sign[eob - 1]  = (v < 0) ? 1 : 0;
         cul_level += level;
 
-        aom_write_symbol(
-            ec_writer, AOMMIN(level, 3) - 1, frame_context->coeff_base_eob_cdf[txs_ctx][component_type][coeff_ctx], 3);
+        aom_write_symbol(ec_writer, AOMMIN(level, 3) - 1, base_eob_cdf[coeff_ctx], 3);
         if (level > NUM_BASE_LEVELS) {
             int32_t base_range = level - 1 - NUM_BASE_LEVELS;
             int16_t br_ctx     = get_br_ctx(levels, pos, bwl, tx_class);
             for (int32_t idx = 0; idx < COEFF_BASE_RANGE; idx += BR_CDF_SIZE - 1) {
                 const int32_t k = AOMMIN(base_range - idx, BR_CDF_SIZE - 1);
-                aom_write_symbol(
-                    ec_writer, k, frame_context->coeff_br_cdf[br_txs_ctx][component_type][br_ctx], BR_CDF_SIZE);
+                aom_write_symbol(ec_writer, k, br_cdf[br_ctx], BR_CDF_SIZE);
                 if (k < BR_CDF_SIZE - 1) {
                     break;
                 }
@@ -609,15 +608,13 @@ static int32_t av1_write_coeffs_txb_1d(PictureParentControlSet* ppcs, FRAME_CONT
         cached_sign[c]  = (v < 0) ? 1 : 0;
         cul_level += level;
 
-        aom_write_symbol(
-            ec_writer, AOMMIN(level, 3), frame_context->coeff_base_cdf[txs_ctx][component_type][coeff_ctx], 4);
+        aom_write_symbol(ec_writer, AOMMIN(level, 3), base_cdf[coeff_ctx], 4);
         if (level > NUM_BASE_LEVELS) {
             int32_t base_range = level - 1 - NUM_BASE_LEVELS;
             int16_t br_ctx     = get_br_ctx(levels, pos, bwl, tx_class);
             for (int32_t idx = 0; idx < COEFF_BASE_RANGE; idx += BR_CDF_SIZE - 1) {
                 const int32_t k = AOMMIN(base_range - idx, BR_CDF_SIZE - 1);
-                aom_write_symbol(
-                    ec_writer, k, frame_context->coeff_br_cdf[br_txs_ctx][component_type][br_ctx], BR_CDF_SIZE);
+                aom_write_symbol(ec_writer, k, br_cdf[br_ctx], BR_CDF_SIZE);
                 if (k < BR_CDF_SIZE - 1) {
                     break;
                 }
@@ -644,6 +641,10 @@ static int32_t av1_write_coeffs_txb_1d(PictureParentControlSet* ppcs, FRAME_CONT
     set_dc_sign(&cul_level, coeff_buffer_ptr[0]);
     return cul_level;
 #else
+    // Pre-compute CDF base pointers (loop-invariant outer dimensions)
+    AomCdfProb(*base_cdf)[CDF_SIZE(4)]         = frame_context->coeff_base_cdf[txs_ctx][component_type];
+    AomCdfProb(*base_eob_cdf)[CDF_SIZE(3)]     = frame_context->coeff_base_eob_cdf[txs_ctx][component_type];
+    AomCdfProb(*br_cdf)[CDF_SIZE(BR_CDF_SIZE)] = frame_context->coeff_br_cdf[AOMMIN(txs_ctx, TX_32X32)][component_type];
     for (c = eob - 1; c >= 0; --c) {
         const int16_t pos       = scan[c];
         const int32_t v         = coeff_buffer_ptr[pos];
@@ -651,13 +652,9 @@ static int32_t av1_write_coeffs_txb_1d(PictureParentControlSet* ppcs, FRAME_CONT
         int32_t       level     = ABS(v);
 
         if (c == eob - 1) {
-            aom_write_symbol(ec_writer,
-                             AOMMIN(level, 3) - 1,
-                             frame_context->coeff_base_eob_cdf[txs_ctx][component_type][coeff_ctx],
-                             3);
+            aom_write_symbol(ec_writer, AOMMIN(level, 3) - 1, base_eob_cdf[coeff_ctx], 3);
         } else {
-            aom_write_symbol(
-                ec_writer, AOMMIN(level, 3), frame_context->coeff_base_cdf[txs_ctx][component_type][coeff_ctx], 4);
+            aom_write_symbol(ec_writer, AOMMIN(level, 3), base_cdf[coeff_ctx], 4);
         }
         if (level > NUM_BASE_LEVELS) {
             // level is above 1.
@@ -665,10 +662,7 @@ static int32_t av1_write_coeffs_txb_1d(PictureParentControlSet* ppcs, FRAME_CONT
             int16_t br_ctx     = get_br_ctx(levels, pos, bwl, tx_type_to_class[tx_type]);
             for (int32_t idx = 0; idx < COEFF_BASE_RANGE; idx += BR_CDF_SIZE - 1) {
                 const int32_t k = AOMMIN(base_range - idx, BR_CDF_SIZE - 1);
-                aom_write_symbol(ec_writer,
-                                 k,
-                                 frame_context->coeff_br_cdf[AOMMIN(txs_ctx, TX_32X32)][component_type][br_ctx],
-                                 BR_CDF_SIZE);
+                aom_write_symbol(ec_writer, k, br_cdf[br_ctx], BR_CDF_SIZE);
                 if (k < BR_CDF_SIZE - 1) {
                     break;
                 }
@@ -1444,6 +1438,7 @@ static void entropy_coder_dctor(EbPtr p) {
     OutputBitstreamUnit* output_bitstream_ptr = (OutputBitstreamUnit*)obj->ec_output_bitstream_ptr;
     EB_DELETE(output_bitstream_ptr);
 
+    svt_od_ec_enc_clear(&obj->ec_writer.ec);
     EB_FREE(obj->fc);
 }
 
@@ -1456,6 +1451,8 @@ EbErrorType svt_aom_entropy_coder_ctor(EntropyCoder* ec, uint32_t buffer_size) {
 
     EB_NEW(output_bitstream_ptr, svt_aom_output_bitstream_unit_ctor, buffer_size);
     ec->ec_output_bitstream_ptr = output_bitstream_ptr;
+
+    svt_od_ec_enc_init(&ec->ec_writer.ec, 62025);
 
     return EB_ErrorNone;
 }
