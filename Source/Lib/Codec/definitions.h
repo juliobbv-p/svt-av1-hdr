@@ -421,14 +421,17 @@ one more than the minimum. */
 // Pad 4 extra columns to remove horizontal availability check.
 #define TX_PAD_HOR_LOG2 2
 #define TX_PAD_HOR 4
-// Pad 6 extra rows (2 on top and 4 on bottom) to remove vertical availability
-// check.
-#define TX_PAD_TOP 2
+// Pad 4 extra rows on bottom to remove vertical availability check.
+// No top padding needed: context functions only read right/below neighbors.
+#define TX_PAD_TOP 0
 #define TX_PAD_BOTTOM 4
 #define TX_PAD_VER (TX_PAD_TOP + TX_PAD_BOTTOM)
 // Pad 16 extra bytes to avoid reading overflow in SIMD optimization.
 #define TX_PAD_END 16
 #define TX_PAD_2D ((MAX_TX_SIZE + TX_PAD_HOR) * (MAX_TX_SIZE + TX_PAD_VER) + TX_PAD_END)
+// Offset where the guaranteed-zero tail begins in levels_buf.
+// Data is placed so it ends at this offset; the tail serves as bottom padding.
+#define LEVELS_TAIL_OFFSET ((MAX_TX_SIZE + TX_PAD_HOR) * MAX_TX_SIZE)
 #define DIST_PRECISION_BITS 4
 
 #define PROFILE_BITS 3

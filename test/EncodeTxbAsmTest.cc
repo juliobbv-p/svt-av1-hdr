@@ -44,8 +44,9 @@ extern "C" void reset_test_env();
 namespace {
 
 static INLINE uint8_t *set_levels(uint8_t *const levels_buf,
-                                  const int32_t width) {
-    return levels_buf + TX_PAD_TOP * (width + TX_PAD_HOR);
+                                  const int32_t width, const int32_t height) {
+    const int32_t stride = width + TX_PAD_HOR;
+    return levels_buf + LEVELS_TAIL_OFFSET - height * stride;
 }
 
 static INLINE int get_padded_idx(const int idx, const int bwl) {
@@ -87,7 +88,7 @@ class EncodeTxbTest : public ::testing::TestWithParam<GetNzMapContextParam> {
         const int real_height = tx_size_high[tx_size];
         const int16_t *const scan = get_scan_order(tx_size, tx_type)->scan;
 
-        levels_ = set_levels(levels_buf_, width);
+        levels_ = set_levels(levels_buf_, width, height);
         for (int i = 0; i < num_tests; ++i) {
             for (int eob = 1; eob <= width * height; ++eob) {
                 init_levels(scan, bwl, eob);
@@ -246,14 +247,14 @@ class EncodeTxbInitLevelTest
 
         svt_av1_get_time(&finish_time_seconds, &finish_time_useconds);
 
-        // compare the result
+        // compare the result: data rows + right pad, bottom padding, and
+        // TX_PAD_END
         const int stride = width + TX_PAD_HOR;
-        for (int r = 0; r < height + TX_PAD_VER; ++r) {
-            for (int c = 0; c < stride; ++c) {
-                ASSERT_EQ(levels_buf_test_[c + r * stride],
-                          levels_buf_ref_[c + r * stride])
-                    << "[" << r << "," << c << "] " << width << "x" << height;
-            }
+        const int total = (height + TX_PAD_BOTTOM) * stride + TX_PAD_END;
+        for (int i = 0; i < total; ++i) {
+            ASSERT_EQ(levels_test_[i], levels_ref_[i])
+                << "mismatch at offset " << i << " (row " << i / stride
+                << ", col " << i % stride << ") " << width << "x" << height;
         }
 
         if (is_speed) {
@@ -283,9 +284,17 @@ class EncodeTxbInitLevelTest
         memset(levels_buf_test_, 111, sizeof(levels_buf_test_));
         memset(levels_buf_ref_, 128, sizeof(levels_buf_test_));
 
+        // Zero the tail for bottom padding
+        memset(levels_buf_test_ + LEVELS_TAIL_OFFSET,
+               0,
+               TX_PAD_2D - LEVELS_TAIL_OFFSET);
+        memset(levels_buf_ref_ + LEVELS_TAIL_OFFSET,
+               0,
+               TX_PAD_2D - LEVELS_TAIL_OFFSET);
+
         // fill the input buffer with random
-        levels_test_ = set_levels(levels_buf_test_, width);
-        levels_ref_ = set_levels(levels_buf_ref_, width);
+        levels_test_ = set_levels(levels_buf_test_, width, height);
+        levels_ref_ = set_levels(levels_buf_ref_, width, height);
 
         for (int i = 0; i < width * height; i++) {
             input_coeff_[i] = rnd_->random();

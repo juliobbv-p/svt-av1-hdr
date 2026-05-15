@@ -92,11 +92,7 @@ static INLINE int32_t get_golomb_cost(int32_t abs_qc) {
 
 void svt_av1_txb_init_levels_c(const TranLow* const coeff, const int32_t width, const int32_t height,
                                uint8_t* const levels) {
-    const int32_t stride = width + TX_PAD_HOR;
-    uint8_t*      ls     = levels;
-
-    memset(levels - TX_PAD_TOP * stride, 0, sizeof(*levels) * TX_PAD_TOP * stride);
-    memset(levels + stride * height, 0, sizeof(*levels) * (TX_PAD_BOTTOM * stride + TX_PAD_END));
+    uint8_t* ls = levels;
 
     for (int32_t i = 0; i < height; i++) {
         for (int32_t j = 0; j < width; j++) {
@@ -378,11 +374,10 @@ uint64_t svt_av1_cost_coeffs_txb(ModeDecisionContext* ctx, uint8_t allow_update_
     const int32_t width  = get_txb_wide(transform_size);
     const int32_t height = get_txb_high(transform_size);
 
-    const ScanOrder* const scan_order = get_scan_order(transform_size, transform_type);
-    const int16_t* const   scan       = scan_order->scan;
-    uint8_t                levels_buf[TX_PAD_2D];
-    uint8_t* const         levels = set_levels(levels_buf, width);
-    DECLARE_ALIGNED(16, int8_t, coeff_contexts[MAX_TX_SQUARE]);
+    const ScanOrder* const scan_order     = get_scan_order(transform_size, transform_type);
+    const int16_t* const   scan           = scan_order->scan;
+    uint8_t* const         levels         = set_levels(ctx->md_levels_buf, width, height);
+    int8_t* const          coeff_contexts = ctx->md_coeff_contexts;
     assert(txs_ctx < TX_SIZES);
     const LvMapCoeffCost* const coeff_costs = &ctx->md_rate_est_ctx->coeff_fac_bits[txs_ctx][plane_type];
 

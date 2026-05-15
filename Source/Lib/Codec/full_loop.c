@@ -1073,8 +1073,7 @@ static void svt_av1_optimize_b(PictureControlSet* pcs, ModeDecisionContext* ctx,
     }
     const int64_t rdmult =
         (((((int64_t)lambda * plane_rd_mult[allintra || rtc][is_inter][plane_type]) * rweight) / 100) + 2) >> rshift;
-    uint8_t        levels_buf[TX_PAD_2D];
-    uint8_t* const levels = set_levels(levels_buf, width);
+    uint8_t* const levels = set_levels(ctx->md_levels_buf, width, height);
 
     if (*eob > 1) {
         svt_av1_txb_init_levels(qcoeff_ptr, width, height, levels);

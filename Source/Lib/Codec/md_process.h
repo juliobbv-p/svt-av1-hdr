@@ -1277,6 +1277,10 @@ typedef struct ModeDecisionContext {
     bool obmc_neighbor_luma_pred_ready; // Flag indicating if luma neighbor prediction is prepared
     bool obmc_neighbor_chroma_pred_ready; // Flag indicating if luma neighbor prediction is prepared
     bool obmc_is_luma_neigh_10bit; // Flag indicating if neighbor uses 10-bit data
+    // Persistent buffers for svt_av1_cost_coeffs_txb() / svt_av1_optimize_b()
+    // (moved from the stack to avoid repeated tail-zeroing).
+    uint8_t md_levels_buf[TX_PAD_2D];
+    DECLARE_ALIGNED(16, int8_t, md_coeff_contexts[MAX_TX_SQUARE]);
 } ModeDecisionContext;
 
 /**************************************

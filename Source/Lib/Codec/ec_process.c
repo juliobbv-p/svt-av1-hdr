@@ -12,6 +12,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include "enc_handle.h"
 #include "entropy_coding.h"
 #include "ec_process.h"
@@ -39,6 +40,10 @@ EbErrorType svt_aom_entropy_coding_context_ctor(EbThreadContext* thread_ctx, con
     thread_ctx->dctor = rest_context_dctor;
 
     context_ptr->is_16bit = enc_handle_ptr->scs_instance->scs->static_config.encoder_bit_depth > EB_EIGHT_BIT;
+
+    // Zero levels_buf once; the tail (offset >= LEVELS_TAIL_OFFSET) serves as
+    // bottom padding for all block sizes via offset-based placement in set_levels.
+    memset(context_ptr->levels_buf + LEVELS_TAIL_OFFSET, 0, TX_PAD_2D - LEVELS_TAIL_OFFSET);
 
     // Input/Output System Resource Manager FIFOs
     context_ptr->enc_dec_input_fifo_ptr = svt_system_resource_get_consumer_fifo(

@@ -65,6 +65,9 @@ typedef struct EntropyCodingContext {
     uint64_t tot_qindex; // qindex accumulator
     uint32_t valid_area; // valid area accumulator
 #endif
+    // Pre-allocated buffers for av1_write_coeffs_txb_1d (moved off stack)
+    uint8_t levels_buf[TX_PAD_2D];
+    DECLARE_ALIGNED(16, int8_t, coeff_contexts[MAX_TX_SQUARE]);
 } EntropyCodingContext;
 
 /**************************************
