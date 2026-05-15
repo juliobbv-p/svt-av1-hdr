@@ -73,6 +73,11 @@ EbErrorType svt_realloc_output_bitstream_unit(OutputBitstreamUnit* output_bitstr
     return EB_ErrorNone;
 }
 
+// ptr points one past the last written byte; propagate carry backward
+static inline void propagate_carry_bwd(unsigned char* ptr) {
+    while (!++*--ptr) {}
+}
+
 /*A range encoder.
   See entdec.c and the references for implementation details \cite{Mar79,MNW98}.
 
@@ -98,27 +103,60 @@ EbErrorType svt_realloc_output_bitstream_unit(OutputBitstreamUnit* output_bitstr
    URL="http://researchcommons.waikato.ac.nz/bitstream/handle/10289/78/content.pdf"
   }*/
 
+/*Flush accumulated bytes from the arithmetic coder to the output buffer.
+  This is the cold path of normalize, kept out-of-line to reduce icache
+  pressure on the hot (no-flush) path.
+  Returns the residual low value after flushing.*/
+static NOINLINE void od_ec_enc_flush(OdEcEnc* enc, OdEcWindow low, unsigned rng, int c, int d) {
+    // Need to add 1 byte here since enc->cnt always counts 1 byte less
+    // (enc->cnt = -9) to ensure correct operation
+    int s              = c + d;
+    int num_bits_ready = (s & ~7) + 8;
+
+    // Update "c" to contain the number of non-ready bits in "low". Since "low"
+    // has 64-bit capacity, we need to add the (64 - 40) cushion bits and take
+    // off the number of ready bits.
+    c += 24 - num_bits_ready;
+
+    // Extract ready bits from low
+    uint64_t output = low >> c;
+
+    // Separate carry bit from data
+    uint64_t mask = (uint64_t)1 << num_bits_ready;
+
+    if (output & mask) {
+        assert(enc->ptr > enc->buf);
+        propagate_carry_bwd(enc->ptr);
+    }
+
+    // Write to buffer. Carry bit will be shifted away, no need to mask
+    // output &= mask - 1;
+    const uint64_t reg = HToBE64(output << (64 - num_bits_ready));
+    memcpy(enc->ptr, &reg, 8);
+
+    enc->ptr += num_bits_ready >> 3;
+
+    low &= (((uint64_t)1 << c) - 1);
+
+    enc->low = low << d;
+    enc->rng = rng << d;
+    enc->cnt = (s & 7) - 8;
+}
+
 /*Takes updated low and range values, renormalizes them so that
      32768 <= rng < 65536 (flushing bytes from low to the output buffer if
      necessary), and stores them back in the encoder context.
     low: The new value of low.
     rng: The new value of the range.*/
-static void svt_od_ec_enc_normalize(OdEcEnc* enc, OdEcWindow low, unsigned rng) {
-    int d;
-    int c;
-    int s;
-    if (enc->error) {
-        return;
-    }
-    c = enc->cnt;
+static inline void svt_od_ec_enc_normalize(OdEcEnc* enc, OdEcWindow low, unsigned rng) {
+    int c = enc->cnt;
     assert(rng <= 65535U);
     /*The number of leading zeros in the 16-bit binary representation of rng.*/
-    d = 16 - OD_ILOG_NZ(rng);
-    s = c + d;
+    int d = 15 - svt_log2f(rng);
 
     /* We flush every time "low" cannot safely and efficiently accommodate any
        more data. Overall, c must not exceed 63 at the time of byte flush out. To
-       facilitate this, "s" cannot exceed 56-bits because we have to keep 1 byte
+       facilitate this, "c+d" cannot exceed 56-bits because we have to keep 1 byte
        for carry. Also, we need to subtract 16 because we want to keep room for
        the next symbol worth "d"-bits (max 15). An alternate condition would be if
        (e < d), where e = number of leading zeros in "low", indicating there is
@@ -126,69 +164,28 @@ static void svt_od_ec_enc_normalize(OdEcEnc* enc, OdEcWindow low, unsigned rng) 
        this approach needs additional computations: (i) compute "e", (ii) push
        the leading 0x00's as a special case.
     */
-    if (s >= 40) { // 56 - 16
-        unsigned char* out     = enc->buf;
-        uint32_t       storage = enc->storage;
-        uint32_t       offs    = enc->offs;
-        if (offs + 8 > storage) {
-            storage = 2 * storage + 8;
-            EB_REALLOC_ARRAY_NO_CHECK(out, storage);
-            if (out == NULL) {
-                enc->error = -1;
-                return;
-            }
-            enc->buf     = out;
-            enc->storage = storage;
-        }
-        // Need to add 1 byte here since enc->cnt always counts 1 byte less
-        // (enc->cnt = -9) to ensure correct operation
-        uint8_t num_bytes_ready = (s >> 3) + 1;
-
-        // Update "c" to contain the number of non-ready bits in "low". Since "low"
-        // has 64-bit capacity, we need to add the (64 - 40) cushion bits and take
-        // off the number of ready bits.
-        c += 24 - (num_bytes_ready << 3);
-
-        // Prepare "output" and update "low"
-        uint64_t output = low >> c;
-        low             = low & (((uint64_t)1 << c) - 1);
-
-        // Prepare data and carry mask
-        uint64_t mask  = (uint64_t)1 << (num_bytes_ready << 3);
-        uint64_t carry = output & mask;
-
-        mask   = mask - 0x01;
-        output = output & mask;
-
-        // Write data in a single operation
-        write_enc_data_to_out_buf(out, offs, output, carry, &enc->offs, num_bytes_ready);
-
-        // Update state of the encoder: enc->cnt to contain the number of residual
-        // bits
-        s = c + d - 24;
+    if (EB_UNLIKELY(c + d >= 40)) { // 56 - 16
+        od_ec_enc_flush(enc, low, rng, c, d);
+    } else {
+        enc->low = low << d;
+        enc->rng = rng << d;
+        enc->cnt = c + d;
     }
-    enc->low = low << d;
-    enc->rng = rng << d;
-    enc->cnt = s;
 }
 
 /*Initializes the encoder.
-  size: The initial size of the buffer, in bytes.*/
-void svt_od_ec_enc_init(OdEcEnc* enc, uint32_t size) {
+  The EC does not own a buffer; it borrows one from the OutputBitstreamUnit
+  via aom_start_encode(). This just zeroes the state.*/
+void svt_od_ec_enc_init(OdEcEnc* enc) {
+    enc->buf = NULL;
     svt_od_ec_enc_reset(enc);
-    EB_MALLOC_ARRAY_NO_CHECK(enc->buf, size);
-    enc->storage = size;
-    if (size > 0 && enc->buf == NULL) {
-        enc->storage = 0;
-        enc->error   = -1;
-    }
 }
 
 /*Reinitializes the encoder.*/
 void svt_od_ec_enc_reset(OdEcEnc* enc) {
-    enc->offs = 0;
-    enc->low  = 0;
-    enc->rng  = 0x8000;
+    enc->ptr = enc->buf;
+    enc->low = 0;
+    enc->rng = 0x8000;
     /*This is initialized to -9 so that it crosses zero after we've accumulated
        one byte + one carry bit.*/
     enc->cnt   = -9;
@@ -201,35 +198,50 @@ void svt_od_ec_enc_reset(OdEcEnc* enc) {
 
 /*Frees the buffers used by the encoder.*/
 void svt_od_ec_enc_clear(OdEcEnc* enc) {
-    EB_FREE_ARRAY(enc->buf);
+    // EC borrows its buffer from OutputBitstreamUnit; nothing to free.
+    enc->buf = NULL;
+    enc->ptr = NULL;
 }
 
-/*Encodes a symbol given its frequency in Q15.
-  fl: CDF_PROB_TOP minus the cumulative frequency of all symbols that come
-  before the one to be encoded.
-  fh: CDF_PROB_TOP minus the cumulative frequency of all symbols up to and
-  including the one to be encoded.*/
-static void svt_od_ec_encode_q15(OdEcEnc* enc, unsigned fl, unsigned fh, int s, int nsyms) {
-    OdEcWindow l;
-    unsigned   r;
-    l = enc->low;
-    r = enc->rng;
+/*Ensures the EC buffer has at least min_free bytes of free space.
+  Reallocs through the AomWriter's buffer_parent (OutputBitstreamUnit)
+  since EC borrows that buffer.  Should be called before encoding each SB
+  to move capacity checks out of the per-symbol hot path.*/
+EbErrorType svt_aom_ec_ensure_capacity(AomWriter* w, uint32_t min_free) {
+    EbErrorType          ret    = EB_ErrorNone;
+    OutputBitstreamUnit* parent = w->buffer_parent;
+    OdEcEnc*             enc    = &w->ec;
+    uint32_t             offs   = (uint32_t)(enc->ptr - enc->buf);
+    uint32_t             needed = offs + min_free;
+    if (needed > parent->size) {
+        // Realloc through the OutputBitstreamUnit that owns the buffer
+        ret = svt_realloc_output_bitstream_unit(parent, needed);
+        if (ret != EB_ErrorNone) {
+            enc->error = -1;
+        } else {
+            // Update EC's borrowed pointers
+            enc->buf = parent->buffer_begin_av1;
+            enc->ptr = enc->buf + offs;
+        }
+    }
+    return ret;
+}
+
+/*Encode a single binary value with 1/2 probability.
+  val: The value to encode (0 or 1).*/
+void svt_od_ec_encode_bool_eq_q15(OdEcEnc* enc, int val) {
+    OdEcWindow l = enc->low;
+    uint32_t   r = enc->rng;
     assert(32768U <= r);
-    assert(fh <= fl);
-    assert(fl <= 32768U);
-    assert(7 - EC_PROB_SHIFT >= 0);
-    const int N = nsyms - 1;
-    if (fl < CDF_PROB_TOP) {
-        unsigned u = ((r >> 8) * (uint32_t)(fl >> EC_PROB_SHIFT) >> (7 - EC_PROB_SHIFT)) + EC_MIN_PROB * (N - (s - 1));
-        unsigned v = ((r >> 8) * (uint32_t)(fh >> EC_PROB_SHIFT) >> (7 - EC_PROB_SHIFT)) + EC_MIN_PROB * (N - (s + 0));
-        l += r - u;
-        r = u - v;
-    } else {
-        r -= ((r >> 8) * (uint32_t)(fh >> EC_PROB_SHIFT) >> (7 - EC_PROB_SHIFT)) + EC_MIN_PROB * (N - (s + 0));
+    uint32_t v = ((r >> 8) << (CDF_PROB_BITS - 1 - 7)) + EC_MIN_PROB;
+    r -= v;
+    if (val) {
+        l += r;
+        r = v;
     }
     svt_od_ec_enc_normalize(enc, l, r);
 #if OD_MEASURE_EC_OVERHEAD
-    enc->entropy -= OD_LOG2((double)(OD_ICDF(fh) - OD_ICDF(fl)) / CDF_PROB_TOP.);
+    enc->entropy -= OD_LOG2((double)(val ? f : (32768 - f)) / 32768.);
     enc->nb_symbols++;
 #endif
 }
@@ -237,21 +249,18 @@ static void svt_od_ec_encode_q15(OdEcEnc* enc, unsigned fl, unsigned fh, int s, 
 /*Encode a single binary value.
   val: The value to encode (0 or 1).
   f: The probability that the val is one, scaled by 32768.*/
-void svt_od_ec_encode_bool_q15(OdEcEnc* enc, int val, unsigned f) {
-    OdEcWindow l;
-    unsigned   r;
-    unsigned   v;
-    assert(0 < f);
+void svt_od_ec_encode_bool_q15(OdEcEnc* enc, int val, uint32_t f) {
     assert(f < 32768U);
-    l = enc->low;
-    r = enc->rng;
+    OdEcWindow l = enc->low;
+    uint32_t   r = enc->rng;
     assert(32768U <= r);
-    v = ((r >> 8) * (uint32_t)(f >> EC_PROB_SHIFT) >> (7 - EC_PROB_SHIFT));
-    v += EC_MIN_PROB;
+    EB_ASSUME(f <= 32768);
+    uint32_t v = ((r >> 8) * (f >> EC_PROB_SHIFT) >> (7 - EC_PROB_SHIFT)) + EC_MIN_PROB;
+    r -= v;
     if (val) {
-        l += r - v;
+        l += r;
+        r = v;
     }
-    r = val ? v : r - v;
     svt_od_ec_enc_normalize(enc, l, r);
 #if OD_MEASURE_EC_OVERHEAD
     enc->entropy -= OD_LOG2((double)(val ? f : (32768 - f)) / 32768.);
@@ -268,11 +277,27 @@ void svt_od_ec_encode_bool_q15(OdEcEnc* enc, int val, unsigned f) {
   nsyms: The number of symbols in the alphabet.
          This should be at most 16.*/
 void svt_od_ec_encode_cdf_q15(OdEcEnc* enc, int s, const uint16_t* icdf, int nsyms) {
-    (void)nsyms;
     assert(s >= 0);
     assert(s < nsyms);
     assert(icdf[nsyms - 1] == OD_ICDF(CDF_PROB_TOP));
-    svt_od_ec_encode_q15(enc, s > 0 ? icdf[s - 1] : OD_ICDF(0), icdf[s], s, nsyms);
+
+    OdEcWindow l = enc->low;
+    uint32_t   r = enc->rng;
+    assert(32768U <= r);
+    assert(7 - EC_PROB_SHIFT >= 0);
+    const uint32_t r_hi = r >> 8;
+    const uint32_t temp = EC_MIN_PROB * (nsyms - 1 - s);
+    if (0 < s) {
+        uint32_t u = (r_hi * (icdf[s - 1] >> EC_PROB_SHIFT) >> (7 - EC_PROB_SHIFT)) + temp + EC_MIN_PROB;
+        l += r - u;
+        r = u;
+    }
+    r -= (r_hi * (icdf[s] >> EC_PROB_SHIFT) >> (7 - EC_PROB_SHIFT)) + temp;
+    svt_od_ec_enc_normalize(enc, l, r);
+#if OD_MEASURE_EC_OVERHEAD
+    enc->entropy -= OD_LOG2((double)(OD_ICDF(fh) - OD_ICDF(fl)) / CDF_PROB_TOP.);
+    enc->nb_symbols++;
+#endif
 }
 
 /*Indicates that there are no more symbols to encode.
@@ -282,14 +307,6 @@ void svt_od_ec_encode_cdf_q15(OdEcEnc* enc, int s, const uint16_t* icdf, int nsy
   Return: A pointer to the start of the final buffer, or NULL if there was an
            encoding error.*/
 unsigned char* svt_od_ec_enc_done(OdEcEnc* enc, uint32_t* nbytes) {
-    unsigned char* out;
-    uint32_t       storage;
-    uint32_t       offs;
-    OdEcWindow     m;
-    OdEcWindow     e;
-    OdEcWindow     l;
-    int            c;
-    int            s;
     if (enc->error) {
         return NULL;
     }
@@ -303,54 +320,26 @@ unsigned char* svt_od_ec_enc_done(OdEcEnc* enc, uint32_t* nbytes) {
     }
 #endif
 
-    l = enc->low;
-    c = enc->cnt;
-    s = 10;
-    m = 0x3FFF;
-    e = ((l + m) & ~m) | (m + 1);
-    s += c;
-    offs = enc->offs;
-
-    /*Make sure there's enough room for the entropy-coded bits.*/
-    out              = enc->buf;
-    storage          = enc->storage;
-    const int s_bits = (s + 7) >> 3;
-    int       b      = MAX(s_bits, 0);
-    if (offs + b > storage) {
-        storage = offs + b;
-        EB_REALLOC_ARRAY_NO_CHECK(out, storage);
-        if (out == NULL) {
-            enc->error = -1;
-            return NULL;
-        }
-        enc->buf     = out;
-        enc->storage = storage;
-    }
+    int c = enc->cnt;
 
     /*We output the minimum number of bits that ensures that the symbols encoded
        thus far will be decoded correctly regardless of the bits that follow.*/
-    if (s > 0) {
-        uint64_t n;
-        n = ((uint64_t)1 << (c + 16)) - 1;
-        do {
-            assert(offs < storage);
-            uint16_t val = (uint16_t)(e >> (c + 16));
-            out[offs]    = (unsigned char)(val & 0x00FF);
-            if (val & 0x0100) {
-                assert(offs > 0);
-                propagate_carry_bwd(out, offs - 1);
-            }
-            offs++;
-
-            e &= n;
-            s -= 8;
-            c -= 8;
-            n >>= 8;
-        } while (s > 0);
+    OdEcWindow m = 0x3FFF;
+    OdEcWindow e = ((enc->low + m) & ~m) | (m + 1);
+    OdEcWindow v = e >> (c + 16);
+    if (v & 0x0100) {
+        assert(enc->ptr > enc->buf);
+        propagate_carry_bwd(enc->ptr);
     }
-    *nbytes = offs;
+    do {
+        *enc->ptr++ = (unsigned char)((e >> (c + 16)) & 0xFF);
 
-    return out;
+        c -= 8;
+    } while (10 + c > 0);
+
+    *nbytes = (uint32_t)(enc->ptr - enc->buf);
+
+    return enc->buf;
 }
 
 /*Returns the number of bits "used" by the encoded symbols so far.
@@ -365,7 +354,7 @@ unsigned char* svt_od_ec_enc_done(OdEcEnc* enc, uint32_t* nbytes) {
 int svt_od_ec_enc_tell(const OdEcEnc* enc) {
     /*The 10 here counteracts the offset of -9 baked into cnt, and adds 1 extra
        bit, which we reserve for terminating the stream.*/
-    return (enc->cnt + 10) + enc->offs * 8;
+    return (enc->cnt + 10) + (int)(enc->ptr - enc->buf) * 8;
 }
 
 /*Given the current total integer number of bits used and the current value of

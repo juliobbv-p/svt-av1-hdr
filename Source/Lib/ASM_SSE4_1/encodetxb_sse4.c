@@ -28,7 +28,6 @@ void svt_av1_txb_init_levels_sse4_1(const TranLow* const coeff, const int32_t wi
     uint8_t*       ls = levels;
     const TranLow* cf = coeff;
     if (width == 4) {
-        xx_storeu_128(ls - 16, zeros);
         do {
             const __m128i coeffA  = xx_loadu_128(cf);
             const __m128i coeffB  = xx_loadu_128(cf + 4);
@@ -41,11 +40,7 @@ void svt_av1_txb_init_levels_sse4_1(const TranLow* const coeff, const int32_t wi
             cf += (width << 1);
             i += 2;
         } while (i < height);
-        xx_storeu_128(ls, zeros);
-        xx_storeu_128(ls + 16, zeros);
     } else if (width == 8) {
-        xx_storeu_128(ls - 24, zeros);
-        xx_storeu_128(ls - 8, zeros);
         do {
             const __m128i coeffA  = xx_loadu_128(cf);
             const __m128i coeffB  = xx_loadu_128(cf + 4);
@@ -57,13 +52,7 @@ void svt_av1_txb_init_levels_sse4_1(const TranLow* const coeff, const int32_t wi
             cf += width;
             i += 1;
         } while (i < height);
-        xx_storeu_128(ls, zeros);
-        xx_storeu_128(ls + 16, zeros);
-        xx_storeu_128(ls + 32, zeros);
     } else if (width == 16) {
-        xx_storeu_128(ls - 40, zeros);
-        xx_storeu_128(ls - 24, zeros);
-        xx_storeu_128(ls - 8, zeros);
         do {
             int j = 0;
             do {
@@ -84,17 +73,7 @@ void svt_av1_txb_init_levels_sse4_1(const TranLow* const coeff, const int32_t wi
             ls += stride;
             i += 1;
         } while (i < height);
-        xx_storeu_128(ls, zeros);
-        xx_storeu_128(ls + 16, zeros);
-        xx_storeu_128(ls + 32, zeros);
-        xx_storeu_128(ls + 48, zeros);
-        xx_storeu_128(ls + 64, zeros);
     } else {
-        xx_storeu_128(ls - 72, zeros);
-        xx_storeu_128(ls - 56, zeros);
-        xx_storeu_128(ls - 40, zeros);
-        xx_storeu_128(ls - 24, zeros);
-        xx_storeu_128(ls - 8, zeros);
         do {
             int j = 0;
             do {
@@ -115,15 +94,6 @@ void svt_av1_txb_init_levels_sse4_1(const TranLow* const coeff, const int32_t wi
             ls += stride;
             i += 1;
         } while (i < height);
-        xx_storeu_128(ls, zeros);
-        xx_storeu_128(ls + 16, zeros);
-        xx_storeu_128(ls + 32, zeros);
-        xx_storeu_128(ls + 48, zeros);
-        xx_storeu_128(ls + 64, zeros);
-        xx_storeu_128(ls + 80, zeros);
-        xx_storeu_128(ls + 96, zeros);
-        xx_storeu_128(ls + 112, zeros);
-        xx_storeu_128(ls + 128, zeros);
     }
 }
 

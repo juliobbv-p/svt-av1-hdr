@@ -139,19 +139,25 @@ static void reset_segmentation_map(SegmentationNeighborMap* segmentation_map) {
  * Reset Mode Decision Neighbor Arrays
  *************************************************/
 static void reset_encode_pass_neighbor_arrays(PictureControlSet* pcs, uint16_t tile_idx) {
-    svt_aom_neighbor_array_unit_reset(pcs->ep_luma_recon_na[tile_idx]);
-    svt_aom_neighbor_array_unit_reset(pcs->ep_cb_recon_na[tile_idx]);
-    svt_aom_neighbor_array_unit_reset(pcs->ep_cr_recon_na[tile_idx]);
-    svt_aom_neighbor_array_unit_reset(pcs->ep_luma_dc_sign_level_coeff_na[tile_idx]);
-    svt_aom_neighbor_array_unit_reset(pcs->ep_cb_dc_sign_level_coeff_na[tile_idx]);
-    svt_aom_neighbor_array_unit_reset(pcs->ep_cr_dc_sign_level_coeff_na[tile_idx]);
+    if (!pcs->pic_bypass_encdec) {
+        // 8-bit recon + 8-bit DC-sign coeff NAs are only consumed by perform_intra/inter_coding_loop,
+        // which is skipped when bypass_encdec=1 (early-return in encode_b). Skip the dead reset.
+        svt_aom_neighbor_array_unit_reset(pcs->ep_luma_recon_na[tile_idx]);
+        svt_aom_neighbor_array_unit_reset(pcs->ep_cb_recon_na[tile_idx]);
+        svt_aom_neighbor_array_unit_reset(pcs->ep_cr_recon_na[tile_idx]);
+        svt_aom_neighbor_array_unit_reset(pcs->ep_luma_dc_sign_level_coeff_na[tile_idx]);
+        svt_aom_neighbor_array_unit_reset(pcs->ep_cb_dc_sign_level_coeff_na[tile_idx]);
+        svt_aom_neighbor_array_unit_reset(pcs->ep_cr_dc_sign_level_coeff_na[tile_idx]);
+    }
+    // _update / partition / txfm NAs are consumed under cdf_ctrl.update_coef/update_se
+    // independent of bypass_encdec; keep these resets unconditional.
     svt_aom_neighbor_array_unit_reset(pcs->ep_luma_dc_sign_level_coeff_na_update[tile_idx]);
     svt_aom_neighbor_array_unit_reset(pcs->ep_cb_dc_sign_level_coeff_na_update[tile_idx]);
     svt_aom_neighbor_array_unit_reset(pcs->ep_cr_dc_sign_level_coeff_na_update[tile_idx]);
     svt_aom_neighbor_array_unit_reset(pcs->ep_partition_context_na[tile_idx]);
     svt_aom_neighbor_array_unit_reset(pcs->ep_txfm_context_na[tile_idx]);
     // TODO(Joel): 8-bit ep_luma_recon_na (Cb,Cr) when is_16bit==0?
-    if (pcs->ppcs->scs->is_16bit_pipeline) {
+    if (pcs->ppcs->scs->is_16bit_pipeline && !pcs->pic_bypass_encdec) {
         svt_aom_neighbor_array_unit_reset(pcs->ep_luma_recon_na_16bit[tile_idx]);
         svt_aom_neighbor_array_unit_reset(pcs->ep_cb_recon_na_16bit[tile_idx]);
         svt_aom_neighbor_array_unit_reset(pcs->ep_cr_recon_na_16bit[tile_idx]);

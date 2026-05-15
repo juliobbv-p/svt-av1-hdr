@@ -12,6 +12,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include "enc_handle.h"
 #include "entropy_coding.h"
 #include "ec_process.h"
@@ -40,6 +41,10 @@ EbErrorType svt_aom_entropy_coding_context_ctor(EbThreadContext* thread_ctx, con
 
     context_ptr->is_16bit = enc_handle_ptr->scs_instance->scs->static_config.encoder_bit_depth > EB_EIGHT_BIT;
 
+    // Zero levels_buf once; the tail (offset >= LEVELS_TAIL_OFFSET) serves as
+    // bottom padding for all block sizes via offset-based placement in set_levels.
+    memset(context_ptr->levels_buf + LEVELS_TAIL_OFFSET, 0, TX_PAD_2D - LEVELS_TAIL_OFFSET);
+
     // Input/Output System Resource Manager FIFOs
     context_ptr->enc_dec_input_fifo_ptr = svt_system_resource_get_consumer_fifo(
         enc_handle_ptr->rest_results_resource_ptr, index);
@@ -59,8 +64,6 @@ static void entropy_coding_reset_neighbor_arrays(PictureControlSet* pcs, uint16_
     svt_aom_neighbor_array_unit_reset(pcs->cb_dc_sign_level_coeff_na[tile_idx]);
     svt_aom_neighbor_array_unit_reset(pcs->cr_dc_sign_level_coeff_na[tile_idx]);
     svt_aom_neighbor_array_unit_reset(pcs->txfm_context_array[tile_idx]);
-    svt_aom_neighbor_array_unit_reset(pcs->segmentation_id_pred_array[tile_idx]);
-    return;
 }
 
 /**************************************************
@@ -154,7 +157,7 @@ void* svt_aom_entropy_coding_kernel(void* input_ptr) {
         SequenceControlSet* scs          = pcs->scs;
         // SB Constants
 
-        uint8_t sb_size = (uint8_t)scs->sb_size;
+        uint32_t sb_size = scs->sb_size;
 
         uint8_t          sb_size_log2    = (uint8_t)svt_log2f(sb_size);
         uint32_t         pic_width_in_sb = (pcs->ppcs->aligned_width + sb_size - 1) >> sb_size_log2;
@@ -200,6 +203,12 @@ void* svt_aom_entropy_coding_kernel(void* input_ptr) {
                     EbPictureBufferDesc* coeff_picture_ptr = pcs->ppcs->enc_dec_ptr->quantized_coeff[sb_index];
                     context_ptr->coded_area_sb             = 0;
                     context_ptr->coded_area_sb_uv          = 0;
+                    // Ensure EC buffer has room for worst-case SB output (4 bytes/pixel)
+                    EbErrorType ret = svt_aom_ec_ensure_capacity(&pcs->ec_info[tile_idx]->ec->ec_writer,
+                                                                 sb_size * sb_size * 4);
+                    if (ret != EB_ErrorNone) {
+                        return NULL;
+                    }
                     svt_aom_write_modes_sb(context_ptr,
                                            sb_ptr,
                                            pcs,

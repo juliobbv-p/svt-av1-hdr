@@ -333,9 +333,7 @@ enum {
 #define CFL_BUF_SQUARE (CFL_BUF_LINE * CFL_BUF_LINE)
 /***********************************    AV1_OBU     ********************************/
 #define INVALID_NEIGHBOR_DATA 0xFFu
-#define CONFIG_BITSTREAM_DEBUG 0
 #define CONFIG_COEFFICIENT_RANGE_CHECKING 0
-#define CONFIG_ENTROPY_STATS 0
 
 // Max superblock size
 #define MAX_SB_SIZE_LOG2 7
@@ -419,14 +417,17 @@ one more than the minimum. */
 // Pad 4 extra columns to remove horizontal availability check.
 #define TX_PAD_HOR_LOG2 2
 #define TX_PAD_HOR 4
-// Pad 6 extra rows (2 on top and 4 on bottom) to remove vertical availability
-// check.
-#define TX_PAD_TOP 2
+// Pad 4 extra rows on bottom to remove vertical availability check.
+// No top padding needed: context functions only read right/below neighbors.
+#define TX_PAD_TOP 0
 #define TX_PAD_BOTTOM 4
 #define TX_PAD_VER (TX_PAD_TOP + TX_PAD_BOTTOM)
 // Pad 16 extra bytes to avoid reading overflow in SIMD optimization.
 #define TX_PAD_END 16
 #define TX_PAD_2D ((MAX_TX_SIZE + TX_PAD_HOR) * (MAX_TX_SIZE + TX_PAD_VER) + TX_PAD_END)
+// Offset where the guaranteed-zero tail begins in levels_buf.
+// Data is placed so it ends at this offset; the tail serves as bottom padding.
+#define LEVELS_TAIL_OFFSET ((MAX_TX_SIZE + TX_PAD_HOR) * MAX_TX_SIZE)
 #define DIST_PRECISION_BITS 4
 
 #define PROFILE_BITS 3
@@ -509,6 +510,14 @@ typedef int16_t InterpKernel[SUBPEL_TAPS];
 #endif
 #endif
 
+#ifndef EB_ASSUME
+#if HAVE_BUILTIN_ASSUME
+#define EB_ASSUME(x) __builtin_assume(x)
+#else
+#define EB_ASSUME(x) ((void)0)
+#endif
+#endif
+
 #if defined(__clang__) && defined(__has_warning)
 #if __has_feature(cxx_attributes) && __has_warning("-Wimplicit-fallthrough")
 #define AOM_FALLTHROUGH_INTENDED [[clang::fallthrough]] // NOLINT
@@ -574,6 +583,59 @@ static __inline void mem_put_le32(void* vmem, MEM_VALUE_T val) {
     mem[2] = (MAU_T)((val >> 16) & 0xff);
     mem[3] = (MAU_T)((val >> 24) & 0xff);
 }
+
+// bitops.h
+// These versions of get_msb() are only valid when n != 0 because all
+// of the optimized versions are undefined when n == 0:
+// https://gcc.gnu.org/onlinedocs/gcc/Other-Builtins.html
+
+#define svt_log2f_safe(x) get_msb((x) | 1)
+#define svt_log2f get_msb
+
+#ifdef _MSC_VER
+#if defined(_M_X64) || defined(_M_IX86)
+#include <intrin.h>
+#define USE_MSC_INTRINSICS
+#endif
+#endif
+
+// use GNU builtins where available.
+#if defined(__GNUC__) && ((__GNUC__ == 3 && __GNUC_MINOR__ >= 4) || __GNUC__ >= 4)
+static INLINE int32_t get_msb(uint32_t n) {
+    assert(n != 0);
+    return 31 - __builtin_clz(n);
+}
+#elif defined(USE_MSC_INTRINSICS)
+#pragma intrinsic(_BitScanReverse)
+
+static INLINE int32_t get_msb(uint32_t n) {
+    unsigned long first_set_bit;
+    assert(n != 0);
+    _BitScanReverse(&first_set_bit, n);
+    return first_set_bit;
+}
+
+#undef USE_MSC_INTRINSICS
+#else
+// Returns (int32_t)floor(log2(n)). n must be > 0.
+/*static*/ INLINE int32_t get_msb(uint32_t n) {
+    int32_t  log   = 0;
+    uint32_t value = n;
+    int32_t  i;
+
+    assert(n != 0);
+
+    for (i = 4; i >= 0; --i) {
+        const int32_t  shift = (1 << i);
+        const uint32_t x     = value >> shift;
+        if (x != 0) {
+            value = x;
+            log += shift;
+        }
+    }
+    return log;
+}
+#endif
 
 /* clang-format on */
 

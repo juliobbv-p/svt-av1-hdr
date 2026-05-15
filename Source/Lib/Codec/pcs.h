@@ -273,7 +273,6 @@ typedef struct PictureControlSet {
     NeighborArrayUnit** cb_dc_sign_level_coeff_na;
     NeighborArrayUnit** txfm_context_array;
 
-    NeighborArrayUnit**      segmentation_id_pred_array;
     SegmentationNeighborMap* segmentation_neighbor_map;
 
     MbModeInfo** mi_grid_base;
@@ -850,11 +849,6 @@ typedef struct PictureParentControlSet {
     int32_t ref_frame_map[REF_FRAMES];
     // index of picture in the mg
     uint32_t pic_idx_in_mg;
-
-    /* profile settings */
-#if CONFIG_ENTROPY_STATS
-    int32_t coef_cdf_category;
-#endif
 
     // Global quant matrix tables
     const QmVal* giqmatrix[NUM_QM_LEVELS][3][TX_SIZES_ALL];

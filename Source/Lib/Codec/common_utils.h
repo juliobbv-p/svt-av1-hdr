@@ -89,8 +89,12 @@ static INLINE int32_t get_ext_tx_set(TxSize tx_size, int32_t is_inter, int32_t u
     return ext_tx_set_index[is_inter][set_type];
 }
 
-static INLINE uint8_t* set_levels(uint8_t* const levels_buf, const int32_t width) {
-    return levels_buf + TX_PAD_TOP * (width + TX_PAD_HOR);
+// Place data in levels_buf so rows 0..height-1 end at LEVELS_TAIL_OFFSET.
+// The tail (>= LEVELS_TAIL_OFFSET) is never written by init_levels, so its
+// zeros serve as bottom padding for all block sizes.
+static INLINE uint8_t* set_levels(uint8_t* const levels_buf, const int32_t width, const int32_t height) {
+    const int32_t stride = width + TX_PAD_HOR;
+    return levels_buf + LEVELS_TAIL_OFFSET - height * stride;
 }
 
 static INLINE TxSize av1_get_adjusted_tx_size(TxSize tx_size) {

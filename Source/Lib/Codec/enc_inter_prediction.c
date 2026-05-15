@@ -335,7 +335,7 @@ static void model_rd_with_curvfit(PictureControlSet* pcs, BlockSize plane_bsize,
     }
 
     const double sse_norm = (double)sse / num_samples;
-    const double xqr      = (double)svt_log2f((uint32_t)sse_norm / (qstep * qstep));
+    const double xqr      = (double)svt_log2f_safe((uint32_t)sse_norm / (qstep * qstep));
 
     double rate_f, dist_by_sse_norm_f;
     av1_model_rd_curvfit(plane_bsize, sse_norm, xqr, &rate_f, &dist_by_sse_norm_f);
@@ -2277,7 +2277,8 @@ static void inter_intra_prediction(PictureControlSet* pcs, ModeDecisionContext* 
                 if (pu_origin_y != 0 && pu_origin_x != 0) {
                     topNeighArray[0] = leftNeighArray[0] =
                         recon_neigh_y
-                            ->top_left_array[(recon_neigh_y->max_pic_h + pu_origin_x - pu_origin_y) << is16bit];
+                            ->top_left_array[(svt_aom_na_topleft_offset(recon_neigh_y, pu_origin_x, pu_origin_y))
+                                             << is16bit];
                 }
             }
         }
@@ -2304,7 +2305,8 @@ static void inter_intra_prediction(PictureControlSet* pcs, ModeDecisionContext* 
             if (blk_originy_uv != 0 && blk_originx_uv != 0) {
                 topNeighArray[0] = leftNeighArray[0] =
                     recon_neigh_cb
-                        ->top_left_array[(recon_neigh_cb->max_pic_h + blk_originx_uv - blk_originy_uv / 2) << is16bit];
+                        ->top_left_array[(svt_aom_na_topleft_offset(recon_neigh_cb, blk_originx_uv, blk_originy_uv / 2))
+                                         << is16bit];
             }
         } else {
             dst = pred_pic->v_buffer +
@@ -2328,7 +2330,8 @@ static void inter_intra_prediction(PictureControlSet* pcs, ModeDecisionContext* 
             if (blk_originy_uv != 0 && blk_originx_uv != 0) {
                 topNeighArray[0] = leftNeighArray[0] =
                     recon_neigh_cr
-                        ->top_left_array[(recon_neigh_cr->max_pic_h + blk_originx_uv - blk_originy_uv / 2) << is16bit];
+                        ->top_left_array[(svt_aom_na_topleft_offset(recon_neigh_cr, blk_originx_uv, blk_originy_uv / 2))
+                                         << is16bit];
             }
         }
         const TxSize tx_size    = tx_depth_to_tx_size[0][bsize];

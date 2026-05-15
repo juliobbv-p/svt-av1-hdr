@@ -227,6 +227,10 @@ EbErrorType svt_aom_mode_decision_context_ctor(ModeDecisionContext* ctx, Sequenc
     ctx->dctor  = mode_decision_context_dctor;
     ctx->hbd_md = enable_hbd_mode_decision;
 
+    // Zero the tail of md_levels_buf once; it serves as permanent bottom-padding
+    // for set_levels() and is never overwritten by svt_av1_txb_init_levels().
+    memset(ctx->md_levels_buf + LEVELS_TAIL_OFFSET, 0, TX_PAD_2D - LEVELS_TAIL_OFFSET);
+
     // Input/Output System Resource Manager FIFOs
     ctx->mode_decision_configuration_input_fifo_ptr = mode_decision_configuration_input_fifo_ptr;
     ctx->mode_decision_output_fifo_ptr              = mode_decision_output_fifo_ptr;

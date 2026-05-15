@@ -35,14 +35,11 @@ static INLINE __m256i txb_init_levels_avx2(const TranLow* const coeff) {
 void svt_av1_txb_init_levels_avx2(const TranLow* const coeff, const int32_t width, const int32_t height,
                                   uint8_t* const levels) {
     const TranLow* cf      = coeff;
-    const __m128i  x_zeros = _mm_setzero_si128();
     const __m256i  y_zeros = _mm256_setzero_si256();
     uint8_t*       ls      = levels;
     int32_t        i       = height;
 
     if (width == 4) {
-        xx_storeu_128(ls - 16, x_zeros);
-
         do {
             const __m256i idx   = _mm256_setr_epi32(0, 2, 4, 6, 1, 3, 5, 7);
             const __m256i c0    = yy_loadu_256(cf);
@@ -56,11 +53,7 @@ void svt_av1_txb_init_levels_avx2(const TranLow* const coeff, const int32_t widt
             ls += 4 * 8;
             i -= 4;
         } while (i);
-
-        yy_storeu_256(ls, y_zeros);
     } else if (width == 8) {
-        yy_storeu_256(ls - 24, y_zeros);
-
         do {
             const __m256i res  = txb_init_levels_avx2(cf);
             const __m128i res0 = _mm256_castsi256_si128(res);
@@ -77,13 +70,7 @@ void svt_av1_txb_init_levels_avx2(const TranLow* const coeff, const int32_t widt
             ls += 4 * 12;
             i -= 4;
         } while (i);
-
-        yy_storeu_256(ls + 0 * 32, y_zeros);
-        xx_storeu_128(ls + 1 * 32, x_zeros);
     } else if (width == 16) {
-        yy_storeu_256(ls - 40, y_zeros);
-        xx_storel_64(ls - 8, x_zeros);
-
         do {
             const __m256i res  = txb_init_levels_avx2(cf);
             const __m128i res0 = _mm256_castsi256_si128(res);
@@ -96,15 +83,7 @@ void svt_av1_txb_init_levels_avx2(const TranLow* const coeff, const int32_t widt
             ls += 2 * 20;
             i -= 2;
         } while (i);
-
-        yy_storeu_256(ls + 0 * 32, y_zeros);
-        yy_storeu_256(ls + 1 * 32, y_zeros);
-        xx_storeu_128(ls + 2 * 32, x_zeros);
     } else {
-        yy_storeu_256(ls - 72, y_zeros);
-        yy_storeu_256(ls - 40, y_zeros);
-        xx_storel_64(ls - 8, x_zeros);
-
         do {
             const __m256i res = txb_init_levels_avx2(cf);
             yy_storeu_256(ls, res);
@@ -112,12 +91,6 @@ void svt_av1_txb_init_levels_avx2(const TranLow* const coeff, const int32_t widt
             cf += 32;
             ls += 36;
         } while (--i);
-
-        yy_storeu_256(ls + 0 * 32, y_zeros);
-        yy_storeu_256(ls + 1 * 32, y_zeros);
-        yy_storeu_256(ls + 2 * 32, y_zeros);
-        yy_storeu_256(ls + 3 * 32, y_zeros);
-        xx_storeu_128(ls + 4 * 32, x_zeros);
     }
 }
 

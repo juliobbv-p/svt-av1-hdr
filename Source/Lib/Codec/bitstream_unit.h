@@ -18,13 +18,6 @@
 extern "C" {
 #endif
 
-#ifdef _MSC_VER
-#if defined(_M_X64) || defined(_M_IX86)
-#include <intrin.h>
-#define USE_MSC_INTRINSICS
-#endif
-#endif
-
 /**********************************
  * Bitstream Unit Types
  **********************************/
@@ -46,55 +39,6 @@ EbErrorType svt_aom_output_bitstream_reset(OutputBitstreamUnit* bitstream_ptr);
 /********************************************************************************************************************************/
 /********************************************************************************************************************************/
 #include "cabac_context_model.h"
-/********************************************************************************************************************************/
-// bitops.h
-// These versions of get_msb() are only valid when n != 0 because all
-// of the optimized versions are undefined when n == 0:
-// https://gcc.gnu.org/onlinedocs/gcc/Other-Builtins.html
-
-// use GNU builtins where available.
-#if defined(__GNUC__) && ((__GNUC__ == 3 && __GNUC_MINOR__ >= 4) || __GNUC__ >= 4)
-static INLINE int32_t get_msb(uint32_t n) {
-    assert(n != 0);
-    return 31 - __builtin_clz(n);
-}
-#elif defined(USE_MSC_INTRINSICS)
-#pragma intrinsic(_BitScanReverse)
-
-static INLINE int32_t get_msb(uint32_t n) {
-    unsigned long first_set_bit;
-    assert(n != 0);
-    _BitScanReverse(&first_set_bit, n);
-    return first_set_bit;
-}
-
-#undef USE_MSC_INTRINSICS
-#else
-// Returns (int32_t)floor(log2(n)). n must be > 0.
-/*static*/ INLINE int32_t get_msb(uint32_t n) {
-    int32_t  log   = 0;
-    uint32_t value = n;
-    int32_t  i;
-
-    assert(n != 0);
-
-    for (i = 4; i >= 0; --i) {
-        const int32_t  shift = (1 << i);
-        const uint32_t x     = value >> shift;
-        if (x != 0) {
-            value = x;
-            log += shift;
-        }
-    }
-    return log;
-}
-#endif
-/********************************************************************************************************************************/
-//odintrin.h
-
-#define OD_CLZ0 (1)
-#define OD_CLZ(x) (-get_msb(x))
-#define OD_ILOG_NZ(x) (OD_CLZ0 - OD_CLZ(x))
 
 #define OD_DIVU_DMAX (1024)
 
@@ -105,9 +49,10 @@ extern uint32_t svt_aom_od_divu_small_consts[OD_DIVU_DMAX][2];
     ((uint32_t)((svt_aom_od_divu_small_consts[(_d) - 1][0] * (uint64_t)(_x) + \
                  svt_aom_od_divu_small_consts[(_d) - 1][1]) >>                \
                 32) >>                                                        \
-     (OD_ILOG_NZ(_d) - 1))
+     (svt_log2f(_d)))
 
 #define OD_DIVU(_x, _d) (((_d) < OD_DIVU_DMAX) ? (OD_DIVU_SMALL((_x), (_d))) : ((_x) / (_d)))
+#define OD_ILOG_NZ(_x) (svt_log2f(_x) + 1)
 
 /*Enable special features for gcc and compatible compilers.*/
 #if defined(__GNUC__) && defined(__GNUC_MINOR__) && defined(__GNUC_PATCHLEVEL__)
@@ -154,22 +99,20 @@ typedef uint64_t OdEcWindow;
 
 /*The entropy encoder context.*/
 typedef struct OdEcEnc {
-    /*Buffered output.
-      This contains only the raw bits until the final call to od_ec_enc_done(),
-       where all the arithmetic-coded data gets prepended to it.*/
-    unsigned char* buf;
-    /*The size of the buffer.*/
-    uint32_t storage;
-    /*The offset at which the next entropy-coded byte will be written.*/
-    uint32_t offs;
     /*The low end of the current range.*/
     OdEcWindow low;
-    /*The number of values in the current range.*/
-    uint16_t rng;
+    /*The number of values in the current range.
+      Widened to uint32_t to eliminate uxth zero-extension instructions on ARM64.
+      Value is always in [0x8000, 0xFFFF] post-normalize.*/
+    uint32_t rng;
     /*The number of bits of data in the current value.*/
     int16_t cnt;
     /*Nonzero if an error occurred.*/
-    int error;
+    int16_t error;
+    /*Buffered output. Borrowed from OutputBitstreamUnit via aom_start_encode().*/
+    unsigned char* buf;
+    /*Write pointer: next byte to write. Invariant: ptr = buf + (bytes written).*/
+    unsigned char* ptr;
 #if OD_MEASURE_EC_OVERHEAD
     double entropy;
     int    nb_symbols;
@@ -177,9 +120,9 @@ typedef struct OdEcEnc {
 } OdEcEnc;
 
 /*See entenc.c for further documentation.*/
-void svt_od_ec_enc_init(OdEcEnc* enc, uint32_t size) OD_ARG_NONNULL(1);
+void svt_od_ec_enc_init(OdEcEnc* enc) OD_ARG_NONNULL(1);
 void svt_od_ec_enc_reset(OdEcEnc* enc) OD_ARG_NONNULL(1);
-void svt_od_ec_enc_clear(OdEcEnc* enc) OD_ARG_NONNULL(1);
+void svt_od_ec_encode_bool_eq_q15(OdEcEnc* enc, int32_t val) OD_ARG_NONNULL(1);
 void svt_od_ec_encode_bool_q15(OdEcEnc* enc, int32_t val, unsigned f_q15) OD_ARG_NONNULL(1);
 void svt_od_ec_encode_cdf_q15(OdEcEnc* enc, int32_t s, const uint16_t* cdf, int32_t nsyms) OD_ARG_NONNULL(1)
     OD_ARG_NONNULL(3);
@@ -274,89 +217,43 @@ static inline uint64_t BSwap64(uint64_t x) {
 #endif // HAVE_BUILTIN_BSWAP64
 }
 
-// buf is the frame bitbuffer, offs is where carry to be added
-static inline void propagate_carry_bwd(unsigned char* buf, uint32_t offs) {
-    uint16_t carry = 1;
-    do {
-        uint16_t sum = (uint16_t)buf[offs] + 1;
-        buf[offs--]  = (unsigned char)sum;
-        carry        = sum >> 8;
-    } while (carry);
-}
-
-// Convert to big-endian byte order and write data to buffer adding the
-// carry-bit
-static inline void write_enc_data_to_out_buf(unsigned char* out, uint32_t offs, uint64_t output, uint64_t carry,
-                                             uint32_t* enc_offs, uint8_t num_bytes_ready) {
-    const uint64_t reg = HToBE64(output << ((8 - num_bytes_ready) << 3));
-    memcpy(&out[offs], &reg, 8);
-    // Propagate carry backwards if exists
-    if (carry) {
-        assert(offs > 0);
-        propagate_carry_bwd(out, offs - 1);
-    }
-    *enc_offs = offs + num_bytes_ready;
-}
-
 /********************************************************************************************************************************/
 //bitwriter.h
 typedef struct AomWriter {
-    unsigned int pos;
-    uint8_t*     buffer;
-    uint32_t     buffer_size;
+    OdEcEnc  ec;
+    uint32_t allow_update_cdf;
+    uint32_t pos;
     // save a pointer to the container holding the buffer, in case the buffer must be resized
     OutputBitstreamUnit* buffer_parent;
-    OdEcEnc              ec;
-    uint8_t              allow_update_cdf;
 } AomWriter;
 
 static INLINE void aom_start_encode(AomWriter* br, OutputBitstreamUnit* source) {
-    br->buffer        = source->buffer_av1;
-    br->buffer_size   = source->size;
     br->buffer_parent = source;
     br->pos           = 0;
-    svt_od_ec_enc_init(&br->ec, 62025);
+    // Borrow tile buffer: EC writes directly to OutputBitstreamUnit's buffer
+    br->ec.buf = source->buffer_begin_av1;
+    svt_od_ec_enc_reset(&br->ec);
 }
 
 EbErrorType svt_realloc_output_bitstream_unit(OutputBitstreamUnit* output_bitstream_ptr, uint32_t sz);
 
-static INLINE int32_t aom_stop_encode(AomWriter* w) {
+/*Ensures the EC buffer has at least min_free bytes of free space.
+  Reallocs through the AomWriter's buffer_parent (OutputBitstreamUnit).
+  Should be called before encoding each SB.*/
+EbErrorType svt_aom_ec_ensure_capacity(AomWriter* w, uint32_t min_free);
+
+static INLINE void aom_stop_encode(AomWriter* w) {
     uint32_t bytes = 0;
     uint8_t* data  = svt_od_ec_enc_done(&w->ec, &bytes);
     if (!data) {
-        svt_od_ec_enc_clear(&w->ec);
-        return -1;
+        return;
     }
-    int32_t nb_bits = svt_od_ec_enc_tell(&w->ec);
-    // If buffer is smaller than data, increase buffer size
-    if (w->buffer_size < bytes) {
-        svt_realloc_output_bitstream_unit(w->buffer_parent,
-                                          bytes + 1); // plus one for good measure
-        w->buffer      = w->buffer_parent->buffer_av1;
-        w->buffer_size = bytes + 1;
-    }
-    if (svt_memcpy != NULL) {
-        svt_memcpy(w->buffer, data, bytes);
-    } else {
-        svt_memcpy_c(w->buffer, data, bytes);
-    }
-
+    // EC wrote directly to buffer_parent's buffer — no memcpy needed.
     w->pos = bytes;
-    svt_od_ec_enc_clear(&w->ec);
-    return nb_bits;
-}
-
-static INLINE void aom_write(AomWriter* w, int bit, int prob) {
-    int p = (0x7FFFFF - (prob << 15) + prob) >> 8;
-#if CONFIG_BITSTREAM_DEBUG
-    AomCdfProb cdf[2] = {(AomCdfProb)p, 32767};
-    bitstream_queue_push(bit, cdf, 2);
-#endif
-    svt_od_ec_encode_bool_q15(&w->ec, bit, p);
 }
 
 static INLINE void aom_write_bit(AomWriter* w, int bit) {
-    aom_write(w, bit, 128); // aom_prob_half
+    svt_od_ec_encode_bool_eq_q15(&w->ec, bit);
 }
 
 static INLINE void aom_write_literal(AomWriter* w, unsigned data, int bits) {
@@ -365,15 +262,17 @@ static INLINE void aom_write_literal(AomWriter* w, unsigned data, int bits) {
     }
 }
 
-static INLINE void aom_write_cdf(AomWriter* w, int symb, const AomCdfProb* cdf, int nsymbs) {
-#if CONFIG_BITSTREAM_DEBUG
-    bitstream_queue_push(symb, cdf, nsymbs);
-#endif
-    svt_od_ec_encode_cdf_q15(&w->ec, symb, cdf, nsymbs);
-}
-
 static INLINE void aom_write_symbol(AomWriter* w, int symb, AomCdfProb* cdf, int nsymbs) {
-    aom_write_cdf(w, symb, cdf, nsymbs);
+    if (nsymbs == 2) {
+        // Binary CDF specialization: route directly to the optimal bool encoder.
+        // For nsyms==2, the CDF encode path is provably equivalent to
+        // svt_od_ec_encode_bool_q15(enc, symb, cdf[0]).
+        // When nsymbs is a compile-time constant 2, this branch folds away.
+        svt_od_ec_encode_bool_q15(&w->ec, symb, cdf[0]);
+    } else {
+        svt_od_ec_encode_cdf_q15(&w->ec, symb, cdf, nsymbs);
+    }
+
     if (w->allow_update_cdf) {
         update_cdf(cdf, symb, nsymbs);
     }

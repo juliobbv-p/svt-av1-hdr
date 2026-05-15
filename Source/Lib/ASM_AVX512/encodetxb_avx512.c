@@ -44,15 +44,12 @@ static INLINE __m512i txb_init_levels_64_avx512(const TranLow* const coeff) {
 
 void svt_av1_txb_init_levels_avx512(const TranLow* const coeff, const int32_t width, const int32_t height,
                                     uint8_t* const levels) {
-    const TranLow* cf      = coeff;
-    const __m128i  x_zeros = _mm_setzero_si128();
-    uint8_t*       ls      = levels;
-    int32_t        i       = height;
+    const TranLow* cf = coeff;
+    uint8_t*       ls = levels;
+    int32_t        i  = height;
 
     if (width == 4) {
         const __m256i y_zeros = _mm256_setzero_si256();
-
-        xx_storeu_128(ls - 16, x_zeros);
 
         do {
             const __m256i c0    = yy_loadu_256(cf);
@@ -67,13 +64,7 @@ void svt_av1_txb_init_levels_avx512(const TranLow* const coeff, const int32_t wi
             ls += 4 * 8;
             i -= 4;
         } while (i);
-
-        yy_storeu_256(ls, y_zeros);
     } else if (width == 8) {
-        const __m256i y_zeros = _mm256_setzero_si256();
-
-        yy_storeu_256(ls - 24, y_zeros);
-
         do {
             const __m256i res  = txb_init_levels_32_avx512(cf);
             const __m128i res0 = _mm256_castsi256_si128(res);
@@ -90,16 +81,7 @@ void svt_av1_txb_init_levels_avx512(const TranLow* const coeff, const int32_t wi
             ls += 4 * 12;
             i -= 4;
         } while (i);
-
-        yy_storeu_256(ls + 0 * 32, y_zeros);
-        xx_storeu_128(ls + 1 * 32, x_zeros);
     } else if (width == 16) {
-        const __m256i y_zeros = _mm256_setzero_si256();
-        const __m512i z_zeros = _mm512_setzero_si512();
-
-        yy_storeu_256(ls - 40, y_zeros);
-        xx_storel_64(ls - 8, x_zeros);
-
         do {
             const __m512i res  = txb_init_levels_64_avx512(cf);
             const __m256i r0   = _mm512_castsi512_si256(res);
@@ -120,15 +102,7 @@ void svt_av1_txb_init_levels_avx512(const TranLow* const coeff, const int32_t wi
             ls += 4 * 20;
             i -= 4;
         } while (i);
-
-        _mm512_storeu_si512((__m512i*)(ls + 0 * 64), z_zeros);
-        xx_storeu_128(ls + 1 * 64, x_zeros);
     } else {
-        const __m512i z_zeros = _mm512_setzero_si512();
-
-        _mm512_storeu_si512((__m512i*)(ls - 72), z_zeros);
-        xx_storel_64(ls - 8, x_zeros);
-
         do {
             const __m512i res  = txb_init_levels_64_avx512(cf);
             const __m256i res0 = _mm512_castsi512_si256(res);
@@ -141,10 +115,6 @@ void svt_av1_txb_init_levels_avx512(const TranLow* const coeff, const int32_t wi
             ls += 2 * 36;
             i -= 2;
         } while (i);
-
-        _mm512_storeu_si512((__m512i*)(ls + 0 * 64), z_zeros);
-        _mm512_storeu_si512((__m512i*)(ls + 1 * 64), z_zeros);
-        xx_storeu_128(ls + 2 * 64, x_zeros);
     }
 }
 #endif // EN_AVX512_SUPPORT

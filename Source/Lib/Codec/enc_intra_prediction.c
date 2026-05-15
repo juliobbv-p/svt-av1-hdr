@@ -617,15 +617,14 @@ EbErrorType svt_av1_intra_prediction(uint8_t hbd_md, ModeDecisionContext* ctx, P
         }
 
         if (blk_org_y != 0 && blk_org_x != 0) {
+            uint32_t tl_offset = svt_aom_na_topleft_offset(recon_neigh, blk_org_x, blk_org_y);
             if (is_16bit) {
                 uint16_t* top_hbd  = (uint16_t*)top_neigh_array;
                 uint16_t* left_hbd = (uint16_t*)left_neigh_array;
-                top_hbd[0] = left_hbd[0] = ((uint16_t*)(recon_neigh->top_left_array) + recon_neigh->max_pic_h +
-                                            blk_org_x - blk_org_y)[0];
+                top_hbd[0] = left_hbd[0] = ((uint16_t*)recon_neigh->top_left_array)[tl_offset];
 
             } else {
-                top_neigh_array[0] = left_neigh_array[0] =
-                    recon_neigh->top_left_array[recon_neigh->max_pic_h + blk_org_x - blk_org_y];
+                top_neigh_array[0] = left_neigh_array[0] = recon_neigh->top_left_array[tl_offset];
             }
         }
 
@@ -685,14 +684,13 @@ static void intra_luma_prediction_for_interintra(ModeDecisionContext* ctx, Pictu
     }
 
     if (ctx->blk_org_y != 0 && ctx->blk_org_x != 0) {
+        uint32_t tl_offset = svt_aom_na_topleft_offset(recon_neigh, ctx->blk_org_x, ctx->blk_org_y);
         if (is_16bit) {
             uint16_t* top_hbd  = (uint16_t*)top_neigh_array;
             uint16_t* left_hbd = (uint16_t*)left_neigh_array;
-            top_hbd[0] = left_hbd[0] = ((uint16_t*)(recon_neigh->top_left_array) + recon_neigh->max_pic_h +
-                                        ctx->blk_org_x - ctx->blk_org_y)[0];
+            top_hbd[0] = left_hbd[0] = ((uint16_t*)recon_neigh->top_left_array)[tl_offset];
         } else {
-            top_neigh_array[0] = left_neigh_array[0] =
-                recon_neigh->top_left_array[recon_neigh->max_pic_h + ctx->blk_org_x - ctx->blk_org_y];
+            top_neigh_array[0] = left_neigh_array[0] = recon_neigh->top_left_array[tl_offset];
         }
     }
     svt_av1_predict_intra_block(ctx->blk_ptr->av1xd,
