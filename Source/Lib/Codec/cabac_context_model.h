@@ -469,6 +469,7 @@ static INLINE uint8_t get_prob(unsigned int num, unsigned int den) {
 static INLINE void update_cdf(AomCdfProb* cdf, int8_t val, int nsymbs) {
     assert(nsymbs < 17);
     const int count = cdf[nsymbs];
+    cdf[nsymbs] += (count < 32);
 
     // rate is computed in the spec as:
     //  3 + ( cdf[N] > 15 ) + ( cdf[N] > 31 ) + Min(FloorLog2(N), 2)
@@ -480,20 +481,18 @@ static INLINE void update_cdf(AomCdfProb* cdf, int8_t val, int nsymbs) {
     // 32). So using that information:
     //  count >> 4 is 0 for count from 0 to 15.
     //  count >> 4 is 1 for count from 16 to 31.
-    //  count >> 4 is 2 for count == 31.
+    //  count >> 4 is 2 for count == 32.
     // Now, the equation becomes:
     //  4 + (count >> 4) + (nsymbs > 3).
     const int rate = 4 + (count >> 4) + (nsymbs > 3);
 
     int i = 0;
-    do {
-        if (i < val) {
-            cdf[i] += (CDF_PROB_TOP - cdf[i]) >> rate;
-        } else {
-            cdf[i] -= cdf[i] >> rate;
-        }
-    } while (++i < nsymbs - 1);
-    cdf[nsymbs] += (count < 32);
+    for (; i < val; i++) {
+        cdf[i] += (CDF_PROB_TOP - cdf[i]) >> rate;
+    }
+    for (; i < nsymbs - 1; i++) {
+        cdf[i] -= cdf[i] >> rate;
+    }
 }
 
 /**********************************************************************************************************************/
