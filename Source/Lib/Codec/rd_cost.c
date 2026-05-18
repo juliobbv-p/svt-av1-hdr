@@ -367,7 +367,7 @@ uint64_t svt_av1_cost_coeffs_txb(ModeDecisionContext* ctx, uint8_t allow_update_
     //Note: there is a different version of this function in AOM that seems to be efficient as its name is:
     //warehouse_efficients_txb
 
-    const TxSize  txs_ctx  = (TxSize)((txsize_sqr_map[transform_size] + txsize_sqr_up_map[transform_size] + 1) >> 1);
+    const TxSize  txs_ctx  = get_txsize_entropy_ctx(transform_size);
     const TxClass tx_class = tx_type_to_class[transform_type];
     int32_t       cost;
     const int32_t bwl    = get_txb_bwl(transform_size);

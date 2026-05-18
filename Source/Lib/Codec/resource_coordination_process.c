@@ -360,11 +360,6 @@ static EbErrorType reset_pcs_av1(PictureParentControlSet* pcs) {
     frm_hdr->force_integer_mv        = 0; // 0 the default in AOM, 1 only integer
     frm_hdr->allow_warped_motion     = 0;
 
-    /* profile settings */
-#if CONFIG_ENTROPY_STATS
-    int32_t coef_cdf_category;
-#endif
-
     frm_hdr->quantization_params.base_q_idx          = 31;
     frm_hdr->quantization_params.delta_q_ac[PLANE_Y] = 0;
     frm_hdr->quantization_params.delta_q_dc[PLANE_Y] = pcs->scs->static_config.luma_y_dc_qindex_offset;

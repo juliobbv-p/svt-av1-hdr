@@ -887,11 +887,6 @@ typedef struct PictureParentControlSet {
     // index of picture in the mg
     uint32_t pic_idx_in_mg;
 
-    /* profile settings */
-#if CONFIG_ENTROPY_STATS
-    int32_t coef_cdf_category;
-#endif
-
     // Global quant matrix tables
     const QmVal* giqmatrix[NUM_QM_LEVELS][3][TX_SIZES_ALL];
     const QmVal* gqmatrix[NUM_QM_LEVELS][3][TX_SIZES_ALL];
