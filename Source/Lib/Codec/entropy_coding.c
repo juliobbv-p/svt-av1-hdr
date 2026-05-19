@@ -4747,7 +4747,7 @@ static EbErrorType av1_code_tx_size(PictureControlSet* pcs, int segment_id, FRAM
                                     MacroBlockD* xd, const MbModeInfo* mbmi, TxSize tx_size, TxMode tx_mode,
                                     BlockSize bsize, uint8_t skip) {
     EbErrorType return_error = EB_ErrorNone;
-    int         is_inter_tx  = is_inter_block(&mbmi->block_mi) || is_intrabc_block(&mbmi->block_mi);
+    int         is_inter_tx  = is_inter_block(&mbmi->block_mi);
     //int skip = mbmi->skip;
     //int segment_id = 0;// mbmi->segment_id;
     if (tx_mode == TX_MODE_SELECT && block_signals_txsize(bsize) && !(is_inter_tx && skip) &&
@@ -4769,7 +4769,7 @@ static EbErrorType av1_code_tx_size(PictureControlSet* pcs, int segment_id, FRAM
             set_txfm_ctxs(tx_size, xd->n8_w, xd->n8_h, 0, xd);
         }
     } else {
-        set_txfm_ctxs(tx_size, xd->n8_w, xd->n8_h, skip && is_inter_block(&mbmi->block_mi), xd);
+        set_txfm_ctxs(tx_size, xd->n8_w, xd->n8_h, skip && is_inter_tx, xd);
     }
 
     return return_error;
@@ -4848,13 +4848,8 @@ static void code_tx_size(PictureControlSet* pcs, uint32_t blk_org_x, uint32_t bl
     TxMode        tx_mode                  = pcs->ppcs->frm_hdr.tx_mode;
     Av1Common*    cm                       = pcs->ppcs->av1_cm;
     MacroBlockD*  xd                       = blk_ptr->av1xd;
-    TileInfo*     tile                     = &xd->tile;
-    int32_t       mi_row                   = blk_org_y >> MI_SIZE_LOG2;
-    int32_t       mi_col                   = blk_org_x >> MI_SIZE_LOG2;
-    const int32_t bw                       = mi_size_wide[bsize];
-    const int32_t bh                       = mi_size_high[bsize];
-    uint32_t      mi_stride                = pcs->mi_stride;
-    set_mi_row_col(pcs, xd, tile, mi_row, bh, mi_col, bw, mi_stride, cm->mi_rows, cm->mi_cols);
+    // xd fields (mi, up_available, left_available, etc.) are already set by
+    // the caller (write_modes_b) via set_mi_row_col — no need to redo.
 
     const MbModeInfo* const mbmi              = xd->mi[0];
     xd->above_txfm_context                    = &txfm_context_array->top_array[txfm_context_above_index];
@@ -4862,6 +4857,8 @@ static void code_tx_size(PictureControlSet* pcs, uint32_t blk_org_x, uint32_t bl
     const TxSize             tx_size          = tx_depth_to_tx_size[mbmi->block_mi.tx_depth][bsize];
     FrameHeader*             frm_hdr          = &pcs->ppcs->frm_hdr;
     SegmentationNeighborMap* segmentation_map = pcs->segmentation_neighbor_map;
+    int32_t                  mi_row           = blk_org_y >> MI_SIZE_LOG2;
+    int32_t                  mi_col           = blk_org_x >> MI_SIZE_LOG2;
     av1_code_tx_size(pcs,
                      frm_hdr->segmentation_params.segmentation_enabled
                          ? svt_aom_get_segment_id(cm, segmentation_map->data, BLOCK_4X4, mi_row, mi_col)
@@ -5060,26 +5057,12 @@ static EbErrorType write_modes_b(PictureControlSet* pcs, EntropyCodingContext* e
     const uint8_t skip_mode = mbmi->block_mi.skip_mode;
 
     assert(bsize < BLOCK_SIZES_ALL);
-    int           mi_stride           = pcs->ppcs->av1_cm->mi_stride;
-    const int32_t offset              = mi_row * mi_stride + mi_col;
-    blk_ptr->av1xd->mi                = pcs->mi_grid_base + offset;
+    int mi_stride                     = pcs->ppcs->av1_cm->mi_stride;
     blk_ptr->av1xd->tile.mi_col_start = sb_ptr->tile_info.mi_col_start;
     blk_ptr->av1xd->tile.mi_col_end   = sb_ptr->tile_info.mi_col_end;
     blk_ptr->av1xd->tile.mi_row_start = sb_ptr->tile_info.mi_row_start;
     blk_ptr->av1xd->tile.mi_row_end   = sb_ptr->tile_info.mi_row_end;
-    blk_ptr->av1xd->up_available      = (mi_row > sb_ptr->tile_info.mi_row_start);
-    blk_ptr->av1xd->left_available    = (mi_col > sb_ptr->tile_info.mi_col_start);
-    if (blk_ptr->av1xd->up_available) {
-        blk_ptr->av1xd->above_mbmi = blk_ptr->av1xd->mi[-mi_stride];
-    } else {
-        blk_ptr->av1xd->above_mbmi = NULL;
-    }
-    if (blk_ptr->av1xd->left_available) {
-        blk_ptr->av1xd->left_mbmi = blk_ptr->av1xd->mi[-1];
-    } else {
-        blk_ptr->av1xd->left_mbmi = NULL;
-    }
-    blk_ptr->av1xd->tile_ctx = frame_context;
+    blk_ptr->av1xd->tile_ctx          = frame_context;
 
     const int32_t bw = mi_size_wide[bsize];
     const int32_t bh = mi_size_high[bsize];
