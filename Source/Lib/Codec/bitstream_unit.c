@@ -259,6 +259,24 @@ static inline void svt_od_ec_encode_q15(OdEcEnc* enc, uint32_t fl, uint32_t fh, 
 #endif
 }
 
+/*Encode a single binary value with 1/2 probability.
+  val: The value to encode (0 or 1).*/
+void svt_od_ec_encode_bool_eq_q15(OdEcEnc* enc, int val) {
+    OdEcWindow l = enc->low;
+    uint32_t   r = enc->rng;
+    assert(32768U <= r);
+    uint32_t v = ((r >> 8) << (CDF_PROB_BITS - 1 - 7)) + EC_MIN_PROB;
+    if (val) {
+        l += r - v;
+    }
+    r = val ? v : r - v;
+    svt_od_ec_enc_normalize(enc, l, r);
+#if OD_MEASURE_EC_OVERHEAD
+    enc->entropy -= OD_LOG2((double)(val ? f : (32768 - f)) / 32768.);
+    enc->nb_symbols++;
+#endif
+}
+
 /*Encode a single binary value.
   val: The value to encode (0 or 1).
   f: The probability that the val is one, scaled by 32768.*/

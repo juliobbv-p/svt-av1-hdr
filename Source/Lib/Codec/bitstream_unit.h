@@ -121,6 +121,7 @@ typedef struct OdEcEnc {
 /*See entenc.c for further documentation.*/
 void svt_od_ec_enc_init(OdEcEnc* enc) OD_ARG_NONNULL(1);
 void svt_od_ec_enc_reset(OdEcEnc* enc) OD_ARG_NONNULL(1);
+void svt_od_ec_encode_bool_eq_q15(OdEcEnc* enc, int32_t val) OD_ARG_NONNULL(1);
 void svt_od_ec_encode_bool_q15(OdEcEnc* enc, int32_t val, unsigned f_q15) OD_ARG_NONNULL(1);
 void svt_od_ec_encode_cdf_q15(OdEcEnc* enc, int32_t s, const uint16_t* cdf, int32_t nsyms) OD_ARG_NONNULL(1)
     OD_ARG_NONNULL(3);
@@ -251,7 +252,7 @@ static INLINE void aom_stop_encode(AomWriter* w) {
 }
 
 static INLINE void aom_write_bit(AomWriter* w, int bit) {
-    svt_od_ec_encode_bool_q15(&w->ec, bit, CDF_PROB_TOP >> 1); // aom_prob_half
+    svt_od_ec_encode_bool_eq_q15(&w->ec, bit);
 }
 
 static INLINE void aom_write_literal(AomWriter* w, unsigned data, int bits) {
