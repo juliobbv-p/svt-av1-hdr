@@ -1388,8 +1388,9 @@ static void entropy_coder_dctor(EbPtr p) {
     EntropyCoder*        obj                  = (EntropyCoder*)p;
     OutputBitstreamUnit* output_bitstream_ptr = (OutputBitstreamUnit*)obj->ec_output_bitstream_ptr;
     EB_DELETE(output_bitstream_ptr);
-
-    svt_od_ec_enc_clear(&obj->ec_writer.ec);
+    // EC buffer is owned by OutputBitstreamUnit and freed above; just NULL out.
+    obj->ec_writer.ec.buf = NULL;
+    obj->ec_writer.ec.ptr = NULL;
     EB_FREE(obj->fc);
 }
 
@@ -1403,7 +1404,9 @@ EbErrorType svt_aom_entropy_coder_ctor(EntropyCoder* ec, uint32_t buffer_size) {
     EB_NEW(output_bitstream_ptr, svt_aom_output_bitstream_unit_ctor, buffer_size);
     ec->ec_output_bitstream_ptr = output_bitstream_ptr;
 
-    svt_od_ec_enc_init(&ec->ec_writer.ec, 62025);
+    // EC does not allocate its own buffer; it borrows from OutputBitstreamUnit
+    // via aom_start_encode() each frame.
+    svt_od_ec_enc_init(&ec->ec_writer.ec);
 
     return EB_ErrorNone;
 }

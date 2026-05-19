@@ -104,18 +104,14 @@ typedef struct OdEcEnc {
       Widened to uint32_t to eliminate uxth zero-extension instructions on ARM64.
       Value is always in [0x8000, 0xFFFF] post-normalize.*/
     uint32_t rng;
-    /*The size of the buffer.*/
-    uint32_t storage;
-    /*Buffered output.
-      This contains only the raw bits until the final call to od_ec_enc_done(),
-       where all the arithmetic-coded data gets prepended to it.*/
-    unsigned char* buf;
-    /*Write pointer: next byte to write. Invariant: ptr = buf + (bytes written).*/
-    unsigned char* ptr;
     /*The number of bits of data in the current value.*/
     int16_t cnt;
     /*Nonzero if an error occurred.*/
     int16_t error;
+    /*Buffered output. Borrowed from OutputBitstreamUnit via aom_start_encode().*/
+    unsigned char* buf;
+    /*Write pointer: next byte to write. Invariant: ptr = buf + (bytes written).*/
+    unsigned char* ptr;
 #if OD_MEASURE_EC_OVERHEAD
     double entropy;
     int    nb_symbols;
@@ -123,10 +119,8 @@ typedef struct OdEcEnc {
 } OdEcEnc;
 
 /*See entenc.c for further documentation.*/
-void svt_od_ec_enc_init(OdEcEnc* enc, uint32_t size) OD_ARG_NONNULL(1);
+void svt_od_ec_enc_init(OdEcEnc* enc) OD_ARG_NONNULL(1);
 void svt_od_ec_enc_reset(OdEcEnc* enc) OD_ARG_NONNULL(1);
-void svt_od_ec_enc_clear(OdEcEnc* enc) OD_ARG_NONNULL(1);
-void svt_od_ec_enc_ensure_capacity(OdEcEnc* enc, uint32_t min_free) OD_ARG_NONNULL(1);
 void svt_od_ec_encode_bool_q15(OdEcEnc* enc, int32_t val, unsigned f_q15) OD_ARG_NONNULL(1);
 void svt_od_ec_encode_cdf_q15(OdEcEnc* enc, int32_t s, const uint16_t* cdf, int32_t nsyms) OD_ARG_NONNULL(1)
     OD_ARG_NONNULL(3);
@@ -234,10 +228,17 @@ typedef struct AomWriter {
 static INLINE void aom_start_encode(AomWriter* br, OutputBitstreamUnit* source) {
     br->buffer_parent = source;
     br->pos           = 0;
+    // Borrow tile buffer: EC writes directly to OutputBitstreamUnit's buffer
+    br->ec.buf = source->buffer_begin_av1;
     svt_od_ec_enc_reset(&br->ec);
 }
 
 EbErrorType svt_realloc_output_bitstream_unit(OutputBitstreamUnit* output_bitstream_ptr, uint32_t sz);
+
+/*Ensures the EC buffer has at least min_free bytes of free space.
+  Reallocs through the AomWriter's buffer_parent (OutputBitstreamUnit).
+  Should be called before encoding each SB.*/
+EbErrorType svt_aom_ec_ensure_capacity(AomWriter* w, uint32_t min_free);
 
 static INLINE void aom_stop_encode(AomWriter* w) {
     uint32_t bytes = 0;
@@ -245,17 +246,7 @@ static INLINE void aom_stop_encode(AomWriter* w) {
     if (!data) {
         return;
     }
-    // If buffer is smaller than data, increase buffer size
-    if (w->buffer_parent->size < bytes) {
-        svt_realloc_output_bitstream_unit(w->buffer_parent,
-                                          bytes + 1); // plus one for good measure
-    }
-    if (svt_memcpy != NULL) {
-        svt_memcpy(w->buffer_parent->buffer_av1, data, bytes);
-    } else {
-        svt_memcpy_c(w->buffer_parent->buffer_av1, data, bytes);
-    }
-
+    // EC wrote directly to buffer_parent's buffer — no memcpy needed.
     w->pos = bytes;
 }
 

@@ -108,7 +108,6 @@ static inline void propagate_carry_bwd(unsigned char* ptr) {
   pressure on the hot (no-flush) path.
   Returns the residual low value after flushing.*/
 static NOINLINE void od_ec_enc_flush(OdEcEnc* enc, OdEcWindow low, unsigned rng, int c, int d) {
-    assert((uint32_t)(enc->ptr - enc->buf) + 8 <= enc->storage);
     // Need to add 1 byte here since enc->cnt always counts 1 byte less
     // (enc->cnt = -9) to ensure correct operation
     int s              = c + d;
@@ -175,16 +174,11 @@ static inline void svt_od_ec_enc_normalize(OdEcEnc* enc, OdEcWindow low, unsigne
 }
 
 /*Initializes the encoder.
-  size: The initial size of the buffer, in bytes.*/
-void svt_od_ec_enc_init(OdEcEnc* enc, uint32_t size) {
+  The EC does not own a buffer; it borrows one from the OutputBitstreamUnit
+  via aom_start_encode(). This just zeroes the state.*/
+void svt_od_ec_enc_init(OdEcEnc* enc) {
+    enc->buf = NULL;
     svt_od_ec_enc_reset(enc);
-    EB_MALLOC_ARRAY_NO_CHECK(enc->buf, size);
-    enc->storage = size;
-    if (size > 0 && enc->buf == NULL) {
-        enc->storage = 0;
-        enc->error   = -1;
-    }
-    enc->ptr = enc->buf;
 }
 
 /*Reinitializes the encoder.*/
@@ -204,31 +198,33 @@ void svt_od_ec_enc_reset(OdEcEnc* enc) {
 
 /*Frees the buffers used by the encoder.*/
 void svt_od_ec_enc_clear(OdEcEnc* enc) {
-    EB_FREE_ARRAY(enc->buf);
+    // EC borrows its buffer from OutputBitstreamUnit; nothing to free.
+    enc->buf = NULL;
+    enc->ptr = NULL;
 }
 
-/*Ensures the encoder buffer has at least min_free bytes of free space.
-  Should be called before encoding each SB to move capacity checks out
-  of the per-symbol hot path.*/
-void svt_od_ec_enc_ensure_capacity(OdEcEnc* enc, uint32_t min_free) {
-    uint32_t offs   = (uint32_t)(enc->ptr - enc->buf);
-    uint32_t needed = offs + min_free;
-    if (needed > enc->storage) {
-        uint32_t new_storage = 2 * enc->storage;
-        if (new_storage < needed) {
-            new_storage = needed;
+/*Ensures the EC buffer has at least min_free bytes of free space.
+  Reallocs through the AomWriter's buffer_parent (OutputBitstreamUnit)
+  since EC borrows that buffer.  Should be called before encoding each SB
+  to move capacity checks out of the per-symbol hot path.*/
+EbErrorType svt_aom_ec_ensure_capacity(AomWriter* w, uint32_t min_free) {
+    EbErrorType          ret    = EB_ErrorNone;
+    OutputBitstreamUnit* parent = w->buffer_parent;
+    OdEcEnc*             enc    = &w->ec;
+    uint32_t             offs   = (uint32_t)(enc->ptr - enc->buf);
+    uint32_t             needed = offs + min_free;
+    if (needed > parent->size) {
+        // Realloc through the OutputBitstreamUnit that owns the buffer
+        ret = svt_realloc_output_bitstream_unit(parent, needed);
+        if (ret != EB_ErrorNone) {
+            enc->error = -1;
+        } else {
+            // Update EC's borrowed pointers
+            enc->buf = parent->buffer_begin_av1;
+            enc->ptr = enc->buf + offs;
         }
-        unsigned char* buf = enc->buf;
-        EB_REALLOC_ARRAY_NO_CHECK(buf, new_storage);
-        if (buf == NULL) {
-            enc->error   = -1;
-            enc->storage = 0;
-            return;
-        }
-        enc->buf     = buf;
-        enc->ptr     = buf + offs;
-        enc->storage = new_storage;
     }
+    return ret;
 }
 
 /*Encodes a symbol given its frequency in Q15.
@@ -332,7 +328,6 @@ unsigned char* svt_od_ec_enc_done(OdEcEnc* enc, uint32_t* nbytes) {
         propagate_carry_bwd(enc->ptr);
     }
     do {
-        assert((uint32_t)(enc->ptr - enc->buf) < enc->storage);
         *enc->ptr++ = (unsigned char)((e >> (c + 16)) & 0xFF);
 
         c -= 8;

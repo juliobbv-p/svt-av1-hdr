@@ -206,8 +206,7 @@ EbErrorType svt_aom_entropy_coding_kernel_iter(void* context) {
                 context_ptr->coded_area_sb             = 0;
                 context_ptr->coded_area_sb_uv          = 0;
                 // Ensure EC buffer has room for worst-case SB output (4 bytes/pixel)
-                svt_od_ec_enc_ensure_capacity(&pcs->ec_info[tile_idx]->ec->ec_writer.ec,
-                                              (uint32_t)sb_size * sb_size * 4);
+                svt_aom_ec_ensure_capacity(&pcs->ec_info[tile_idx]->ec->ec_writer, (uint32_t)sb_size * sb_size * 4);
                 svt_aom_write_modes_sb(context_ptr,
                                        sb_ptr,
                                        pcs,
