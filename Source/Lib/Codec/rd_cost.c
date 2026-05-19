@@ -187,12 +187,10 @@ static void update_eob_context(int eob, TxSize tx_size, TxClass tx_class, PlaneT
         break;
     }
 
-    const int eob_offset_bits = svt_aom_eob_offset_bits[eob_pt];
-    if (eob_offset_bits > 0) {
-        const int eob_ctx   = eob_pt - 3;
-        const int eob_shift = eob_offset_bits - 1;
-        const int bit       = (eob_extra & (1 << eob_shift)) ? 1 : 0;
-        update_cdf(ec_ctx->eob_extra_cdf[txs_ctx][plane][eob_ctx], bit, 2);
+    if (eob_pt > 2) {
+        const int cnt = eob_pt - 3;
+        const int bit = (eob_extra >> cnt) & 1;
+        update_cdf(ec_ctx->eob_extra_cdf[txs_ctx][plane][cnt], bit, 2);
     }
 }
 
@@ -203,15 +201,11 @@ int get_eob_cost(int eob, const LvMapEobCost* txb_eob_costs, const LvMapCoeffCos
     const int eob_multi_ctx = (tx_class == TX_CLASS_2D) ? 0 : 1;
     int       eob_cost      = txb_eob_costs->eob_cost[eob_multi_ctx][eob_pt - 1];
 
-    const int eob_offset_bits = svt_aom_eob_offset_bits[eob_pt];
-    if (eob_offset_bits > 0) {
-        const int eob_ctx   = eob_pt - 3;
-        const int eob_shift = eob_offset_bits - 1;
-        const int bit       = (eob_extra & (1 << eob_shift)) ? 1 : 0;
-        eob_cost += txb_costs->eob_extra_cost[eob_ctx][bit];
-        if (eob_offset_bits > 1) {
-            eob_cost += av1_cost_literal(eob_offset_bits - 1);
-        }
+    if (eob_pt > 2) {
+        const int cnt = eob_pt - 3;
+        const int bit = (eob_extra >> cnt) & 1;
+        eob_cost += txb_costs->eob_extra_cost[cnt][bit];
+        eob_cost += av1_cost_literal(cnt);
     }
     return eob_cost;
 }

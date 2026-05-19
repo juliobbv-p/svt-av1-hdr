@@ -125,40 +125,31 @@ static AOM_FORCE_INLINE int get_br_ctx(const uint8_t* const levels,
     return mag + 14;
 }
 
-static const uint8_t clip_max3[256] = {
-    0, 1, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3};
-
 static INLINE int get_padded_idx(const int idx, const int bwl) {
     return idx + ((idx >> bwl) << TX_PAD_HOR_LOG2);
 }
 
 static AOM_FORCE_INLINE int get_nz_mag(const uint8_t* const levels, const int bwl, const TxClass tx_class) {
     int mag;
-
+#define CLIP_MAX3(x) ((x > 3) ? 3 : x)
     // Note: AOMMIN(level, 3) is useless for decoder since level < 3.
-    mag = clip_max3[levels[1]]; // { 0, 1 }
-    mag += clip_max3[levels[(1 << bwl) + TX_PAD_HOR]]; // { 1, 0 }
+    mag = CLIP_MAX3(levels[1]); // { 0, 1 }
+    mag += CLIP_MAX3(levels[(1 << bwl) + TX_PAD_HOR]); // { 1, 0 }
 
     if (tx_class == TX_CLASS_2D) {
-        mag += clip_max3[levels[(1 << bwl) + TX_PAD_HOR + 1]]; // { 1, 1 }
-        mag += clip_max3[levels[2]]; // { 0, 2 }
-        mag += clip_max3[levels[(2 << bwl) + (2 << TX_PAD_HOR_LOG2)]]; // { 2, 0 }
+        mag += CLIP_MAX3(levels[(1 << bwl) + TX_PAD_HOR + 1]); // { 1, 1 }
+        mag += CLIP_MAX3(levels[2]); // { 0, 2 }
+        mag += CLIP_MAX3(levels[(2 << bwl) + (2 << TX_PAD_HOR_LOG2)]); // { 2, 0 }
     } else if (tx_class == TX_CLASS_VERT) {
-        mag += clip_max3[levels[(2 << bwl) + (2 << TX_PAD_HOR_LOG2)]]; // { 2, 0 }
-        mag += clip_max3[levels[(3 << bwl) + (3 << TX_PAD_HOR_LOG2)]]; // { 3, 0 }
-        mag += clip_max3[levels[(4 << bwl) + (4 << TX_PAD_HOR_LOG2)]]; // { 4, 0 }
+        mag += CLIP_MAX3(levels[(2 << bwl) + (2 << TX_PAD_HOR_LOG2)]); // { 2, 0 }
+        mag += CLIP_MAX3(levels[(3 << bwl) + (3 << TX_PAD_HOR_LOG2)]); // { 3, 0 }
+        mag += CLIP_MAX3(levels[(4 << bwl) + (4 << TX_PAD_HOR_LOG2)]); // { 4, 0 }
     } else {
-        mag += clip_max3[levels[2]]; // { 0, 2 }
-        mag += clip_max3[levels[3]]; // { 0, 3 }
-        mag += clip_max3[levels[4]]; // { 0, 4 }
+        mag += CLIP_MAX3(levels[2]); // { 0, 2 }
+        mag += CLIP_MAX3(levels[3]); // { 0, 3 }
+        mag += CLIP_MAX3(levels[4]); // { 0, 4 }
     }
-
+#undef CLIP_MAX3
     return mag;
 }
 

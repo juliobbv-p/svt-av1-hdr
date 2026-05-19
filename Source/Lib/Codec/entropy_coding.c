@@ -29,37 +29,6 @@
 #include "mode_decision.h"
 #include "restoration.h"
 
-const uint8_t eob_to_pos_small[33] = {
-    0, 1, 2, // 0-2
-    3, 3, // 3-4
-    4, 4, 4, 4, // 5-8
-    5, 5, 5, 5, 5, 5, 5, 5, // 9-16
-    6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6 // 17-32
-};
-
-const int16_t eob_group_start[12]         = {0, 1, 2, 3, 5, 9, 17, 33, 65, 129, 257, 513};
-const int16_t svt_aom_eob_offset_bits[12] = {0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
-
-const uint8_t eob_to_pos_large[17] = {
-    6, // place holder
-    7, // 33-64
-    8,
-    8, // 65-128
-    9,
-    9,
-    9,
-    9, // 129-256
-    10,
-    10,
-    10,
-    10,
-    10,
-    10,
-    10,
-    10, // 257-512
-    11 // 513-
-};
-
 static void mem_put_varsize(uint8_t* const dst, const int sz, const int val) {
     switch (sz) {
     case 1:
@@ -446,13 +415,6 @@ static int32_t av1_write_coeffs_txb_1d(PictureParentControlSet* ppcs, FRAME_CONT
     int32_t      c;
     const TxSize txs_ctx = get_txsize_entropy_ctx(tx_size);
     TxType       tx_type = component_type == COMPONENT_LUMA ? blk_ptr->tx_type[txb_index] : blk_ptr->tx_type_uv;
-    const ScanOrder* const scan_order = get_scan_order(tx_size, tx_type);
-    const int16_t* const   scan       = scan_order->scan;
-    const int              bwl        = get_txb_bwl(tx_size);
-    const int              width      = get_txb_wide(tx_size);
-    const int              height     = get_txb_high(tx_size);
-
-    uint8_t* const levels = set_levels(ec_ctx->levels_buf, width, height);
 
     assert(txs_ctx < TX_SIZES);
 
@@ -464,10 +426,6 @@ static int32_t av1_write_coeffs_txb_1d(PictureParentControlSet* ppcs, FRAME_CONT
     if (eob == 0) {
         return 0;
     }
-#if OPT_EC_DC_ONLY
-    if (eob > 1)
-#endif
-        svt_av1_txb_init_levels(coeff_buffer_ptr, width, height, levels);
     if (component_type == COMPONENT_LUMA) {
         av1_write_tx_type(ppcs, frame_context, mbmi, ec_writer, intraLumaDir, tx_type, tx_size);
     }
@@ -500,13 +458,11 @@ static int32_t av1_write_coeffs_txb_1d(PictureParentControlSet* ppcs, FRAME_CONT
         break;
     }
     aom_write_symbol(ec_writer, eob_pt - 1, eob_flag_cdfs, eob_multi_size + 5);
-    const int eob_offset_bits = svt_aom_eob_offset_bits[eob_pt];
-    if (eob_offset_bits > 0) {
-        const int eob_ctx   = eob_pt - 3;
-        int       eob_shift = eob_offset_bits - 1;
-        int       bit       = (eob_extra & (1 << eob_shift)) ? 1 : 0;
-        aom_write_symbol(ec_writer, bit, frame_context->eob_extra_cdf[txs_ctx][component_type][eob_ctx], 2);
-        aom_write_literal(ec_writer, eob_extra, eob_offset_bits - 1);
+    if (eob_pt > 2) {
+        int cnt = eob_pt - 3;
+        int bit = (eob_extra >> cnt) & 1;
+        aom_write_symbol(ec_writer, bit, frame_context->eob_extra_cdf[txs_ctx][component_type][cnt], 2);
+        aom_write_literal(ec_writer, eob_extra, cnt);
     }
 
 #if OPT_EC_DC_ONLY
@@ -515,7 +471,7 @@ static int32_t av1_write_coeffs_txb_1d(PictureParentControlSet* ppcs, FRAME_CONT
     // br_ctx=0 (DC position with all-zero neighbors).
     // Skips txb_init_levels and get_nz_map_contexts entirely.
     if (eob == 1) {
-        const int32_t v         = coeff_buffer_ptr[scan[0]];
+        const int32_t v         = coeff_buffer_ptr[0];
         int32_t       level     = ABS(v);
         AomCdfProb*   dc_br_cdf = frame_context->coeff_br_cdf[AOMMIN(txs_ctx, TX_32X32)][component_type][0];
 
@@ -542,6 +498,16 @@ static int32_t av1_write_coeffs_txb_1d(PictureParentControlSet* ppcs, FRAME_CONT
         return cul_level;
     }
 #endif
+
+    const int bwl    = get_txb_bwl(tx_size);
+    const int width  = get_txb_wide(tx_size);
+    const int height = get_txb_high(tx_size);
+
+    uint8_t* const levels = set_levels(ec_ctx->levels_buf, width, height);
+    svt_av1_txb_init_levels(coeff_buffer_ptr, width, height, levels);
+
+    const ScanOrder* const scan_order = get_scan_order(tx_size, tx_type);
+    const int16_t* const   scan       = scan_order->scan;
 
     svt_av1_get_nz_map_contexts(levels, scan, eob, tx_size, tx_type_to_class[tx_type], ec_ctx->coeff_contexts);
 
@@ -632,62 +598,61 @@ static int32_t av1_write_coeffs_txb_1d(PictureParentControlSet* ppcs, FRAME_CONT
     set_dc_sign(&cul_level, coeff_buffer_ptr[0]);
     return cul_level;
 #else
-        // Pre-compute CDF base pointers (loop-invariant outer dimensions)
-        AomCdfProb(*base_cdf)[CDF_SIZE(4)]     = frame_context->coeff_base_cdf[txs_ctx][component_type];
-        AomCdfProb(*base_eob_cdf)[CDF_SIZE(3)] = frame_context->coeff_base_eob_cdf[txs_ctx][component_type];
-        AomCdfProb(
-            *br_cdf)[CDF_SIZE(BR_CDF_SIZE)] = frame_context->coeff_br_cdf[AOMMIN(txs_ctx, TX_32X32)][component_type];
-        for (c = eob - 1; c >= 0; --c) {
-            const int16_t pos       = scan[c];
-            const int32_t v         = coeff_buffer_ptr[pos];
-            const int16_t coeff_ctx = ec_ctx->coeff_contexts[pos];
-            int32_t       level     = ABS(v);
+    // Pre-compute CDF base pointers (loop-invariant outer dimensions)
+    AomCdfProb(*base_cdf)[CDF_SIZE(4)]         = frame_context->coeff_base_cdf[txs_ctx][component_type];
+    AomCdfProb(*base_eob_cdf)[CDF_SIZE(3)]     = frame_context->coeff_base_eob_cdf[txs_ctx][component_type];
+    AomCdfProb(*br_cdf)[CDF_SIZE(BR_CDF_SIZE)] = frame_context->coeff_br_cdf[AOMMIN(txs_ctx, TX_32X32)][component_type];
+    for (c = eob - 1; c >= 0; --c) {
+        const int16_t pos       = scan[c];
+        const int32_t v         = coeff_buffer_ptr[pos];
+        const int16_t coeff_ctx = ec_ctx->coeff_contexts[pos];
+        int32_t       level     = ABS(v);
 
-            if (c == eob - 1) {
-                aom_write_symbol(ec_writer, AOMMIN(level, 3) - 1, base_eob_cdf[coeff_ctx], 3);
+        if (c == eob - 1) {
+            aom_write_symbol(ec_writer, AOMMIN(level, 3) - 1, base_eob_cdf[coeff_ctx], 3);
+        } else {
+            aom_write_symbol(ec_writer, AOMMIN(level, 3), base_cdf[coeff_ctx], 4);
+        }
+        if (level > NUM_BASE_LEVELS) {
+            // level is above 1.
+            int32_t base_range = level - 1 - NUM_BASE_LEVELS;
+            int16_t br_ctx     = get_br_ctx(levels, pos, bwl, tx_type_to_class[tx_type]);
+            for (int32_t idx = 0; idx < COEFF_BASE_RANGE; idx += BR_CDF_SIZE - 1) {
+                const int32_t k = AOMMIN(base_range - idx, BR_CDF_SIZE - 1);
+                aom_write_symbol(ec_writer, k, br_cdf[br_ctx], BR_CDF_SIZE);
+                if (k < BR_CDF_SIZE - 1) {
+                    break;
+                }
+            }
+        }
+    }
+    // Loop to code all signs in the transform block,
+    // starting with the sign of DC (if applicable)
+
+    int32_t cul_level = 0;
+    for (c = 0; c < eob; ++c) {
+        const int16_t pos   = scan[c];
+        const int32_t v     = coeff_buffer_ptr[pos];
+        int32_t       level = ABS(v);
+        cul_level += level;
+
+        const int32_t sign = (v < 0) ? 1 : 0;
+        if (level) {
+            if (c == 0) {
+                aom_write_symbol(ec_writer, sign, frame_context->dc_sign_cdf[component_type][dc_sign_ctx], 2);
             } else {
-                aom_write_symbol(ec_writer, AOMMIN(level, 3), base_cdf[coeff_ctx], 4);
+                aom_write_bit(ec_writer, sign);
             }
-            if (level > NUM_BASE_LEVELS) {
-                // level is above 1.
-                int32_t base_range = level - 1 - NUM_BASE_LEVELS;
-                int16_t br_ctx     = get_br_ctx(levels, pos, bwl, tx_type_to_class[tx_type]);
-                for (int32_t idx = 0; idx < COEFF_BASE_RANGE; idx += BR_CDF_SIZE - 1) {
-                    const int32_t k = AOMMIN(base_range - idx, BR_CDF_SIZE - 1);
-                    aom_write_symbol(ec_writer, k, br_cdf[br_ctx], BR_CDF_SIZE);
-                    if (k < BR_CDF_SIZE - 1) {
-                        break;
-                    }
-                }
+            if (level > COEFF_BASE_RANGE + NUM_BASE_LEVELS) {
+                write_golomb(ec_writer, level - COEFF_BASE_RANGE - 1 - NUM_BASE_LEVELS);
             }
         }
-        // Loop to code all signs in the transform block,
-        // starting with the sign of DC (if applicable)
+    }
 
-        int32_t cul_level = 0;
-        for (c = 0; c < eob; ++c) {
-            const int16_t pos   = scan[c];
-            const int32_t v     = coeff_buffer_ptr[pos];
-            int32_t       level = ABS(v);
-            cul_level += level;
-
-            const int32_t sign = (v < 0) ? 1 : 0;
-            if (level) {
-                if (c == 0) {
-                    aom_write_symbol(ec_writer, sign, frame_context->dc_sign_cdf[component_type][dc_sign_ctx], 2);
-                } else {
-                    aom_write_bit(ec_writer, sign);
-                }
-                if (level > COEFF_BASE_RANGE + NUM_BASE_LEVELS) {
-                    write_golomb(ec_writer, level - COEFF_BASE_RANGE - 1 - NUM_BASE_LEVELS);
-                }
-            }
-        }
-
-        cul_level = AOMMIN(COEFF_CONTEXT_MASK, cul_level);
-        // DC value
-        set_dc_sign(&cul_level, coeff_buffer_ptr[0]);
-        return cul_level;
+    cul_level = AOMMIN(COEFF_CONTEXT_MASK, cul_level);
+    // DC value
+    set_dc_sign(&cul_level, coeff_buffer_ptr[0]);
+    return cul_level;
 #endif
 }
 
