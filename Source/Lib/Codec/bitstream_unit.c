@@ -73,9 +73,9 @@ EbErrorType svt_realloc_output_bitstream_unit(OutputBitstreamUnit* output_bitstr
     return EB_ErrorNone;
 }
 
-// buf is the frame bitbuffer, offs is where carry to be added
-static inline void propagate_carry_bwd(unsigned char* buf, uint32_t offs) {
-    while (!++buf[offs--]) {}
+// ptr points one past the last written byte; propagate carry backward
+static inline void propagate_carry_bwd(unsigned char* ptr) {
+    while (!++*--ptr) {}
 }
 
 /*A range encoder.
@@ -107,12 +107,12 @@ static inline void propagate_carry_bwd(unsigned char* buf, uint32_t offs) {
   This is the cold path of normalize, kept out-of-line to reduce icache
   pressure on the hot (no-flush) path.
   Returns the residual low value after flushing.*/
-static NOINLINE void od_ec_enc_flush(OdEcEnc* enc, OdEcWindow low, unsigned rng, int c, int d, int s) {
-    unsigned char* out = enc->buf;
-    assert(enc->offs + 8 <= enc->storage);
+static NOINLINE void od_ec_enc_flush(OdEcEnc* enc, OdEcWindow low, unsigned rng, int c, int d) {
+    assert((uint32_t)(enc->ptr - enc->buf) + 8 <= enc->storage);
     // Need to add 1 byte here since enc->cnt always counts 1 byte less
     // (enc->cnt = -9) to ensure correct operation
-    uint8_t num_bits_ready = (s & ~7) + 8;
+    int s              = c + d;
+    int num_bits_ready = (s & ~7) + 8;
 
     // Update "c" to contain the number of non-ready bits in "low". Since "low"
     // has 64-bit capacity, we need to add the (64 - 40) cushion bits and take
@@ -126,16 +126,16 @@ static NOINLINE void od_ec_enc_flush(OdEcEnc* enc, OdEcWindow low, unsigned rng,
     uint64_t mask = (uint64_t)1 << num_bits_ready;
 
     if (output & mask) {
-        assert(enc->offs > 0);
-        propagate_carry_bwd(out, enc->offs - 1);
+        assert(enc->ptr > enc->buf);
+        propagate_carry_bwd(enc->ptr);
     }
 
     // Write to buffer. Carry bit will be shifted away, no need to mask
     // output &= mask - 1;
     const uint64_t reg = HToBE64(output << (64 - num_bits_ready));
-    memcpy(&out[enc->offs], &reg, 8);
+    memcpy(enc->ptr, &reg, 8);
 
-    enc->offs += num_bits_ready >> 3;
+    enc->ptr += num_bits_ready >> 3;
 
     low &= (((uint64_t)1 << c) - 1);
 
@@ -154,11 +154,10 @@ static inline void svt_od_ec_enc_normalize(OdEcEnc* enc, OdEcWindow low, unsigne
     assert(rng <= 65535U);
     /*The number of leading zeros in the 16-bit binary representation of rng.*/
     int d = 15 - svt_log2f(rng);
-    int s = c + d;
 
     /* We flush every time "low" cannot safely and efficiently accommodate any
        more data. Overall, c must not exceed 63 at the time of byte flush out. To
-       facilitate this, "s" cannot exceed 56-bits because we have to keep 1 byte
+       facilitate this, "c+d" cannot exceed 56-bits because we have to keep 1 byte
        for carry. Also, we need to subtract 16 because we want to keep room for
        the next symbol worth "d"-bits (max 15). An alternate condition would be if
        (e < d), where e = number of leading zeros in "low", indicating there is
@@ -166,12 +165,12 @@ static inline void svt_od_ec_enc_normalize(OdEcEnc* enc, OdEcWindow low, unsigne
        this approach needs additional computations: (i) compute "e", (ii) push
        the leading 0x00's as a special case.
     */
-    if (EB_UNLIKELY(s >= 40)) { // 56 - 16
-        od_ec_enc_flush(enc, low, rng, c, d, s);
+    if (EB_UNLIKELY(c + d >= 40)) { // 56 - 16
+        od_ec_enc_flush(enc, low, rng, c, d);
     } else {
         enc->low = low << d;
         enc->rng = rng << d;
-        enc->cnt = s;
+        enc->cnt = c + d;
     }
 }
 
@@ -185,13 +184,14 @@ void svt_od_ec_enc_init(OdEcEnc* enc, uint32_t size) {
         enc->storage = 0;
         enc->error   = -1;
     }
+    enc->ptr = enc->buf;
 }
 
 /*Reinitializes the encoder.*/
 void svt_od_ec_enc_reset(OdEcEnc* enc) {
-    enc->offs = 0;
-    enc->low  = 0;
-    enc->rng  = 0x8000;
+    enc->ptr = enc->buf;
+    enc->low = 0;
+    enc->rng = 0x8000;
     /*This is initialized to -9 so that it crosses zero after we've accumulated
        one byte + one carry bit.*/
     enc->cnt   = -9;
@@ -211,7 +211,8 @@ void svt_od_ec_enc_clear(OdEcEnc* enc) {
   Should be called before encoding each SB to move capacity checks out
   of the per-symbol hot path.*/
 void svt_od_ec_enc_ensure_capacity(OdEcEnc* enc, uint32_t min_free) {
-    uint32_t needed = enc->offs + min_free;
+    uint32_t offs   = (uint32_t)(enc->ptr - enc->buf);
+    uint32_t needed = offs + min_free;
     if (needed > enc->storage) {
         uint32_t new_storage = 2 * enc->storage;
         if (new_storage < needed) {
@@ -225,6 +226,7 @@ void svt_od_ec_enc_ensure_capacity(OdEcEnc* enc, uint32_t min_free) {
             return;
         }
         enc->buf     = buf;
+        enc->ptr     = buf + offs;
         enc->storage = new_storage;
     }
 }
@@ -305,14 +307,6 @@ void svt_od_ec_encode_cdf_q15(OdEcEnc* enc, int s, const uint16_t* icdf, int nsy
   Return: A pointer to the start of the final buffer, or NULL if there was an
            encoding error.*/
 unsigned char* svt_od_ec_enc_done(OdEcEnc* enc, uint32_t* nbytes) {
-    unsigned char* out;
-    uint32_t       storage;
-    uint32_t       offs;
-    OdEcWindow     m;
-    OdEcWindow     e;
-    OdEcWindow     l;
-    int            c;
-    int            s;
     if (enc->error) {
         return NULL;
     }
@@ -326,54 +320,27 @@ unsigned char* svt_od_ec_enc_done(OdEcEnc* enc, uint32_t* nbytes) {
     }
 #endif
 
-    l = enc->low;
-    c = enc->cnt;
-    s = 10;
-    m = 0x3FFF;
-    e = ((l + m) & ~m) | (m + 1);
-    s += c;
-    offs = enc->offs;
-
-    /*Make sure there's enough room for the entropy-coded bits.*/
-    out              = enc->buf;
-    storage          = enc->storage;
-    const int s_bits = (s + 7) >> 3;
-    int       b      = MAX(s_bits, 0);
-    if (offs + b > storage) {
-        storage = offs + b;
-        EB_REALLOC_ARRAY_NO_CHECK(out, storage);
-        if (out == NULL) {
-            enc->error = -1;
-            return NULL;
-        }
-        enc->buf     = out;
-        enc->storage = storage;
-    }
+    int c = enc->cnt;
 
     /*We output the minimum number of bits that ensures that the symbols encoded
        thus far will be decoded correctly regardless of the bits that follow.*/
-    if (s > 0) {
-        uint64_t n;
-        n = ((uint64_t)1 << (c + 16)) - 1;
-        do {
-            assert(offs < storage);
-            uint16_t val = (uint16_t)(e >> (c + 16));
-            out[offs]    = (unsigned char)(val & 0x00FF);
-            if (val & 0x0100) {
-                assert(offs > 0);
-                propagate_carry_bwd(out, offs - 1);
-            }
-            offs++;
-
-            e &= n;
-            s -= 8;
-            c -= 8;
-            n >>= 8;
-        } while (s > 0);
+    OdEcWindow m = 0x3FFF;
+    OdEcWindow e = ((enc->low + m) & ~m) | (m + 1);
+    OdEcWindow v = e >> (c + 16);
+    if (v & 0x0100) {
+        assert(enc->ptr > enc->buf);
+        propagate_carry_bwd(enc->ptr);
     }
-    *nbytes = offs;
+    do {
+        assert((uint32_t)(enc->ptr - enc->buf) < enc->storage);
+        *enc->ptr++ = (unsigned char)((e >> (c + 16)) & 0xFF);
 
-    return out;
+        c -= 8;
+    } while (10 + c > 0);
+
+    *nbytes = (uint32_t)(enc->ptr - enc->buf);
+
+    return enc->buf;
 }
 
 /*Returns the number of bits "used" by the encoded symbols so far.
@@ -388,7 +355,7 @@ unsigned char* svt_od_ec_enc_done(OdEcEnc* enc, uint32_t* nbytes) {
 int svt_od_ec_enc_tell(const OdEcEnc* enc) {
     /*The 10 here counteracts the offset of -9 baked into cnt, and adds 1 extra
        bit, which we reserve for terminating the stream.*/
-    return (enc->cnt + 10) + enc->offs * 8;
+    return (enc->cnt + 10) + (int)(enc->ptr - enc->buf) * 8;
 }
 
 /*Given the current total integer number of bits used and the current value of

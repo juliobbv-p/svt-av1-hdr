@@ -104,14 +104,14 @@ typedef struct OdEcEnc {
       Widened to uint32_t to eliminate uxth zero-extension instructions on ARM64.
       Value is always in [0x8000, 0xFFFF] post-normalize.*/
     uint32_t rng;
+    /*The size of the buffer.*/
+    uint32_t storage;
     /*Buffered output.
       This contains only the raw bits until the final call to od_ec_enc_done(),
        where all the arithmetic-coded data gets prepended to it.*/
     unsigned char* buf;
-    /*The size of the buffer.*/
-    uint32_t storage;
-    /*The offset at which the next entropy-coded byte will be written.*/
-    uint32_t offs;
+    /*Write pointer: next byte to write. Invariant: ptr = buf + (bytes written).*/
+    unsigned char* ptr;
     /*The number of bits of data in the current value.*/
     int16_t cnt;
     /*Nonzero if an error occurred.*/
