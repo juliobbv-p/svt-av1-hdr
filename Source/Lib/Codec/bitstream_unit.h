@@ -224,18 +224,14 @@ static inline uint64_t BSwap64(uint64_t x) {
 /********************************************************************************************************************************/
 //bitwriter.h
 typedef struct AomWriter {
-    unsigned int pos;
-    uint8_t*     buffer;
-    uint32_t     buffer_size;
+    OdEcEnc  ec;
+    uint32_t allow_update_cdf;
+    uint32_t pos;
     // save a pointer to the container holding the buffer, in case the buffer must be resized
     OutputBitstreamUnit* buffer_parent;
-    OdEcEnc              ec;
-    uint8_t              allow_update_cdf;
 } AomWriter;
 
 static INLINE void aom_start_encode(AomWriter* br, OutputBitstreamUnit* source) {
-    br->buffer        = source->buffer_av1;
-    br->buffer_size   = source->size;
     br->buffer_parent = source;
     br->pos           = 0;
     svt_od_ec_enc_reset(&br->ec);
@@ -243,28 +239,24 @@ static INLINE void aom_start_encode(AomWriter* br, OutputBitstreamUnit* source) 
 
 EbErrorType svt_realloc_output_bitstream_unit(OutputBitstreamUnit* output_bitstream_ptr, uint32_t sz);
 
-static INLINE int32_t aom_stop_encode(AomWriter* w) {
+static INLINE void aom_stop_encode(AomWriter* w) {
     uint32_t bytes = 0;
     uint8_t* data  = svt_od_ec_enc_done(&w->ec, &bytes);
     if (!data) {
-        return -1;
+        return;
     }
-    int32_t nb_bits = svt_od_ec_enc_tell(&w->ec);
     // If buffer is smaller than data, increase buffer size
-    if (w->buffer_size < bytes) {
+    if (w->buffer_parent->size < bytes) {
         svt_realloc_output_bitstream_unit(w->buffer_parent,
                                           bytes + 1); // plus one for good measure
-        w->buffer      = w->buffer_parent->buffer_av1;
-        w->buffer_size = bytes + 1;
     }
     if (svt_memcpy != NULL) {
-        svt_memcpy(w->buffer, data, bytes);
+        svt_memcpy(w->buffer_parent->buffer_av1, data, bytes);
     } else {
-        svt_memcpy_c(w->buffer, data, bytes);
+        svt_memcpy_c(w->buffer_parent->buffer_av1, data, bytes);
     }
 
     w->pos = bytes;
-    return nb_bits;
 }
 
 static INLINE void aom_write_bit(AomWriter* w, int bit) {

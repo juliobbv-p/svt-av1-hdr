@@ -447,18 +447,6 @@ void update_firstpass_stats(PictureParentControlSet* pcs, const int frame_number
 void svt_av1_end_first_pass(PictureParentControlSet* pcs);
 
 /* Realloc when bitstream pointer size is not enough to write data of size sz */
-static EbErrorType realloc_output_bitstream(Bitstream* bitstream_ptr, uint32_t sz) {
-    if (bitstream_ptr && sz > 0) {
-        OutputBitstreamUnit* output_bitstream_ptr = bitstream_ptr->output_bitstream_ptr;
-        if (output_bitstream_ptr) {
-            output_bitstream_ptr->size = sz;
-            EB_REALLOC_ARRAY(output_bitstream_ptr->buffer_begin_av1, output_bitstream_ptr->size);
-            output_bitstream_ptr->buffer_av1 = output_bitstream_ptr->buffer_begin_av1;
-        }
-    }
-    return EB_ErrorNone;
-}
-
 EbErrorType svt_aom_packetization_kernel_iter(void* context) {
     // Context
     PacketizationContext* context_ptr = (PacketizationContext*)context;
@@ -812,10 +800,12 @@ EbErrorType svt_aom_packetization_kernel_iter(void* context) {
         // Check if the temporal entry has metadata
         if (temp_entry->metadata) {
             // Get bitstream from queue entry
-            Bitstream* bitstream_ptr       = queue_entry_ptr->bitstream_ptr;
-            size_t     current_metadata_sz = svt_metadata_size(temp_entry->metadata, EB_AV1_METADATA_TYPE_ITUT_T35);
-            // 16 bytes for frame header
-            realloc_output_bitstream(bitstream_ptr, (uint32_t)(current_metadata_sz + 16));
+            size_t current_metadata_sz = svt_metadata_size(temp_entry->metadata, EB_AV1_METADATA_TYPE_ITUT_T35);
+            if (queue_entry_ptr->bitstream_ptr) {
+                OutputBitstreamUnit* output = queue_entry_ptr->bitstream_ptr->output_bitstream_ptr;
+                // 16 bytes for frame header
+                svt_realloc_output_bitstream_unit(output, (uint32_t)(current_metadata_sz + 16));
+            }
         }
         // Reset the Bitstream before writing to it
         svt_aom_bitstream_reset(queue_entry_ptr->bitstream_ptr);
