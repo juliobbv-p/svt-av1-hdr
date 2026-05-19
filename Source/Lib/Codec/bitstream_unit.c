@@ -227,38 +227,6 @@ EbErrorType svt_aom_ec_ensure_capacity(AomWriter* w, uint32_t min_free) {
     return ret;
 }
 
-/*Encodes a symbol given its frequency in Q15.
-  fl: CDF_PROB_TOP minus the cumulative frequency of all symbols that come
-  before the one to be encoded.
-  fh: CDF_PROB_TOP minus the cumulative frequency of all symbols up to and
-  including the one to be encoded.*/
-static inline void svt_od_ec_encode_q15(OdEcEnc* enc, uint32_t fl, uint32_t fh, uint32_t s, uint32_t nsyms) {
-    OdEcWindow l = enc->low;
-    uint32_t   r = enc->rng;
-    assert(32768U <= r);
-    assert(fh <= fl);
-    assert(fl <= 32768U);
-    assert(7 - EC_PROB_SHIFT >= 0);
-    const uint32_t N    = nsyms - 1;
-    const uint32_t r_hi = r >> 8;
-    const uint32_t temp = EC_MIN_PROB * (N - s);
-    if (fl < CDF_PROB_TOP) {
-        EB_ASSUME(fl <= 32768);
-        EB_ASSUME(fh <= 32768);
-        uint32_t u = (r_hi * (fl >> EC_PROB_SHIFT) >> (7 - EC_PROB_SHIFT)) + temp + EC_MIN_PROB;
-        uint32_t v = (r_hi * (fh >> EC_PROB_SHIFT) >> (7 - EC_PROB_SHIFT)) + temp;
-        l += r - u;
-        r = u - v;
-    } else {
-        r -= (r_hi * (fh >> EC_PROB_SHIFT) >> (7 - EC_PROB_SHIFT)) + temp;
-    }
-    svt_od_ec_enc_normalize(enc, l, r);
-#if OD_MEASURE_EC_OVERHEAD
-    enc->entropy -= OD_LOG2((double)(OD_ICDF(fh) - OD_ICDF(fl)) / CDF_PROB_TOP.);
-    enc->nb_symbols++;
-#endif
-}
-
 /*Encode a single binary value with 1/2 probability.
   val: The value to encode (0 or 1).*/
 void svt_od_ec_encode_bool_eq_q15(OdEcEnc* enc, int val) {
@@ -266,10 +234,11 @@ void svt_od_ec_encode_bool_eq_q15(OdEcEnc* enc, int val) {
     uint32_t   r = enc->rng;
     assert(32768U <= r);
     uint32_t v = ((r >> 8) << (CDF_PROB_BITS - 1 - 7)) + EC_MIN_PROB;
+    r -= v;
     if (val) {
-        l += r - v;
+        l += r;
+        r = v;
     }
-    r = val ? v : r - v;
     svt_od_ec_enc_normalize(enc, l, r);
 #if OD_MEASURE_EC_OVERHEAD
     enc->entropy -= OD_LOG2((double)(val ? f : (32768 - f)) / 32768.);
@@ -288,10 +257,11 @@ void svt_od_ec_encode_bool_q15(OdEcEnc* enc, int val, uint32_t f) {
     assert(32768U <= r);
     EB_ASSUME(f <= 32768);
     uint32_t v = ((r >> 8) * (f >> EC_PROB_SHIFT) >> (7 - EC_PROB_SHIFT)) + EC_MIN_PROB;
+    r -= v;
     if (val) {
-        l += r - v;
+        l += r;
+        r = v;
     }
-    r = val ? v : r - v;
     svt_od_ec_enc_normalize(enc, l, r);
 #if OD_MEASURE_EC_OVERHEAD
     enc->entropy -= OD_LOG2((double)(val ? f : (32768 - f)) / 32768.);
@@ -311,7 +281,24 @@ void svt_od_ec_encode_cdf_q15(OdEcEnc* enc, int s, const uint16_t* icdf, int nsy
     assert(s >= 0);
     assert(s < nsyms);
     assert(icdf[nsyms - 1] == OD_ICDF(CDF_PROB_TOP));
-    svt_od_ec_encode_q15(enc, s > 0 ? icdf[s - 1] : OD_ICDF(0), icdf[s], s, nsyms);
+
+    OdEcWindow l = enc->low;
+    uint32_t   r = enc->rng;
+    assert(32768U <= r);
+    assert(7 - EC_PROB_SHIFT >= 0);
+    const uint32_t r_hi = r >> 8;
+    const uint32_t temp = EC_MIN_PROB * (nsyms - 1 - s);
+    if (0 < s) {
+        uint32_t u = (r_hi * (icdf[s - 1] >> EC_PROB_SHIFT) >> (7 - EC_PROB_SHIFT)) + temp + EC_MIN_PROB;
+        l += r - u;
+        r = u;
+    }
+    r -= (r_hi * (icdf[s] >> EC_PROB_SHIFT) >> (7 - EC_PROB_SHIFT)) + temp;
+    svt_od_ec_enc_normalize(enc, l, r);
+#if OD_MEASURE_EC_OVERHEAD
+    enc->entropy -= OD_LOG2((double)(OD_ICDF(fh) - OD_ICDF(fl)) / CDF_PROB_TOP.);
+    enc->nb_symbols++;
+#endif
 }
 
 /*Indicates that there are no more symbols to encode.
