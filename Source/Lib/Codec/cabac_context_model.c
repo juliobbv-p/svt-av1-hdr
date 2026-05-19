@@ -55,6 +55,7 @@ const int32_t av1_ext_tx_inv[EXT_TX_SET_TYPES][TX_TYPES] = {
 /********************************************************************************************************************************/
 // entropymode.c
 
+// clang-format off
 const AomCdfProb svt_aom_default_kf_y_mode_cdf[KF_MODE_CONTEXTS][KF_MODE_CONTEXTS][CDF_SIZE(INTRA_MODES)] = {
     {{AOM_CDF13(15588, 17027, 19338, 20218, 20682, 21110, 21825, 23244, 24189, 28165, 29093, 30466)},
      {AOM_CDF13(12016, 18066, 19516, 20303, 20719, 21444, 21888, 23032, 24434, 28658, 30172, 31409)},
@@ -728,6 +729,7 @@ static const AomCdfProb default_switchable_interp_cdf[SWITCHABLE_FILTER_CONTEXTS
     {AOM_CDF3(  601,   943)},
     {AOM_CDF3(14969, 21398)}
 };
+// clang-format on
 
 void svt_aom_init_mode_probs(FRAME_CONTEXT* fc) {
 #define COPY_CDF(dst_cdf, src_cdf) svt_memcpy(fc->dst_cdf, src_cdf, sizeof(src_cdf))
@@ -795,6 +797,7 @@ void svt_aom_init_mode_probs(FRAME_CONTEXT* fc) {
 
 /********************************************************************************************************************************/
 // token_cdfs.h
+// clang-format off
 static const AomCdfProb av1_default_dc_sign_cdfs[TOKEN_CDF_Q_CTXS][PLANE_TYPES][DC_SIGN_CONTEXTS][CDF_SIZE(2)] = {
     {{{AOM_CDF2(128 * 125)}, {AOM_CDF2(128 * 102)}, {AOM_CDF2(128 * 147)}},
      {{AOM_CDF2(128 * 119)}, {AOM_CDF2(128 * 101)}, {AOM_CDF2(128 * 135)}}},
@@ -1897,6 +1900,7 @@ static const AomCdfProb
      {{{AOM_CDF3(12358, 24977)}, {AOM_CDF3(31331, 32385)}, {AOM_CDF3(32634, 32756)}, {AOM_CDF3(30411, 32548)}},
       {{AOM_CDF3(10923, 21845)}, {AOM_CDF3(10923, 21845)}, {AOM_CDF3(10923, 21845)}, {AOM_CDF3(10923, 21845)}}}}
 };
+// clang-format on
 
 /********************************************************************************************************************************/
 // entropy.c

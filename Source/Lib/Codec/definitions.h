@@ -335,9 +335,7 @@ enum {
 #define CFL_BUF_SQUARE (CFL_BUF_LINE * CFL_BUF_LINE)
 /***********************************    AV1_OBU     ********************************/
 #define INVALID_NEIGHBOR_DATA 0xFFu
-#define CONFIG_BITSTREAM_DEBUG 0
 #define CONFIG_COEFFICIENT_RANGE_CHECKING 0
-#define CONFIG_ENTROPY_STATS 0
 
 // Max superblock size
 #define MAX_SB_SIZE_LOG2 7
@@ -511,6 +509,14 @@ typedef int16_t InterpKernel[SUBPEL_TAPS];
 #else
 #define EB_LIKELY(x) (x)
 #define EB_UNLIKELY(x) (x)
+#endif
+#endif
+
+#ifndef EB_ASSUME
+#if HAVE_BUILTIN_ASSUME
+#define EB_ASSUME(x) __builtin_assume(x)
+#else
+#define EB_ASSUME(x) ((void)0)
 #endif
 #endif
 

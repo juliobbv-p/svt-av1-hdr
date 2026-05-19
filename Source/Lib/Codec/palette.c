@@ -806,13 +806,6 @@ static int cost_and_tokenize_map(Av1ColorMapParam* param, TOKENEXTRA** t, int pl
                 if (allow_update_cdf) {
                     update_cdf(map_cdf[palette_size_idx][color_ctx], color_new_idx, n);
                 }
-#if CONFIG_ENTROPY_STATS
-                if (plane) {
-                    ++counts->palette_uv_color_index[palette_size_idx][color_ctx][color_new_idx];
-                } else {
-                    ++counts->palette_y_color_index[palette_size_idx][color_ctx][color_new_idx];
-                }
-#endif
             }
         }
     }

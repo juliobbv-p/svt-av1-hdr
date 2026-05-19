@@ -577,6 +577,25 @@ else()
             HAVE_BUILTIN_EXPECT=0)
 endif()
 
+# try to see if __builtin_assume is available (Clang, GCC 13+)
+check_c_source_compiles("
+    int main() {
+        int x = 42;
+        __builtin_assume(x > 0);
+        return 0;
+    }" HAVE_BUILTIN_ASSUME)
+if(HAVE_BUILTIN_ASSUME)
+    set_property(DIRECTORY .
+        APPEND
+        PROPERTY COMPILE_DEFINITIONS
+            HAVE_BUILTIN_ASSUME=1)
+else()
+    set_property(DIRECTORY .
+        APPEND
+        PROPERTY COMPILE_DEFINITIONS
+            HAVE_BUILTIN_ASSUME=0)
+endif()
+
 include_directories(.)
 
 # Find out if we have threading available

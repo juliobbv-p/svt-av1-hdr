@@ -154,6 +154,12 @@ typedef uint64_t OdEcWindow;
 
 /*The entropy encoder context.*/
 typedef struct OdEcEnc {
+    /*The low end of the current range.*/
+    OdEcWindow low;
+    /*The number of values in the current range.
+      Widened to uint32_t to eliminate uxth zero-extension instructions on ARM64.
+      Value is always in [0x8000, 0xFFFF] post-normalize.*/
+    uint32_t rng;
     /*Buffered output.
       This contains only the raw bits until the final call to od_ec_enc_done(),
        where all the arithmetic-coded data gets prepended to it.*/
@@ -162,14 +168,10 @@ typedef struct OdEcEnc {
     uint32_t storage;
     /*The offset at which the next entropy-coded byte will be written.*/
     uint32_t offs;
-    /*The low end of the current range.*/
-    OdEcWindow low;
-    /*The number of values in the current range.*/
-    uint16_t rng;
     /*The number of bits of data in the current value.*/
     int16_t cnt;
     /*Nonzero if an error occurred.*/
-    int error;
+    int16_t error;
 #if OD_MEASURE_EC_OVERHEAD
     double entropy;
     int    nb_symbols;
@@ -321,17 +323,8 @@ static INLINE int32_t aom_stop_encode(AomWriter* w) {
     return nb_bits;
 }
 
-static INLINE void aom_write(AomWriter* w, int bit, int prob) {
-    int p = (0x7FFFFF - (prob << 15) + prob) >> 8;
-#if CONFIG_BITSTREAM_DEBUG
-    AomCdfProb cdf[2] = {(AomCdfProb)p, 32767};
-    bitstream_queue_push(bit, cdf, 2);
-#endif
-    svt_od_ec_encode_bool_q15(&w->ec, bit, p);
-}
-
 static INLINE void aom_write_bit(AomWriter* w, int bit) {
-    aom_write(w, bit, 128); // aom_prob_half
+    svt_od_ec_encode_bool_q15(&w->ec, bit, CDF_PROB_TOP >> 1); // aom_prob_half
 }
 
 static INLINE void aom_write_literal(AomWriter* w, unsigned data, int bits) {
@@ -340,15 +333,17 @@ static INLINE void aom_write_literal(AomWriter* w, unsigned data, int bits) {
     }
 }
 
-static INLINE void aom_write_cdf(AomWriter* w, int symb, const AomCdfProb* cdf, int nsymbs) {
-#if CONFIG_BITSTREAM_DEBUG
-    bitstream_queue_push(symb, cdf, nsymbs);
-#endif
-    svt_od_ec_encode_cdf_q15(&w->ec, symb, cdf, nsymbs);
-}
-
 static INLINE void aom_write_symbol(AomWriter* w, int symb, AomCdfProb* cdf, int nsymbs) {
-    aom_write_cdf(w, symb, cdf, nsymbs);
+    if (nsymbs == 2) {
+        // Binary CDF specialization: route directly to the optimal bool encoder.
+        // For nsyms==2, the CDF encode path is provably equivalent to
+        // svt_od_ec_encode_bool_q15(enc, symb, cdf[0]).
+        // When nsymbs is a compile-time constant 2, this branch folds away.
+        svt_od_ec_encode_bool_q15(&w->ec, symb, cdf[0]);
+    } else {
+        svt_od_ec_encode_cdf_q15(&w->ec, symb, cdf, nsymbs);
+    }
+
     if (w->allow_update_cdf) {
         update_cdf(cdf, symb, nsymbs);
     }

@@ -438,12 +438,6 @@ uint64_t svt_av1_cost_coeffs_txb(ModeDecisionContext* ctx, uint8_t allow_update_
             {
                 if (c == eob - 1) {
                     assert(coeff_ctx < 4);
-#if CONFIG_ENTROPY_STATS
-                    ++td->counts
-                          ->coeff_base_eob_multi[cdf_idx][txsize_ctx][plane_type][coeff_ctx][AOMMIN(level, 3) - 1];
-                } else {
-                    ++td->counts->coeff_base_multi[cdf_idx][txsize_ctx][plane_type][coeff_ctx][AOMMIN(level, 3)];
-#endif
                 }
             }
 
@@ -460,16 +454,10 @@ uint64_t svt_av1_cost_coeffs_txb(ModeDecisionContext* ctx, uint8_t allow_update_
                     const int k = AOMMIN(base_range - idx, BR_CDF_SIZE - 1);
                     update_cdf(ec_ctx->coeff_br_cdf[AOMMIN(txs_ctx, TX_32X32)][plane_type][br_ctx], k, BR_CDF_SIZE);
                     for (int lps = 0; lps < BR_CDF_SIZE - 1; lps++) {
-#if CONFIG_ENTROPY_STATS
-                        ++td->counts->coeff_lps[AOMMIN(txsize_ctx, TX_32X32)][plane_type][lps][br_ctx][lps == k];
-#endif // CONFIG_ENTROPY_STATS
                         if (lps == k) {
                             break;
                         }
                     }
-#if CONFIG_ENTROPY_STATS
-                    ++td->counts->coeff_lps_multi[cdf_idx][AOMMIN(txsize_ctx, TX_32X32)][plane_type][br_ctx][k];
-#endif
                     if (k < BR_CDF_SIZE - 1) {
                         break;
                     }

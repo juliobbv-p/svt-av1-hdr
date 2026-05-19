@@ -4244,9 +4244,6 @@ static void loop_restoration_write_sb_coeffs(PictureControlSet* pcs, FRAME_CONTE
         return;
     }
 
-    //(void)counts;
-    //    assert(!cm->all_lossless);
-
     const int32_t   wiener_win   = (plane > 0) ? WIENER_WIN_CHROMA : WIENER_WIN;
     WienerInfo*     wiener_info  = &ctx->wiener_info[plane];
     SgrprojInfo*    sgrproj_info = &ctx->sgrproj_info[plane];
@@ -4259,9 +4256,6 @@ static void loop_restoration_write_sb_coeffs(PictureControlSet* pcs, FRAME_CONTE
                          unit_rtype,
                          /*xd->tile_ctx->*/ frame_context->switchable_restore_cdf,
                          RESTORE_SWITCHABLE_TYPES);
-#if CONFIG_ENTROPY_STATS
-        ++counts->switchable_restore[unit_rtype];
-#endif
         switch (unit_rtype) {
         case RESTORE_WIENER:
             write_wiener_filter(wiener_win, &rui->wiener_info, wiener_info, w);
@@ -4280,9 +4274,6 @@ static void loop_restoration_write_sb_coeffs(PictureControlSet* pcs, FRAME_CONTE
                          unit_rtype != RESTORE_NONE,
                          /*xd->tile_ctx->*/ frame_context->wiener_restore_cdf,
                          2);
-#if CONFIG_ENTROPY_STATS
-        ++counts->wiener_restore[unit_rtype != RESTORE_NONE];
-#endif
         if (unit_rtype != RESTORE_NONE) {
             write_wiener_filter(wiener_win, &rui->wiener_info, wiener_info, w);
             //SVT_LOG("POC:%i plane:%i v:%i %i %i  h:%i %i %i\n", piCSetPtr->picture_number, plane, rui->wiener_info.vfilter[0], rui->wiener_info.vfilter[1], rui->wiener_info.vfilter[2], rui->wiener_info.hfilter[0], rui->wiener_info.hfilter[1], rui->wiener_info.hfilter[2]);
@@ -4294,9 +4285,6 @@ static void loop_restoration_write_sb_coeffs(PictureControlSet* pcs, FRAME_CONTE
                          unit_rtype != RESTORE_NONE,
                          /*xd->tile_ctx->*/ frame_context->sgrproj_restore_cdf,
                          2);
-#if CONFIG_ENTROPY_STATS
-        ++counts->sgrproj_restore[unit_rtype != RESTORE_NONE];
-#endif
         if (unit_rtype != RESTORE_NONE) {
             write_sgrproj_filter(&rui->sgrproj_info, sgrproj_info, w);
             //SVT_LOG("POC:%i plane:%i ep:%i xqd_0:%i  xqd_1:%i\n", piCSetPtr->picture_number, plane, rui->sgrproj_info.ep, rui->sgrproj_info.xqd[0], rui->sgrproj_info.xqd[1]);

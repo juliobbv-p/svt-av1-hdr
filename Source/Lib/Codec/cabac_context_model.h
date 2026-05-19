@@ -72,7 +72,7 @@ static INLINE uint8_t get_prob(unsigned int num, unsigned int den) {
     return (uint8_t)clipped_prob;
 }
 
-static INLINE void update_cdf(AomCdfProb* cdf, int8_t val, int nsymbs) {
+static INLINE void update_cdf(AomCdfProb* cdf, int val, int nsymbs) {
     assert(nsymbs < 17);
     const int count = cdf[nsymbs];
     cdf[nsymbs] += (count < 32);
@@ -91,6 +91,8 @@ static INLINE void update_cdf(AomCdfProb* cdf, int8_t val, int nsymbs) {
     // Now, the equation becomes:
     //  4 + (count >> 4) + (nsymbs > 3).
     const int rate = 4 + (count >> 4) + (nsymbs > 3);
+
+    EB_ASSUME(val < nsymbs);
 
     int i = 0;
     for (; i < val; i++) {

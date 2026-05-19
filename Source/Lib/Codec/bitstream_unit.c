@@ -107,7 +107,7 @@ static inline void propagate_carry_bwd(unsigned char* buf, uint32_t offs) {
   This is the cold path of normalize, kept out-of-line to reduce icache
   pressure on the hot (no-flush) path.
   Returns the residual low value after flushing.*/
-static NOINLINE OdEcWindow od_ec_enc_flush(OdEcEnc* enc, OdEcWindow low, int c, int s) {
+static NOINLINE void od_ec_enc_flush(OdEcEnc* enc, OdEcWindow low, unsigned rng, int c, int d, int s) {
     unsigned char* out = enc->buf;
     assert(enc->offs + 8 <= enc->storage);
     // Need to add 1 byte here since enc->cnt always counts 1 byte less
@@ -136,7 +136,12 @@ static NOINLINE OdEcWindow od_ec_enc_flush(OdEcEnc* enc, OdEcWindow low, int c, 
     memcpy(&out[enc->offs], &reg, 8);
 
     enc->offs += num_bits_ready >> 3;
-    return low & (((uint64_t)1 << c) - 1);
+
+    low &= (((uint64_t)1 << c) - 1);
+
+    enc->low = low << d;
+    enc->rng = rng << d;
+    enc->cnt = (s & 7) - 8;
 }
 
 /*Takes updated low and range values, renormalizes them so that
@@ -161,13 +166,13 @@ static inline void svt_od_ec_enc_normalize(OdEcEnc* enc, OdEcWindow low, unsigne
        this approach needs additional computations: (i) compute "e", (ii) push
        the leading 0x00's as a special case.
     */
-    if (s >= 40) { // 56 - 16
-        low = od_ec_enc_flush(enc, low, c, s);
-        s   = (s & 7) - 8;
+    if (EB_UNLIKELY(s >= 40)) { // 56 - 16
+        od_ec_enc_flush(enc, low, rng, c, d, s);
+    } else {
+        enc->low = low << d;
+        enc->rng = rng << d;
+        enc->cnt = s;
     }
-    enc->low = low << d;
-    enc->rng = rng << d;
-    enc->cnt = s;
 }
 
 /*Initializes the encoder.
@@ -229,23 +234,25 @@ void svt_od_ec_enc_ensure_capacity(OdEcEnc* enc, uint32_t min_free) {
   before the one to be encoded.
   fh: CDF_PROB_TOP minus the cumulative frequency of all symbols up to and
   including the one to be encoded.*/
-static inline void svt_od_ec_encode_q15(OdEcEnc* enc, unsigned fl, unsigned fh, int s, int nsyms) {
-    OdEcWindow l;
-    unsigned   r;
-    l = enc->low;
-    r = enc->rng;
+static inline void svt_od_ec_encode_q15(OdEcEnc* enc, uint32_t fl, uint32_t fh, uint32_t s, uint32_t nsyms) {
+    OdEcWindow l = enc->low;
+    uint32_t   r = enc->rng;
     assert(32768U <= r);
     assert(fh <= fl);
     assert(fl <= 32768U);
     assert(7 - EC_PROB_SHIFT >= 0);
-    const int N = nsyms - 1;
+    const uint32_t N    = nsyms - 1;
+    const uint32_t r_hi = r >> 8;
+    const uint32_t temp = EC_MIN_PROB * (N - s);
     if (fl < CDF_PROB_TOP) {
-        unsigned u = ((r >> 8) * (uint32_t)(fl >> EC_PROB_SHIFT) >> (7 - EC_PROB_SHIFT)) + EC_MIN_PROB * (N - (s - 1));
-        unsigned v = ((r >> 8) * (uint32_t)(fh >> EC_PROB_SHIFT) >> (7 - EC_PROB_SHIFT)) + EC_MIN_PROB * (N - (s + 0));
+        EB_ASSUME(fl <= 32768);
+        EB_ASSUME(fh <= 32768);
+        uint32_t u = (r_hi * (fl >> EC_PROB_SHIFT) >> (7 - EC_PROB_SHIFT)) + temp + EC_MIN_PROB;
+        uint32_t v = (r_hi * (fh >> EC_PROB_SHIFT) >> (7 - EC_PROB_SHIFT)) + temp;
         l += r - u;
         r = u - v;
     } else {
-        r -= ((r >> 8) * (uint32_t)(fh >> EC_PROB_SHIFT) >> (7 - EC_PROB_SHIFT)) + EC_MIN_PROB * (N - (s + 0));
+        r -= (r_hi * (fh >> EC_PROB_SHIFT) >> (7 - EC_PROB_SHIFT)) + temp;
     }
     svt_od_ec_enc_normalize(enc, l, r);
 #if OD_MEASURE_EC_OVERHEAD
@@ -257,17 +264,14 @@ static inline void svt_od_ec_encode_q15(OdEcEnc* enc, unsigned fl, unsigned fh, 
 /*Encode a single binary value.
   val: The value to encode (0 or 1).
   f: The probability that the val is one, scaled by 32768.*/
-void svt_od_ec_encode_bool_q15(OdEcEnc* enc, int val, unsigned f) {
-    OdEcWindow l;
-    unsigned   r;
-    unsigned   v;
+void svt_od_ec_encode_bool_q15(OdEcEnc* enc, int val, uint32_t f) {
     assert(0 < f);
     assert(f < 32768U);
-    l = enc->low;
-    r = enc->rng;
+    OdEcWindow l = enc->low;
+    uint32_t   r = enc->rng;
     assert(32768U <= r);
-    v = ((r >> 8) * (uint32_t)(f >> EC_PROB_SHIFT) >> (7 - EC_PROB_SHIFT));
-    v += EC_MIN_PROB;
+    EB_ASSUME(f <= 32768);
+    uint32_t v = ((r >> 8) * (f >> EC_PROB_SHIFT) >> (7 - EC_PROB_SHIFT)) + EC_MIN_PROB;
     if (val) {
         l += r - v;
     }

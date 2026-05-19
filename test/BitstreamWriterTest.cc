@@ -35,8 +35,7 @@
 #endif
 /**
  * @brief Unit test for Bitstream writer functions:
- * - aom_write
- * - aom_write_symbols
+ * - aom_write_symbol (bool and cdf)
  * - aom_write_literal
  * - aom_start_encode
  * - aom_stop_encode
@@ -224,7 +223,7 @@ TEST(Entropy_BitstreamWriter, write_symbol_no_update) {
     aom_start_encode(&bw, &output_bitstream_ptr);
     for (int i = 0; i < 500; ++i) {
         aom_write_symbol(&bw, rnd(gen), fc.txb_skip_cdf[0][0], 2);
-        aom_write_symbol(&bw, rnd(gen), fc.txb_skip_cdf[0][0], 2);
+        aom_write_symbol(&bw, rnd(gen), fc.eob_flag_cdf16[0][0], 5);
     }
     aom_stop_encode(&bw);
 
@@ -237,7 +236,7 @@ TEST(Entropy_BitstreamWriter, write_symbol_no_update) {
     for (int i = 0; i < 500; ++i) {
         ASSERT_EQ(aom_read_symbol(&br, fc.txb_skip_cdf[0][0], 2, nullptr),
                   rnd(gen));
-        ASSERT_EQ(aom_read_symbol(&br, fc.txb_skip_cdf[0][0], 2, nullptr),
+        ASSERT_EQ(aom_read_symbol(&br, fc.eob_flag_cdf16[0][0], 5, nullptr),
                   rnd(gen));
     }
 }
@@ -267,7 +266,7 @@ TEST(Entropy_BitstreamWriter, write_symbol_with_update) {
     aom_start_encode(&bw, &output_bitstream_ptr);
     for (int i = 0; i < 500; ++i) {
         aom_write_symbol(&bw, rnd(gen), fc.txb_skip_cdf[0][0], 2);
-        aom_write_symbol(&bw, rnd(gen), fc.txb_skip_cdf[0][0], 2);
+        aom_write_symbol(&bw, rnd(gen), fc.eob_flag_cdf16[0][0], 5);
     }
     aom_stop_encode(&bw);
 
@@ -282,7 +281,7 @@ TEST(Entropy_BitstreamWriter, write_symbol_with_update) {
     for (int i = 0; i < 500; i++) {
         ASSERT_EQ(aom_read_symbol(&br, fc.txb_skip_cdf[0][0], 2, nullptr),
                   rnd(gen));
-        ASSERT_EQ(aom_read_symbol(&br, fc.txb_skip_cdf[0][0], 2, nullptr),
+        ASSERT_EQ(aom_read_symbol(&br, fc.eob_flag_cdf16[0][0], 5, nullptr),
                   rnd(gen));
     }
 }
