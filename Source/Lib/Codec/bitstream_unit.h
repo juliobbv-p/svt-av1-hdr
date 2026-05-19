@@ -18,13 +18,6 @@
 extern "C" {
 #endif
 
-#ifdef _MSC_VER
-#if defined(_M_X64) || defined(_M_IX86)
-#include <intrin.h>
-#define USE_MSC_INTRINSICS
-#endif
-#endif
-
 /**********************************
  * Bitstream Unit Types
  **********************************/
@@ -46,55 +39,6 @@ EbErrorType svt_aom_output_bitstream_reset(OutputBitstreamUnit* bitstream_ptr);
 /********************************************************************************************************************************/
 /********************************************************************************************************************************/
 #include "cabac_context_model.h"
-/********************************************************************************************************************************/
-// bitops.h
-// These versions of get_msb() are only valid when n != 0 because all
-// of the optimized versions are undefined when n == 0:
-// https://gcc.gnu.org/onlinedocs/gcc/Other-Builtins.html
-
-// use GNU builtins where available.
-#if defined(__GNUC__) && ((__GNUC__ == 3 && __GNUC_MINOR__ >= 4) || __GNUC__ >= 4)
-static INLINE int32_t get_msb(uint32_t n) {
-    assert(n != 0);
-    return 31 - __builtin_clz(n);
-}
-#elif defined(USE_MSC_INTRINSICS)
-#pragma intrinsic(_BitScanReverse)
-
-static INLINE int32_t get_msb(uint32_t n) {
-    unsigned long first_set_bit;
-    assert(n != 0);
-    _BitScanReverse(&first_set_bit, n);
-    return first_set_bit;
-}
-
-#undef USE_MSC_INTRINSICS
-#else
-// Returns (int32_t)floor(log2(n)). n must be > 0.
-/*static*/ INLINE int32_t get_msb(uint32_t n) {
-    int32_t  log   = 0;
-    uint32_t value = n;
-    int32_t  i;
-
-    assert(n != 0);
-
-    for (i = 4; i >= 0; --i) {
-        const int32_t  shift = (1 << i);
-        const uint32_t x     = value >> shift;
-        if (x != 0) {
-            value = x;
-            log += shift;
-        }
-    }
-    return log;
-}
-#endif
-/********************************************************************************************************************************/
-//odintrin.h
-
-#define OD_CLZ0 (1)
-#define OD_CLZ(x) (-get_msb(x))
-#define OD_ILOG_NZ(x) (OD_CLZ0 - OD_CLZ(x))
 
 #define OD_DIVU_DMAX (1024)
 
@@ -105,7 +49,7 @@ extern uint32_t svt_aom_od_divu_small_consts[OD_DIVU_DMAX][2];
     ((uint32_t)((svt_aom_od_divu_small_consts[(_d) - 1][0] * (uint64_t)(_x) + \
                  svt_aom_od_divu_small_consts[(_d) - 1][1]) >>                \
                 32) >>                                                        \
-     (OD_ILOG_NZ(_d) - 1))
+     (svt_log2f(_d)))
 
 #define OD_DIVU(_x, _d) (((_d) < OD_DIVU_DMAX) ? (OD_DIVU_SMALL((_x), (_d))) : ((_x) / (_d)))
 

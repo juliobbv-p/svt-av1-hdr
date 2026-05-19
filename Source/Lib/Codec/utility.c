@@ -127,26 +127,6 @@ const CodedBlockStats* svt_aom_get_coded_blk_stats(const uint32_t cu_idx) {
     return &coded_unit_stats_array[cu_idx];
 }
 
-/*****************************************
-  * Long Log 2
-  *  This is a quick adaptation of a Number
-  *  Leading Zeros (NLZ) algorithm to get
-  *  the log2f of a 32-bit number
-  *****************************************/
-uint32_t svt_aom_log2f_32(uint32_t x) {
-    uint32_t log = 0;
-    int32_t  i;
-    for (i = 4; i >= 0; --i) {
-        const uint32_t shift = (1 << i);
-        const uint32_t n     = x >> shift;
-        if (n != 0) {
-            x = n;
-            log += shift;
-        }
-    }
-    return log;
-}
-
 static const MiniGopStats mini_gop_stats_array[] = {
     // hierarchical_levels    start_index    end_index    Length
     {5, 0, 31, 32}, // 0

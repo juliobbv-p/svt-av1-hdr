@@ -153,7 +153,7 @@ static inline void svt_od_ec_enc_normalize(OdEcEnc* enc, OdEcWindow low, unsigne
     int c = enc->cnt;
     assert(rng <= 65535U);
     /*The number of leading zeros in the 16-bit binary representation of rng.*/
-    int d = 16 - OD_ILOG_NZ(rng);
+    int d = 15 - svt_log2f(rng);
     int s = c + d;
 
     /* We flush every time "low" cannot safely and efficiently accommodate any
