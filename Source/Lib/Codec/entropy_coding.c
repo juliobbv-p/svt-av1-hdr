@@ -3770,15 +3770,6 @@ static int32_t write_uleb_obu_size(uint32_t obu_header_size, uint32_t obu_payloa
     return SVT_AOM_CODEC_OK;
 }
 
-static size_t obu_mem_move(uint32_t obu_header_size, uint32_t obu_payload_size, uint8_t* data) {
-    const size_t   length_field_size = svt_aom_uleb_size_in_bytes(obu_payload_size);
-    const uint32_t move_dst_offset   = (uint32_t)length_field_size + obu_header_size;
-    const uint32_t move_src_offset   = obu_header_size;
-    const uint32_t move_size         = obu_payload_size;
-    memmove(data + move_dst_offset, data + move_src_offset, move_size);
-    return length_field_size;
-}
-
 static void add_trailing_bits(AomWriteBitBuffer* wb) {
     if (svt_aom_wb_is_byte_aligned(wb)) {
         svt_aom_wb_write_literal(wb, 0x80, 8);
@@ -3932,21 +3923,21 @@ EbErrorType svt_aom_write_metadata_av1(Bitstream* bitstream_ptr, SvtMetadataArra
         SvtMetadataT* current_metadata = metadata->metadata_array[i];
         if (current_metadata && current_metadata->payload && current_metadata->type == type) {
             uint32_t      obu_header_size      = 0;
-            int32_t       curr_data_size       = 0;
             const uint8_t obu_extension_header = 0;
-            // A new tile group begins at this tile.  Write the obu header and
-            // tile group header
-            const ObuType obu_type = OBU_METADATA;
-            curr_data_size         = write_obu_header(obu_type, obu_extension_header, data);
-            obu_header_size        = curr_data_size;
-            curr_data_size += write_obu_metadata(current_metadata, data + curr_data_size);
-            const uint32_t obu_payload_size  = curr_data_size - obu_header_size;
-            const size_t   length_field_size = obu_mem_move(obu_header_size, obu_payload_size, data);
-            if (write_uleb_obu_size(obu_header_size, obu_payload_size, data) != SVT_AOM_CODEC_OK) {
-                assert(0);
-            }
-            curr_data_size += (int32_t)length_field_size;
-            data += curr_data_size;
+            const ObuType obu_type             = OBU_METADATA;
+
+            // Phase 1: measure header + payload sizes
+            obu_header_size                  = write_obu_header(obu_type, obu_extension_header, data);
+            const uint32_t obu_payload_size  = write_obu_metadata(current_metadata, data + obu_header_size);
+            const size_t   length_field_size = svt_aom_uleb_size_in_bytes(obu_payload_size);
+
+            // Phase 2: write at correct offsets (re-write payload after LEB128)
+            // OBU header already at data[0]
+            size_t coded_size;
+            svt_aom_uleb_encode(obu_payload_size, sizeof(obu_payload_size), data + obu_header_size, &coded_size);
+            write_obu_metadata(current_metadata, data + obu_header_size + length_field_size);
+
+            data += obu_header_size + length_field_size + obu_payload_size;
         }
     }
     output_bitstream_ptr->buffer_av1 = data;
@@ -3964,61 +3955,75 @@ EbErrorType svt_aom_write_frame_header_av1(Bitstream* bitstream_ptr, SequenceCon
     Av1Common* const         cm                   = ppcs->av1_cm;
     uint16_t                 tile_cnt             = cm->tiles_info.tile_rows * cm->tiles_info.tile_cols;
     uint8_t*                 data                 = output_bitstream_ptr->buffer_av1;
-    uint32_t                 obu_header_size      = 0;
 
-    int32_t curr_data_size = 0;
+    const uint8_t obu_extension_header            = 0;
+    const ObuType obu_type                        = show_existing ? OBU_FRAME_HEADER : OBU_FRAME;
+    const int     n_log2_tiles                    = ppcs->av1_cm->log2_tile_rows + ppcs->av1_cm->log2_tile_cols;
+    const int     tile_start_and_end_present_flag = 0;
 
-    const uint8_t obu_extension_header = 0;
+    // Phase 1: Measure header sizes by writing to data (will be overwritten in phase 2).
+    const uint32_t obu_header_size = write_obu_header(obu_type, obu_extension_header, data);
+    const uint32_t frame_hdr_size  = write_frame_header_obu(
+        scs, ppcs, data + obu_header_size, show_existing, show_existing);
+    const uint32_t tg_hdr_size = write_tile_group_header(
+        data + obu_header_size + frame_hdr_size, 0, 0, n_log2_tiles, tile_start_and_end_present_flag);
+    const uint32_t hdr_payload_size = frame_hdr_size + tg_hdr_size;
 
-    // A new tile group begins at this tile.  Write the obu header and
-    // tile group header
-    const ObuType obu_type = show_existing ? OBU_FRAME_HEADER : OBU_FRAME;
-    curr_data_size         = write_obu_header(obu_type, obu_extension_header, data);
-    obu_header_size        = curr_data_size;
-
-    curr_data_size += write_frame_header_obu(
-        scs, ppcs, /*saved_wb,*/ data + curr_data_size, show_existing, show_existing);
-
-    const int n_log2_tiles                    = ppcs->av1_cm->log2_tile_rows + ppcs->av1_cm->log2_tile_cols;
-    const int tile_start_and_end_present_flag = 0;
-
-    curr_data_size += write_tile_group_header(
-        data + curr_data_size, 0, 0, n_log2_tiles, tile_start_and_end_present_flag);
-
+    // Compute tile data size (tile size prefixes + tile data).
+    uint32_t tile_data_size = 0;
     if (!show_existing) {
-        // Add data from EC stream to Picture Stream.
+        for (int tile_idx = 0; tile_idx < tile_cnt; tile_idx++) {
+            tile_data_size += pcs->ec_info[tile_idx]->ec->ec_writer.pos;
+            if (tile_idx != tile_cnt - 1 && tile_cnt > 1) {
+                tile_data_size += pcs->tile_size_bytes_minus_1 + 1;
+            }
+        }
+    }
+
+    // Compute exact OBU payload size and LEB128 field size.
+    const uint32_t obu_payload_size  = hdr_payload_size + tile_data_size;
+    const size_t   length_field_size = svt_aom_uleb_size_in_bytes(obu_payload_size);
+
+    // Ensure buffer is large enough for the complete OBU.
+    const uint32_t total_obu_size = obu_header_size + (uint32_t)length_field_size + obu_payload_size;
+    uint32_t       buf_needed     = total_obu_size +
+        (uint32_t)(output_bitstream_ptr->buffer_av1 - output_bitstream_ptr->buffer_begin_av1);
+    if (output_bitstream_ptr->size < buf_needed) {
+        svt_realloc_output_bitstream_unit(output_bitstream_ptr, buf_needed + 1);
+        data = output_bitstream_ptr->buffer_av1;
+    }
+
+    // Phase 2: Write everything at the correct offsets — no memmove needed.
+    // OBU header is already at data[0] from phase 1 (same content, same position).
+
+    // LEB128 size field right after OBU header.
+    size_t coded_size;
+    svt_aom_uleb_encode(obu_payload_size, sizeof(obu_payload_size), data + obu_header_size, &coded_size);
+
+    // Re-write frame header + tile group header at the correct offset (after LEB128).
+    uint32_t write_offset = obu_header_size + (uint32_t)length_field_size;
+    write_frame_header_obu(scs, ppcs, data + write_offset, show_existing, show_existing);
+    write_offset += frame_hdr_size;
+    write_tile_group_header(data + write_offset, 0, 0, n_log2_tiles, tile_start_and_end_present_flag);
+    write_offset += tg_hdr_size;
+
+    // Copy tile data.
+    if (!show_existing) {
         for (int tile_idx = 0; tile_idx < tile_cnt; tile_idx++) {
             const int32_t tile_size       = pcs->ec_info[tile_idx]->ec->ec_writer.pos;
             uint8_t       tile_size_bytes = 0;
-            // tile_size += (tile_idx != tile_cnt - 1) ? 4 : 0;
             if (tile_idx != tile_cnt - 1 && tile_cnt > 1) {
                 tile_size_bytes = pcs->tile_size_bytes_minus_1 + 1;
-                mem_put_varsize(data + curr_data_size, tile_size_bytes, tile_size - 1);
+                mem_put_varsize(data + write_offset, tile_size_bytes, tile_size - 1);
             }
             OutputBitstreamUnit* ec_output_bitstream_ptr =
                 (OutputBitstreamUnit*)pcs->ec_info[tile_idx]->ec->ec_output_bitstream_ptr;
-            assert(output_bitstream_ptr->buffer_av1 >= output_bitstream_ptr->buffer_begin_av1);
-            // Size of the buffer needed to store all data; if buffer is too small, increase buffer
-            // size
-            uint32_t data_size = (uint32_t)tile_size + curr_data_size + tile_size_bytes + 10 /*MAX length_field_size*/ +
-                (uint32_t)(output_bitstream_ptr->buffer_av1 - output_bitstream_ptr->buffer_begin_av1);
-            if (output_bitstream_ptr->size < data_size) {
-                svt_realloc_output_bitstream_unit(output_bitstream_ptr,
-                                                  data_size + 1); // plus one for good measure
-                data = output_bitstream_ptr->buffer_av1;
-            }
-            svt_memcpy(data + curr_data_size + tile_size_bytes, ec_output_bitstream_ptr->buffer_begin_av1, tile_size);
-            curr_data_size += (tile_size + tile_size_bytes);
+            svt_memcpy(data + write_offset + tile_size_bytes, ec_output_bitstream_ptr->buffer_begin_av1, tile_size);
+            write_offset += (tile_size + tile_size_bytes);
         }
     }
-    const uint32_t obu_payload_size  = curr_data_size - obu_header_size;
-    const size_t   length_field_size = obu_mem_move(obu_header_size, obu_payload_size, data);
-    if (write_uleb_obu_size(obu_header_size, obu_payload_size, data) != SVT_AOM_CODEC_OK) {
-        assert(0);
-    }
-    curr_data_size += (int32_t)length_field_size;
-    data += curr_data_size;
 
+    data += total_obu_size;
     output_bitstream_ptr->buffer_av1 = data;
     return return_error;
 }
@@ -4030,21 +4035,19 @@ EbErrorType svt_aom_encode_sps_av1(Bitstream* bitstream_ptr, SequenceControlSet*
     EbErrorType          return_error             = EB_ErrorNone;
     OutputBitstreamUnit* output_bitstream_ptr     = (OutputBitstreamUnit*)bitstream_ptr->output_bitstream_ptr;
     uint8_t*             data                     = output_bitstream_ptr->buffer_av1;
-    uint32_t             obu_header_size          = 0;
-    uint32_t             obu_payload_size         = 0;
     const uint8_t        enhancement_layers_count = 0; // cm->enhancement_layers_count;
 
-    // write sequence header obu if KEY_FRAME, preceded by 4-byte size
-    obu_header_size = write_obu_header(OBU_SEQUENCE_HEADER, 0, data);
+    // Phase 1: measure
+    const uint32_t obu_header_size   = write_obu_header(OBU_SEQUENCE_HEADER, 0, data);
+    const uint32_t obu_payload_size  = write_sequence_header_obu(scs, data + obu_header_size, enhancement_layers_count);
+    const size_t   length_field_size = svt_aom_uleb_size_in_bytes(obu_payload_size);
 
-    obu_payload_size = write_sequence_header_obu(scs, /*cpi,*/ data + obu_header_size, enhancement_layers_count);
+    // Phase 2: write at correct offsets (re-write payload after LEB128)
+    size_t coded_size;
+    svt_aom_uleb_encode(obu_payload_size, sizeof(obu_payload_size), data + obu_header_size, &coded_size);
+    write_sequence_header_obu(scs, data + obu_header_size + length_field_size, enhancement_layers_count);
 
-    const size_t length_field_size = obu_mem_move(obu_header_size, obu_payload_size, data);
-    if (write_uleb_obu_size(obu_header_size, obu_payload_size, data) != SVT_AOM_CODEC_OK) {
-        // return SVT_AOM_CODEC_ERROR;
-    }
-
-    data += obu_header_size + obu_payload_size + length_field_size;
+    data += obu_header_size + length_field_size + obu_payload_size;
     output_bitstream_ptr->buffer_av1 = data;
     return return_error;
 }
