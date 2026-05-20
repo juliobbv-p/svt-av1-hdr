@@ -52,6 +52,7 @@ extern uint32_t svt_aom_od_divu_small_consts[OD_DIVU_DMAX][2];
      (svt_log2f(_d)))
 
 #define OD_DIVU(_x, _d) (((_d) < OD_DIVU_DMAX) ? (OD_DIVU_SMALL((_x), (_d))) : ((_x) / (_d)))
+#define OD_ILOG_NZ(_x) (svt_log2f(_x) + 1)
 
 /*Enable special features for gcc and compatible compilers.*/
 #if defined(__GNUC__) && defined(__GNUC_MINOR__) && defined(__GNUC_PATCHLEVEL__)

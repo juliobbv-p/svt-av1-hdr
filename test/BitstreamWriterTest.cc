@@ -145,7 +145,8 @@ class BitstreamWriterTest : public ::testing::Test {
                 AomWriter bw;
                 aom_start_encode(&bw, &output_bitstream_ptr);
                 for (int i = 0; i < total_bits; ++i) {
-                    aom_write(&bw, test_bits[i], static_cast<int>(probas[i]));
+                    int p = (0x7FFFFF - (probas[i] << 15) + probas[i]) >> 8;
+                    svt_od_ec_encode_bool_q15(&bw.ec, test_bits[i], p);
                 }
                 aom_stop_encode(&bw);
 

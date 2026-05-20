@@ -47,21 +47,22 @@ typedef struct {
 #define AOM_ICDF(x) (CDF_PROB_TOP - (x))
 
 // clang-format off
+#define AOM_EXPAND_LIST(x) x
 #define AOM_CDF2(a0)  AOM_ICDF(a0), 0
-#define AOM_CDF3(a0,  ...) AOM_ICDF(a0), AOM_CDF2(__VA_ARGS__)
-#define AOM_CDF4(a0,  ...) AOM_ICDF(a0), AOM_CDF3(__VA_ARGS__)
-#define AOM_CDF5(a0,  ...) AOM_ICDF(a0), AOM_CDF4(__VA_ARGS__)
-#define AOM_CDF6(a0,  ...) AOM_ICDF(a0), AOM_CDF5(__VA_ARGS__)
-#define AOM_CDF7(a0,  ...) AOM_ICDF(a0), AOM_CDF6(__VA_ARGS__)
-#define AOM_CDF8(a0,  ...) AOM_ICDF(a0), AOM_CDF7(__VA_ARGS__)
-#define AOM_CDF9(a0,  ...) AOM_ICDF(a0), AOM_CDF8(__VA_ARGS__)
-#define AOM_CDF10(a0, ...) AOM_ICDF(a0), AOM_CDF9(__VA_ARGS__)
-#define AOM_CDF11(a0, ...) AOM_ICDF(a0), AOM_CDF10(__VA_ARGS__)
-#define AOM_CDF12(a0, ...) AOM_ICDF(a0), AOM_CDF11(__VA_ARGS__)
-#define AOM_CDF13(a0, ...) AOM_ICDF(a0), AOM_CDF12(__VA_ARGS__)
-#define AOM_CDF14(a0, ...) AOM_ICDF(a0), AOM_CDF13(__VA_ARGS__)
-#define AOM_CDF15(a0, ...) AOM_ICDF(a0), AOM_CDF14(__VA_ARGS__)
-#define AOM_CDF16(a0, ...) AOM_ICDF(a0), AOM_CDF15(__VA_ARGS__)
+#define AOM_CDF3(a0,  ...) AOM_ICDF(a0), AOM_EXPAND_LIST(AOM_CDF2(__VA_ARGS__))
+#define AOM_CDF4(a0,  ...) AOM_ICDF(a0), AOM_EXPAND_LIST(AOM_CDF3(__VA_ARGS__))
+#define AOM_CDF5(a0,  ...) AOM_ICDF(a0), AOM_EXPAND_LIST(AOM_CDF4(__VA_ARGS__))
+#define AOM_CDF6(a0,  ...) AOM_ICDF(a0), AOM_EXPAND_LIST(AOM_CDF5(__VA_ARGS__))
+#define AOM_CDF7(a0,  ...) AOM_ICDF(a0), AOM_EXPAND_LIST(AOM_CDF6(__VA_ARGS__))
+#define AOM_CDF8(a0,  ...) AOM_ICDF(a0), AOM_EXPAND_LIST(AOM_CDF7(__VA_ARGS__))
+#define AOM_CDF9(a0,  ...) AOM_ICDF(a0), AOM_EXPAND_LIST(AOM_CDF8(__VA_ARGS__))
+#define AOM_CDF10(a0, ...) AOM_ICDF(a0), AOM_EXPAND_LIST(AOM_CDF9(__VA_ARGS__))
+#define AOM_CDF11(a0, ...) AOM_ICDF(a0), AOM_EXPAND_LIST(AOM_CDF10(__VA_ARGS__))
+#define AOM_CDF12(a0, ...) AOM_ICDF(a0), AOM_EXPAND_LIST(AOM_CDF11(__VA_ARGS__))
+#define AOM_CDF13(a0, ...) AOM_ICDF(a0), AOM_EXPAND_LIST(AOM_CDF12(__VA_ARGS__))
+#define AOM_CDF14(a0, ...) AOM_ICDF(a0), AOM_EXPAND_LIST(AOM_CDF13(__VA_ARGS__))
+#define AOM_CDF15(a0, ...) AOM_ICDF(a0), AOM_EXPAND_LIST(AOM_CDF14(__VA_ARGS__))
+#define AOM_CDF16(a0, ...) AOM_ICDF(a0), AOM_EXPAND_LIST(AOM_CDF15(__VA_ARGS__))
 // clang-format on
 
 static INLINE uint8_t get_prob(unsigned int num, unsigned int den) {

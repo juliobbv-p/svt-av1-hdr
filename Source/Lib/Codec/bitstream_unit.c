@@ -250,7 +250,6 @@ void svt_od_ec_encode_bool_eq_q15(OdEcEnc* enc, int val) {
   val: The value to encode (0 or 1).
   f: The probability that the val is one, scaled by 32768.*/
 void svt_od_ec_encode_bool_q15(OdEcEnc* enc, int val, uint32_t f) {
-    assert(0 < f);
     assert(f < 32768U);
     OdEcWindow l = enc->low;
     uint32_t   r = enc->rng;

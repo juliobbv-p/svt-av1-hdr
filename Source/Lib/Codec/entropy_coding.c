@@ -454,6 +454,7 @@ static int32_t av1_write_coeffs_txb_1d(PictureParentControlSet* ppcs, FRAME_CONT
         eob_flag_cdfs = frame_context->eob_flag_cdf512[component_type][eob_multi_ctx];
         break;
     case 6:
+    default:
         eob_flag_cdfs = frame_context->eob_flag_cdf1024[component_type][eob_multi_ctx];
         break;
     }
@@ -525,8 +526,14 @@ static int32_t av1_write_coeffs_txb_1d(PictureParentControlSet* ppcs, FRAME_CONT
     // Cache: store level and sign for each scan position 0..eob-1
     // VLA sized to eob (guaranteed >= 2 here) instead of MAX_TX_SQUARE (4096)
     // to reduce stack usage from ~12KB to a few bytes for typical small blocks.
+    // MSVC does not support C99 VLAs, so fall back to MAX_TX_SQUARE there.
+#ifdef _MSC_VER
+    int16_t cached_level[MAX_TX_SQUARE];
+    uint8_t cached_sign[MAX_TX_SQUARE];
+#else
     int16_t cached_level[eob];
     uint8_t cached_sign[eob];
+#endif
     int32_t cul_level = 0;
 
     // Backward pass: base levels + base_range + cache
