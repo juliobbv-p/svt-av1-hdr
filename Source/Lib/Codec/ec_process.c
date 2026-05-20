@@ -155,7 +155,7 @@ EbErrorType svt_aom_entropy_coding_kernel_iter(void* context) {
     SequenceControlSet* scs          = pcs->scs;
     // SB Constants
 
-    uint8_t sb_size = (uint8_t)scs->sb_size;
+    uint32_t sb_size = scs->sb_size;
 
     uint8_t          sb_size_log2    = (uint8_t)svt_log2f(sb_size);
     uint32_t         pic_width_in_sb = (pcs->ppcs->aligned_width + sb_size - 1) >> sb_size_log2;
@@ -206,7 +206,11 @@ EbErrorType svt_aom_entropy_coding_kernel_iter(void* context) {
                 context_ptr->coded_area_sb             = 0;
                 context_ptr->coded_area_sb_uv          = 0;
                 // Ensure EC buffer has room for worst-case SB output (4 bytes/pixel)
-                svt_aom_ec_ensure_capacity(&pcs->ec_info[tile_idx]->ec->ec_writer, (uint32_t)sb_size * sb_size * 4);
+                EbErrorType ret = svt_aom_ec_ensure_capacity(&pcs->ec_info[tile_idx]->ec->ec_writer,
+                                                             sb_size * sb_size * 4);
+                if (ret != EB_ErrorNone) {
+                    return ret;
+                }
                 svt_aom_write_modes_sb(context_ptr,
                                        sb_ptr,
                                        pcs,
