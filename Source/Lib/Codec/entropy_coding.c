@@ -520,7 +520,6 @@ static int32_t av1_write_coeffs_txb_1d(PictureParentControlSet* ppcs, FRAME_CONT
 
     // Pre-compute CDF base pointers (loop-invariant outer dimensions)
     AomCdfProb(*base_cdf)[CDF_SIZE(4)]         = frame_context->coeff_base_cdf[txs_ctx][component_type];
-    AomCdfProb(*base_eob_cdf)[CDF_SIZE(3)]     = frame_context->coeff_base_eob_cdf[txs_ctx][component_type];
     AomCdfProb(*br_cdf)[CDF_SIZE(BR_CDF_SIZE)] = frame_context->coeff_br_cdf[br_txs_ctx][component_type];
 
     // Cache: store level and sign for each scan position 0..eob-1
@@ -532,6 +531,8 @@ static int32_t av1_write_coeffs_txb_1d(PictureParentControlSet* ppcs, FRAME_CONT
 
     // Backward pass: base levels + base_range + cache
     {
+        AomCdfProb(*base_eob_cdf)[CDF_SIZE(3)] = frame_context->coeff_base_eob_cdf[txs_ctx][component_type];
+
         // Peeled first iteration: c == eob - 1
         const int16_t pos       = scan[eob - 1];
         const int32_t v         = coeff_buffer_ptr[pos];
