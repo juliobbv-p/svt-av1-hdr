@@ -3671,7 +3671,7 @@ static void write_uncompressed_header_obu(SequenceControlSet* scs /*Av1Comp *cpi
     if (frm_hdr->quantization_params.base_q_idx > 0) {
         svt_aom_wb_write_bit(wb, frm_hdr->delta_q_params.delta_q_present);
         if (frm_hdr->delta_q_params.delta_q_present) {
-            svt_aom_wb_write_literal(wb, svt_log2f(frm_hdr->delta_q_params.delta_q_res), 2);
+            svt_aom_wb_write_literal(wb, svt_log2f_safe(frm_hdr->delta_q_params.delta_q_res), 2);
             for (uint16_t tile_idx = 0; tile_idx < tile_cnt; tile_idx++) {
                 pcs->prev_qindex[tile_idx] = frm_hdr->quantization_params.base_q_idx;
             }
@@ -3681,7 +3681,7 @@ static void write_uncompressed_header_obu(SequenceControlSet* scs /*Av1Comp *cpi
                 svt_aom_wb_write_bit(wb, frm_hdr->delta_lf_params.delta_lf_present);
             }
             if (frm_hdr->delta_lf_params.delta_lf_present) {
-                svt_aom_wb_write_literal(wb, svt_log2f(frm_hdr->delta_lf_params.delta_lf_res), 2);
+                svt_aom_wb_write_literal(wb, svt_log2f_safe(frm_hdr->delta_lf_params.delta_lf_res), 2);
                 pcs->prev_delta_lf_from_base = 0;
                 svt_aom_wb_write_bit(wb, frm_hdr->delta_lf_params.delta_lf_multi);
                 const int32_t frame_lf_count = pcs->monochrome == 0 ? FRAME_LF_COUNT : FRAME_LF_COUNT - 2;

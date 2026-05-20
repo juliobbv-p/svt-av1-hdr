@@ -335,7 +335,7 @@ static void model_rd_with_curvfit(PictureControlSet* pcs, BlockSize plane_bsize,
     }
 
     const double sse_norm = (double)sse / num_samples;
-    const double xqr      = (double)svt_log2f((uint32_t)sse_norm / (qstep * qstep));
+    const double xqr      = (double)svt_log2f_safe((uint32_t)sse_norm / (qstep * qstep));
 
     double rate_f, dist_by_sse_norm_f;
     av1_model_rd_curvfit(plane_bsize, sse_norm, xqr, &rate_f, &dist_by_sse_norm_f);

@@ -591,6 +591,7 @@ static __inline void mem_put_le32(void* vmem, MEM_VALUE_T val) {
 // of the optimized versions are undefined when n == 0:
 // https://gcc.gnu.org/onlinedocs/gcc/Other-Builtins.html
 
+#define svt_log2f_safe(x) get_msb((x) | 1)
 #define svt_log2f get_msb
 
 #ifdef _MSC_VER
