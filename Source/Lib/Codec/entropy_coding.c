@@ -249,41 +249,40 @@ void svt_aom_get_txb_ctx(PictureControlSet* pcs, const int32_t plane,
                          NeighborArrayUnit* dc_sign_level_coeff_neighbor_array, uint32_t blk_org_x, uint32_t blk_org_y,
                          const BlockSize plane_bsize, const TxSize tx_size, int16_t* const txb_skip_ctx,
                          int16_t* const dc_sign_ctx) {
-    uint32_t dc_sign_lvl_coeff_left_neighbor_idx = svt_aom_na_left_index_pu(blk_org_y);
-    uint32_t dc_sign_lvl_coeff_top_neighbor_idx  = svt_aom_na_top_index_pu(blk_org_x);
+    /* Hoist NA ring pointers and iterate them directly. Shape-B PU NA. */
+    const uint8_t* const top_ptr  = svt_aom_na_top_ptr_pu(dc_sign_level_coeff_neighbor_array, blk_org_x);
+    const uint8_t* const left_ptr = svt_aom_na_left_ptr_pu(dc_sign_level_coeff_neighbor_array, blk_org_y);
 
-    static const int8_t signs[3] = {0, -1, 1};
-    int32_t             txb_w_unit;
-    int32_t             txb_h_unit;
-    if (plane) {
-        txb_w_unit = MIN(eb_tx_size_wide_unit[tx_size], (int32_t)(pcs->ppcs->aligned_width / 2 - blk_org_x) >> 2);
-        txb_h_unit = MIN(eb_tx_size_high_unit[tx_size], (int32_t)(pcs->ppcs->aligned_height / 2 - blk_org_y) >> 2);
-    } else {
-        txb_w_unit = MIN(eb_tx_size_wide_unit[tx_size], (int32_t)(pcs->ppcs->aligned_width - blk_org_x) >> 2);
-        txb_h_unit = MIN(eb_tx_size_high_unit[tx_size], (int32_t)(pcs->ppcs->aligned_height - blk_org_y) >> 2);
-    }
-    int16_t  dc_sign = 0;
-    uint16_t k       = 0;
+    static const int8_t signs[3]    = {0, -1, 1};
+    const int32_t       plane_shift = !!plane;
+    int32_t             txb_w_unit  = MIN(eb_tx_size_wide_unit[tx_size],
+                             (int32_t)((pcs->ppcs->aligned_width >> plane_shift) - blk_org_x) >> 2);
+    int32_t             txb_h_unit  = MIN(eb_tx_size_high_unit[tx_size],
+                             (int32_t)((pcs->ppcs->aligned_height >> plane_shift) - blk_org_y) >> 2);
 
-    uint8_t sign;
+    int16_t dc_sign = 0;
+    int32_t top     = 0; /* OR-accumulation across neighbors */
+    int32_t left    = 0;
 
-    if (dc_sign_level_coeff_neighbor_array->top_array[dc_sign_lvl_coeff_top_neighbor_idx] != INVALID_NEIGHBOR_DATA) {
-        do {
-            sign = ((uint8_t)dc_sign_level_coeff_neighbor_array->top_array[k + dc_sign_lvl_coeff_top_neighbor_idx] >>
-                    COEFF_CONTEXT_BITS);
+    /* Combined top sweep: dc_sign + OR-accumulated top. */
+    if (top_ptr[0] != INVALID_NEIGHBOR_DATA) {
+        for (int32_t k = 0; k < txb_w_unit; ++k) {
+            uint8_t v    = top_ptr[k];
+            uint8_t sign = v >> COEFF_CONTEXT_BITS;
             assert(sign <= 2);
             dc_sign += signs[sign];
-        } while (++k < txb_w_unit);
+            top |= v;
+        }
     }
-
-    if (dc_sign_level_coeff_neighbor_array->left_array[dc_sign_lvl_coeff_left_neighbor_idx] != INVALID_NEIGHBOR_DATA) {
-        k = 0;
-        do {
-            sign = ((uint8_t)dc_sign_level_coeff_neighbor_array->left_array[k + dc_sign_lvl_coeff_left_neighbor_idx] >>
-                    COEFF_CONTEXT_BITS);
+    /* Combined left sweep: dc_sign + OR-accumulated left. */
+    if (left_ptr[0] != INVALID_NEIGHBOR_DATA) {
+        for (int32_t k = 0; k < txb_h_unit; ++k) {
+            uint8_t v    = left_ptr[k];
+            uint8_t sign = v >> COEFF_CONTEXT_BITS;
             assert(sign <= 2);
             dc_sign += signs[sign];
-        } while (++k < txb_h_unit);
+            left |= v;
+        }
     }
 
     if (dc_sign > 0) {
@@ -294,76 +293,24 @@ void svt_aom_get_txb_ctx(PictureControlSet* pcs, const int32_t plane,
         *dc_sign_ctx = 0;
     }
 
+    int32_t tx_bsize = txsize_to_bsize[tx_size];
     if (plane == 0) {
-        if (plane_bsize == txsize_to_bsize[tx_size]) {
+        if (plane_bsize == tx_bsize) {
             *txb_skip_ctx = 0;
         } else {
             static const uint8_t skip_contexts[5][5] = {
                 {1, 2, 2, 2, 3}, {1, 4, 4, 4, 5}, {1, 4, 4, 4, 5}, {1, 4, 4, 4, 5}, {1, 4, 4, 4, 6}};
-            int32_t top  = 0;
-            int32_t left = 0;
-
-            k = 0;
-            if (dc_sign_level_coeff_neighbor_array->top_array[dc_sign_lvl_coeff_top_neighbor_idx] !=
-                INVALID_NEIGHBOR_DATA) {
-                do {
-                    top |= (int32_t)(dc_sign_level_coeff_neighbor_array
-                                         ->top_array[k + dc_sign_lvl_coeff_top_neighbor_idx]);
-                } while (++k < txb_w_unit);
-            }
             top &= COEFF_CONTEXT_MASK;
-
-            if (dc_sign_level_coeff_neighbor_array->left_array[dc_sign_lvl_coeff_left_neighbor_idx] !=
-                INVALID_NEIGHBOR_DATA) {
-                k = 0;
-                do {
-                    left |= (int32_t)(dc_sign_level_coeff_neighbor_array
-                                          ->left_array[k + dc_sign_lvl_coeff_left_neighbor_idx]);
-                } while (++k < txb_h_unit);
-            }
             left &= COEFF_CONTEXT_MASK;
-            //do {
-            //    top |= a[k];
-            //} while (++k < txb_w_unit);
-            //top &= COEFF_CONTEXT_MASK;
-
-            //k = 0;
-            //do {
-            //    left |= l[k];
-            //} while (++k < txb_h_unit);
-            //left &= COEFF_CONTEXT_MASK;
-            const int32_t max = AOMMIN(top | left, 4);
-            const int32_t min = AOMMIN(AOMMIN(top, left), 4);
+            int32_t max = AOMMIN(top | left, 4);
+            int32_t min = AOMMIN(AOMMIN(top, left), 4);
 
             *txb_skip_ctx = skip_contexts[min][max];
         }
     } else {
-        //const int32_t ctx_base = get_entropy_context(tx_size, a, l);
-        int16_t ctx_base_left = 0;
-        int16_t ctx_base_top  = 0;
-
-        if (dc_sign_level_coeff_neighbor_array->top_array[dc_sign_lvl_coeff_top_neighbor_idx] !=
-            INVALID_NEIGHBOR_DATA) {
-            k = 0;
-            do {
-                ctx_base_top +=
-                    (dc_sign_level_coeff_neighbor_array->top_array[k + dc_sign_lvl_coeff_top_neighbor_idx] != 0);
-            } while (++k < txb_w_unit);
-        }
-        if (dc_sign_level_coeff_neighbor_array->left_array[dc_sign_lvl_coeff_left_neighbor_idx] !=
-            INVALID_NEIGHBOR_DATA) {
-            k = 0;
-            do {
-                ctx_base_left +=
-                    (dc_sign_level_coeff_neighbor_array->left_array[k + dc_sign_lvl_coeff_left_neighbor_idx] != 0);
-            } while (++k < txb_h_unit);
-        }
-        const int32_t ctx_base   = ((ctx_base_left != 0) + (ctx_base_top != 0));
-        const int32_t ctx_offset = (eb_num_pels_log2_lookup[plane_bsize] >
-                                    eb_num_pels_log2_lookup[txsize_to_bsize[tx_size]])
-            ? 10
-            : 7;
-        *txb_skip_ctx            = (int16_t)(ctx_base + ctx_offset);
+        int32_t ctx_base   = ((left != 0) + (top != 0));
+        int32_t ctx_offset = (eb_num_pels_log2_lookup[plane_bsize] > eb_num_pels_log2_lookup[tx_bsize]) ? 10 : 7;
+        *txb_skip_ctx      = (int16_t)(ctx_base + ctx_offset);
     }
 }
 

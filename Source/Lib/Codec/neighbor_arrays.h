@@ -211,11 +211,6 @@ static INLINE void svt_aom_update_recon_neighbor_array(NeighborArrayUnit* na_uni
                                                        uint8_t* src_ptr_left, uint32_t pic_origin_x,
                                                        uint32_t pic_origin_y, uint32_t bw, uint32_t bh) {
     uint8_t* dst_ptr;
-#if CONFIG_ENABLE_HIGH_BIT_DEPTH
-    const uint32_t na_unit_size = na_unit_ptr->unit_size;
-#else
-    const uint32_t na_unit_size = 1;
-#endif
 
     dst_ptr = svt_aom_na_top_ptr(na_unit_ptr, pic_origin_x);
     memcpy(dst_ptr, src_ptr_top, bw);
@@ -277,7 +272,6 @@ static INLINE void svt_aom_copy_neigh_arr(NeighborArrayUnit* na_src, NeighborArr
                                           uint32_t org_y, uint32_t bw, uint32_t bh, uint8_t mask) {
     uint8_t *dst_ptr, *src_ptr;
     uint32_t count;
-    uint32_t na_offset;
 #if CONFIG_ENABLE_HIGH_BIT_DEPTH
     uint32_t na_unit_size = na_src->unit_size;
 #else
@@ -285,24 +279,21 @@ static INLINE void svt_aom_copy_neigh_arr(NeighborArrayUnit* na_src, NeighborArr
 #endif
 
     if (mask & NEIGHBOR_ARRAY_UNIT_TOP_MASK) {
-        na_offset = get_neighbor_array_unit_top_index(na_src, org_x);
-        src_ptr   = na_src->top_array + na_offset * na_unit_size;
-        dst_ptr   = na_dst->top_array + na_offset * na_unit_size;
-        count     = bw >> na_src->granularity_log2;
+        src_ptr = svt_aom_na_top_ptr(na_src, org_x);
+        dst_ptr = svt_aom_na_top_ptr(na_dst, org_x);
+        count   = bw >> na_src->granularity_log2;
         memcpy(dst_ptr, src_ptr, na_unit_size * count);
     }
     if (mask & NEIGHBOR_ARRAY_UNIT_LEFT_MASK) {
-        na_offset = get_neighbor_array_unit_left_index(na_src, org_y);
-        src_ptr   = na_src->left_array + na_offset * na_unit_size;
-        dst_ptr   = na_dst->left_array + na_offset * na_unit_size;
-        count     = bh >> na_src->granularity_log2;
+        src_ptr = svt_aom_na_left_ptr(na_src, org_y);
+        dst_ptr = svt_aom_na_left_ptr(na_dst, org_y);
+        count   = bh >> na_src->granularity_log2;
         memcpy(dst_ptr, src_ptr, na_unit_size * count);
     }
     if (mask & NEIGHBOR_ARRAY_UNIT_TOPLEFT_MASK) {
-        na_offset = svt_aom_get_neighbor_array_unit_top_left_index(na_src, org_x, org_y + (bh - 1));
-        src_ptr   = na_src->top_left_array + na_offset * na_unit_size;
-        dst_ptr   = na_dst->top_left_array + na_offset * na_unit_size;
-        count     = ((bw + bh) >> na_src->granularity_log2) - 1;
+        src_ptr = svt_aom_na_topleft_ptr(na_src, org_x, org_y + (bh - 1));
+        dst_ptr = svt_aom_na_topleft_ptr(na_dst, org_x, org_y + (bh - 1));
+        count   = ((bw + bh) >> na_src->granularity_log2) - 1;
         memcpy(dst_ptr, src_ptr, na_unit_size * count);
     }
 }
