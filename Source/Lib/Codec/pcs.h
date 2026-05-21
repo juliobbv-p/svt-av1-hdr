@@ -273,7 +273,6 @@ typedef struct PictureControlSet {
     NeighborArrayUnit** cb_dc_sign_level_coeff_na;
     NeighborArrayUnit** txfm_context_array;
 
-    NeighborArrayUnit**      segmentation_id_pred_array;
     SegmentationNeighborMap* segmentation_neighbor_map;
 
     MbModeInfo** mi_grid_base;

@@ -64,8 +64,6 @@ static void entropy_coding_reset_neighbor_arrays(PictureControlSet* pcs, uint16_
     svt_aom_neighbor_array_unit_reset(pcs->cb_dc_sign_level_coeff_na[tile_idx]);
     svt_aom_neighbor_array_unit_reset(pcs->cr_dc_sign_level_coeff_na[tile_idx]);
     svt_aom_neighbor_array_unit_reset(pcs->txfm_context_array[tile_idx]);
-    svt_aom_neighbor_array_unit_reset(pcs->segmentation_id_pred_array[tile_idx]);
-    return;
 }
 
 /**************************************************
