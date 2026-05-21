@@ -4013,15 +4013,14 @@ static void av1_intra_luma_prediction(ModeDecisionContext* ctx, PictureControlSe
                    (tx_height * multipler) << is_16bit);
     }
     if (txb_origin_y != 0 && txb_origin_x != 0) {
+        uint32_t tl_offset = svt_aom_na_topleft_offset(recon_neigh, txb_origin_x, txb_origin_y);
         if (is_16bit) {
             uint16_t* top_hbd  = (uint16_t*)top_neigh_array;
             uint16_t* left_hbd = (uint16_t*)left_neigh_array;
-            top_hbd[0] = left_hbd[0] = ((uint16_t*)(recon_neigh->top_left_array) + recon_neigh->max_pic_h +
-                                        txb_origin_x - txb_origin_y)[0];
+            top_hbd[0] = left_hbd[0] = ((uint16_t*)recon_neigh->top_left_array)[tl_offset];
 
         } else {
-            top_neigh_array[0] = left_neigh_array[0] =
-                recon_neigh->top_left_array[recon_neigh->max_pic_h + txb_origin_x - txb_origin_y];
+            top_neigh_array[0] = left_neigh_array[0] = recon_neigh->top_left_array[tl_offset];
         }
     }
 
@@ -7995,14 +7994,16 @@ static void md_encode_block_light_pd0(PictureControlSet* pcs, ModeDecisionContex
 
     if (ctx->lpd0_use_src_samples) {
         uint8_t* src_y = input_pic->y_buffer + input_origin_index;
-        svt_memcpy(ctx->recon_neigh_y->top_array + ctx->blk_org_x, src_y - input_pic->y_stride, ctx->blk_geom->bwidth);
+        svt_memcpy(
+            svt_aom_na_top_ptr(ctx->recon_neigh_y, ctx->blk_org_x), src_y - input_pic->y_stride, ctx->blk_geom->bwidth);
 
+        uint8_t* left_ptr = svt_aom_na_left_ptr(ctx->recon_neigh_y, ctx->blk_org_y);
         for (uint32_t row_idx = 0; row_idx < ctx->blk_geom->bheight; ++row_idx) {
-            ctx->recon_neigh_y->left_array[ctx->blk_org_y + row_idx] = *(src_y + row_idx * input_pic->y_stride - 1);
+            left_ptr[row_idx] = *(src_y + row_idx * input_pic->y_stride - 1);
         }
 
-        ctx->recon_neigh_y->top_left_array[ctx->recon_neigh_y->max_pic_h + ctx->blk_org_x - ctx->blk_org_y] = *(
-            src_y - input_pic->y_stride - 1);
+        *svt_aom_na_topleft_ptr(
+            ctx->recon_neigh_y, ctx->blk_org_x, ctx->blk_org_y) = *(src_y - input_pic->y_stride - 1);
     }
     ctx->md_stage       = MD_STAGE_0;
     ctx->mds0_best_idx  = 0;
@@ -8349,22 +8350,16 @@ static void copy_recon_light_pd1(PictureControlSet* pcs, ModeDecisionContext* ct
 
     // Y
     // Copy top and bottom rows
-    uint8_t* dst_ptr_top_left = ctx->recon_neigh_y->top_array +
-        get_neighbor_array_unit_top_index(ctx->recon_neigh_y, blk_org_x) * ctx->recon_neigh_y->unit_size;
-    uint8_t* dst_ptr_bot_right = ctx->recon_neigh_y->top_left_array +
-        svt_aom_get_neighbor_array_unit_top_left_index(ctx->recon_neigh_y, blk_org_x, blk_org_y + (bheight - 1)) *
-            ctx->recon_neigh_y->unit_size;
-    uint8_t* src_ptr = recon_ptr->y_buffer + rec_luma_offset + (bheight - 1) * recon_ptr->y_stride;
+    uint8_t* dst_ptr_top_left  = svt_aom_na_top_ptr(ctx->recon_neigh_y, blk_org_x);
+    uint8_t* dst_ptr_bot_right = svt_aom_na_botleft_ptr(ctx->recon_neigh_y, blk_org_x, blk_org_y, bheight);
+    uint8_t* src_ptr           = recon_ptr->y_buffer + rec_luma_offset + (bheight - 1) * recon_ptr->y_stride;
     svt_memcpy(dst_ptr_top_left, src_ptr, bwidth);
     svt_memcpy(dst_ptr_bot_right, src_ptr, bwidth);
 
     // Copy right and left columns
-    dst_ptr_top_left = ctx->recon_neigh_y->left_array +
-        get_neighbor_array_unit_left_index(ctx->recon_neigh_y, blk_org_y) * ctx->recon_neigh_y->unit_size;
-    dst_ptr_bot_right = ctx->recon_neigh_y->top_left_array +
-        svt_aom_get_neighbor_array_unit_top_left_index(ctx->recon_neigh_y, blk_org_x + (bwidth - 1), blk_org_y) *
-            ctx->recon_neigh_y->unit_size;
-    src_ptr = recon_ptr->y_buffer + rec_luma_offset + bwidth - 1;
+    dst_ptr_top_left  = svt_aom_na_left_ptr(ctx->recon_neigh_y, blk_org_y);
+    dst_ptr_bot_right = svt_aom_na_topright_ptr(ctx->recon_neigh_y, blk_org_x, blk_org_y, bwidth);
+    src_ptr           = recon_ptr->y_buffer + rec_luma_offset + bwidth - 1;
     for (j = 0; j < bheight; ++j) {
         *dst_ptr_bot_right = dst_ptr_top_left[j] = src_ptr[j * recon_ptr->y_stride];
         dst_ptr_bot_right -= 1;
@@ -8372,24 +8367,16 @@ static void copy_recon_light_pd1(PictureControlSet* pcs, ModeDecisionContext* ct
 
     // Cb
     // Copy top and bottom rows
-    dst_ptr_top_left = ctx->recon_neigh_cb->top_array +
-        get_neighbor_array_unit_top_index(ctx->recon_neigh_cb, blk_origin_x_uv) * ctx->recon_neigh_cb->unit_size;
-    dst_ptr_bot_right = ctx->recon_neigh_cb->top_left_array +
-        svt_aom_get_neighbor_array_unit_top_left_index(
-            ctx->recon_neigh_cb, blk_origin_x_uv, blk_origin_y_uv + (bheight_uv - 1)) *
-            ctx->recon_neigh_cb->unit_size;
-    src_ptr = recon_ptr->u_buffer + rec_cb_offset + (bheight_uv - 1) * recon_ptr->u_stride;
+    dst_ptr_top_left  = svt_aom_na_top_ptr(ctx->recon_neigh_cb, blk_origin_x_uv);
+    dst_ptr_bot_right = svt_aom_na_botleft_ptr(ctx->recon_neigh_cb, blk_origin_x_uv, blk_origin_y_uv, bheight_uv);
+    src_ptr           = recon_ptr->u_buffer + rec_cb_offset + (bheight_uv - 1) * recon_ptr->u_stride;
     svt_memcpy(dst_ptr_top_left, src_ptr, bwidth_uv);
     svt_memcpy(dst_ptr_bot_right, src_ptr, bwidth_uv);
 
     // Copy right and left columns
-    dst_ptr_top_left = ctx->recon_neigh_cb->left_array +
-        get_neighbor_array_unit_left_index(ctx->recon_neigh_cb, blk_origin_y_uv) * ctx->recon_neigh_cb->unit_size;
-    dst_ptr_bot_right = ctx->recon_neigh_cb->top_left_array +
-        svt_aom_get_neighbor_array_unit_top_left_index(
-            ctx->recon_neigh_cb, blk_origin_x_uv + (bwidth_uv - 1), blk_origin_y_uv) *
-            ctx->recon_neigh_cb->unit_size;
-    src_ptr = recon_ptr->u_buffer + rec_cb_offset + bwidth_uv - 1;
+    dst_ptr_top_left  = svt_aom_na_left_ptr(ctx->recon_neigh_cb, blk_origin_y_uv);
+    dst_ptr_bot_right = svt_aom_na_topright_ptr(ctx->recon_neigh_cb, blk_origin_x_uv, blk_origin_y_uv, bwidth_uv);
+    src_ptr           = recon_ptr->u_buffer + rec_cb_offset + bwidth_uv - 1;
     for (j = 0; j < bheight_uv; ++j) {
         *dst_ptr_bot_right = dst_ptr_top_left[j] = src_ptr[j * recon_ptr->u_stride];
         dst_ptr_bot_right -= 1;
@@ -8397,24 +8384,16 @@ static void copy_recon_light_pd1(PictureControlSet* pcs, ModeDecisionContext* ct
 
     // Cr
     // Copy top and bottom rows
-    dst_ptr_top_left = ctx->recon_neigh_cr->top_array +
-        get_neighbor_array_unit_top_index(ctx->recon_neigh_cr, blk_origin_x_uv) * ctx->recon_neigh_cr->unit_size;
-    dst_ptr_bot_right = ctx->recon_neigh_cr->top_left_array +
-        svt_aom_get_neighbor_array_unit_top_left_index(
-            ctx->recon_neigh_cr, blk_origin_x_uv, blk_origin_y_uv + (bheight_uv - 1)) *
-            ctx->recon_neigh_cr->unit_size;
-    src_ptr = recon_ptr->v_buffer + rec_cr_offset + (bheight_uv - 1) * recon_ptr->v_stride;
+    dst_ptr_top_left  = svt_aom_na_top_ptr(ctx->recon_neigh_cr, blk_origin_x_uv);
+    dst_ptr_bot_right = svt_aom_na_botleft_ptr(ctx->recon_neigh_cr, blk_origin_x_uv, blk_origin_y_uv, bheight_uv);
+    src_ptr           = recon_ptr->v_buffer + rec_cr_offset + (bheight_uv - 1) * recon_ptr->v_stride;
     svt_memcpy(dst_ptr_top_left, src_ptr, bwidth_uv);
     svt_memcpy(dst_ptr_bot_right, src_ptr, bwidth_uv);
 
     // Copy right and left columns
-    dst_ptr_top_left = ctx->recon_neigh_cr->left_array +
-        get_neighbor_array_unit_left_index(ctx->recon_neigh_cr, blk_origin_y_uv) * ctx->recon_neigh_cr->unit_size;
-    dst_ptr_bot_right = ctx->recon_neigh_cr->top_left_array +
-        svt_aom_get_neighbor_array_unit_top_left_index(
-            ctx->recon_neigh_cr, blk_origin_x_uv + (bwidth_uv - 1), blk_origin_y_uv) *
-            ctx->recon_neigh_cr->unit_size;
-    src_ptr = recon_ptr->v_buffer + rec_cr_offset + bwidth_uv - 1;
+    dst_ptr_top_left  = svt_aom_na_left_ptr(ctx->recon_neigh_cr, blk_origin_y_uv);
+    dst_ptr_bot_right = svt_aom_na_topright_ptr(ctx->recon_neigh_cr, blk_origin_x_uv, blk_origin_y_uv, bwidth_uv);
+    src_ptr           = recon_ptr->v_buffer + rec_cr_offset + bwidth_uv - 1;
     for (j = 0; j < bheight_uv; ++j) {
         *dst_ptr_bot_right = dst_ptr_top_left[j] = src_ptr[j * recon_ptr->v_stride];
         dst_ptr_bot_right -= 1;
@@ -8425,29 +8404,19 @@ static void copy_recon_light_pd1(PictureControlSet* pcs, ModeDecisionContext* ct
         svt_aom_get_recon_pic(pcs, &recon_ptr, 1);
         // Y
         // Copy top and bottom rows
-        uint16_t* dst_ptr_top_left_16bit = (uint16_t*)(ctx->luma_recon_na_16bit->top_array +
-                                                       get_neighbor_array_unit_top_index(ctx->luma_recon_na_16bit,
-                                                                                         blk_org_x) *
-                                                           ctx->luma_recon_na_16bit->unit_size);
-        uint16_t* dst_ptr_bot_right_16bit =
-            (uint16_t*)(ctx->luma_recon_na_16bit->top_left_array +
-                        svt_aom_get_neighbor_array_unit_top_left_index(
-                            ctx->luma_recon_na_16bit, blk_org_x, blk_org_y + (bheight - 1)) *
-                            ctx->luma_recon_na_16bit->unit_size);
+        uint16_t* dst_ptr_top_left_16bit  = (uint16_t*)svt_aom_na_top_ptr(ctx->luma_recon_na_16bit, blk_org_x);
+        uint16_t* dst_ptr_bot_right_16bit = (uint16_t*)svt_aom_na_botleft_ptr(
+            ctx->luma_recon_na_16bit, blk_org_x, blk_org_y, bheight);
         uint16_t* src_ptr_16bit = ((uint16_t*)recon_ptr->y_buffer) + rec_luma_offset +
             (bheight - 1) * recon_ptr->y_stride;
         svt_memcpy(dst_ptr_top_left_16bit, src_ptr_16bit, bwidth * sizeof(uint16_t));
         svt_memcpy(dst_ptr_bot_right_16bit, src_ptr_16bit, bwidth * sizeof(uint16_t));
 
         // Copy right and left columns
-        dst_ptr_top_left_16bit  = (uint16_t*)(ctx->luma_recon_na_16bit->left_array +
-                                             get_neighbor_array_unit_left_index(ctx->luma_recon_na_16bit, blk_org_y) *
-                                                 ctx->luma_recon_na_16bit->unit_size);
-        dst_ptr_bot_right_16bit = (uint16_t*)(ctx->luma_recon_na_16bit->top_left_array +
-                                              svt_aom_get_neighbor_array_unit_top_left_index(
-                                                  ctx->luma_recon_na_16bit, blk_org_x + (bwidth - 1), blk_org_y) *
-                                                  ctx->luma_recon_na_16bit->unit_size);
-        src_ptr_16bit           = ((uint16_t*)recon_ptr->y_buffer) + rec_luma_offset + bwidth - 1;
+        dst_ptr_top_left_16bit  = (uint16_t*)svt_aom_na_left_ptr(ctx->luma_recon_na_16bit, blk_org_y);
+        dst_ptr_bot_right_16bit = (uint16_t*)svt_aom_na_topright_ptr(
+            ctx->luma_recon_na_16bit, blk_org_x, blk_org_y, bwidth);
+        src_ptr_16bit = ((uint16_t*)recon_ptr->y_buffer) + rec_luma_offset + bwidth - 1;
         for (j = 0; j < bheight; ++j) {
             *dst_ptr_bot_right_16bit = dst_ptr_top_left_16bit[j] = src_ptr_16bit[j * recon_ptr->y_stride];
             dst_ptr_bot_right_16bit -= 1;
@@ -8455,29 +8424,17 @@ static void copy_recon_light_pd1(PictureControlSet* pcs, ModeDecisionContext* ct
 
         // Cb
         // Copy top and bottom rows
-        dst_ptr_top_left_16bit = (uint16_t*)(ctx->cb_recon_na_16bit->top_array +
-                                             get_neighbor_array_unit_top_index(ctx->cb_recon_na_16bit,
-                                                                               blk_origin_x_uv) *
-                                                 ctx->cb_recon_na_16bit->unit_size);
-        dst_ptr_bot_right_16bit =
-            (uint16_t*)(ctx->cb_recon_na_16bit->top_left_array +
-                        svt_aom_get_neighbor_array_unit_top_left_index(
-                            ctx->cb_recon_na_16bit, blk_origin_x_uv, blk_origin_y_uv + (bheight_uv - 1)) *
-                            ctx->cb_recon_na_16bit->unit_size);
+        dst_ptr_top_left_16bit  = (uint16_t*)svt_aom_na_top_ptr(ctx->cb_recon_na_16bit, blk_origin_x_uv);
+        dst_ptr_bot_right_16bit = (uint16_t*)svt_aom_na_botleft_ptr(
+            ctx->cb_recon_na_16bit, blk_origin_x_uv, blk_origin_y_uv, bheight_uv);
         src_ptr_16bit = ((uint16_t*)recon_ptr->u_buffer) + rec_cb_offset + (bheight_uv - 1) * recon_ptr->u_stride;
         svt_memcpy(dst_ptr_top_left_16bit, src_ptr_16bit, bwidth_uv * sizeof(uint16_t));
         svt_memcpy(dst_ptr_bot_right_16bit, src_ptr_16bit, bwidth_uv * sizeof(uint16_t));
 
         // Copy right and left columns
-        dst_ptr_top_left_16bit = (uint16_t*)(ctx->cb_recon_na_16bit->left_array +
-                                             get_neighbor_array_unit_left_index(ctx->cb_recon_na_16bit,
-                                                                                blk_origin_y_uv) *
-                                                 ctx->cb_recon_na_16bit->unit_size);
-        dst_ptr_bot_right_16bit =
-            (uint16_t*)(ctx->cb_recon_na_16bit->top_left_array +
-                        svt_aom_get_neighbor_array_unit_top_left_index(
-                            ctx->cb_recon_na_16bit, blk_origin_x_uv + (bwidth_uv - 1), blk_origin_y_uv) *
-                            ctx->cb_recon_na_16bit->unit_size);
+        dst_ptr_top_left_16bit  = (uint16_t*)svt_aom_na_left_ptr(ctx->cb_recon_na_16bit, blk_origin_y_uv);
+        dst_ptr_bot_right_16bit = (uint16_t*)svt_aom_na_topright_ptr(
+            ctx->cb_recon_na_16bit, blk_origin_x_uv, blk_origin_y_uv, bwidth_uv);
         src_ptr_16bit = ((uint16_t*)recon_ptr->u_buffer) + rec_cb_offset + bwidth_uv - 1;
         for (j = 0; j < bheight_uv; ++j) {
             *dst_ptr_bot_right_16bit = dst_ptr_top_left_16bit[j] = src_ptr_16bit[j * recon_ptr->u_stride];
@@ -8486,29 +8443,17 @@ static void copy_recon_light_pd1(PictureControlSet* pcs, ModeDecisionContext* ct
 
         // Cr
         // Copy top and bottom rows
-        dst_ptr_top_left_16bit = (uint16_t*)(ctx->cr_recon_na_16bit->top_array +
-                                             get_neighbor_array_unit_top_index(ctx->cr_recon_na_16bit,
-                                                                               blk_origin_x_uv) *
-                                                 ctx->cr_recon_na_16bit->unit_size);
-        dst_ptr_bot_right_16bit =
-            (uint16_t*)(ctx->cr_recon_na_16bit->top_left_array +
-                        svt_aom_get_neighbor_array_unit_top_left_index(
-                            ctx->cr_recon_na_16bit, blk_origin_x_uv, blk_origin_y_uv + (bheight_uv - 1)) *
-                            ctx->cr_recon_na_16bit->unit_size);
+        dst_ptr_top_left_16bit  = (uint16_t*)svt_aom_na_top_ptr(ctx->cr_recon_na_16bit, blk_origin_x_uv);
+        dst_ptr_bot_right_16bit = (uint16_t*)svt_aom_na_botleft_ptr(
+            ctx->cr_recon_na_16bit, blk_origin_x_uv, blk_origin_y_uv, bheight_uv);
         src_ptr_16bit = ((uint16_t*)recon_ptr->v_buffer) + rec_cr_offset + (bheight_uv - 1) * recon_ptr->v_stride;
         svt_memcpy(dst_ptr_top_left_16bit, src_ptr_16bit, bwidth_uv * sizeof(uint16_t));
         svt_memcpy(dst_ptr_bot_right_16bit, src_ptr_16bit, bwidth_uv * sizeof(uint16_t));
 
         // Copy right and left columns
-        dst_ptr_top_left_16bit = (uint16_t*)(ctx->cr_recon_na_16bit->left_array +
-                                             get_neighbor_array_unit_left_index(ctx->cr_recon_na_16bit,
-                                                                                blk_origin_y_uv) *
-                                                 ctx->cr_recon_na_16bit->unit_size);
-        dst_ptr_bot_right_16bit =
-            (uint16_t*)(ctx->cr_recon_na_16bit->top_left_array +
-                        svt_aom_get_neighbor_array_unit_top_left_index(
-                            ctx->cr_recon_na_16bit, blk_origin_x_uv + (bwidth_uv - 1), blk_origin_y_uv) *
-                            ctx->cr_recon_na_16bit->unit_size);
+        dst_ptr_top_left_16bit  = (uint16_t*)svt_aom_na_left_ptr(ctx->cr_recon_na_16bit, blk_origin_y_uv);
+        dst_ptr_bot_right_16bit = (uint16_t*)svt_aom_na_topright_ptr(
+            ctx->cr_recon_na_16bit, blk_origin_x_uv, blk_origin_y_uv, bwidth_uv);
         src_ptr_16bit = ((uint16_t*)recon_ptr->v_buffer) + rec_cr_offset + bwidth_uv - 1;
         for (j = 0; j < bheight_uv; ++j) {
             *dst_ptr_bot_right_16bit = dst_ptr_top_left_16bit[j] = src_ptr_16bit[j * recon_ptr->v_stride];
@@ -10386,18 +10331,14 @@ static void update_part_neighs(ModeDecisionContext* ctx, PC_TREE* pc_tree, const
     const uint32_t blk_org_x = mi_col << MI_SIZE_LOG2;
     const uint32_t blk_org_y = mi_row << MI_SIZE_LOG2;
 
-    NeighborArrayUnit* leaf_partition_na    = ctx->leaf_partition_na;
-    const uint32_t     left_neighbor_index  = get_neighbor_array_unit_left_index(leaf_partition_na, blk_org_y);
-    const uint32_t     above_neighbor_index = get_neighbor_array_unit_top_index(leaf_partition_na, blk_org_x);
+    NeighborArrayUnit* leaf_partition_na = ctx->leaf_partition_na;
+    const uint8_t      left_byte         = *svt_aom_na_left_ptr_pu(leaf_partition_na, blk_org_y);
+    const uint8_t      above_byte        = *svt_aom_na_top_ptr_pu(leaf_partition_na, blk_org_x);
 
     // Generate Partition context
-    pc_tree->above_part_ctx = (leaf_partition_na->top_array[above_neighbor_index] == INVALID_NEIGHBOR_DATA)
-        ? 0
-        : (PartitionContextType)leaf_partition_na->top_array[above_neighbor_index];
+    pc_tree->above_part_ctx = (above_byte == INVALID_NEIGHBOR_DATA) ? 0 : (PartitionContextType)above_byte;
 
-    pc_tree->left_part_ctx = (leaf_partition_na->left_array[left_neighbor_index] == INVALID_NEIGHBOR_DATA)
-        ? 0
-        : (PartitionContextType)leaf_partition_na->left_array[left_neighbor_index];
+    pc_tree->left_part_ctx = (left_byte == INVALID_NEIGHBOR_DATA) ? 0 : (PartitionContextType)left_byte;
 }
 
 void svt_aom_init_sb_data(SequenceControlSet* scs, PictureControlSet* pcs, ModeDecisionContext* ctx) {

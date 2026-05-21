@@ -1064,15 +1064,11 @@ void svt_aom_update_part_stats(PictureControlSet* pcs, const PartitionType parti
     const int has_cols = (mi_col + hbs) < cm->mi_cols;
 
     NeighborArrayUnit* partition_context_na = pcs->ep_partition_context_na[tile_idx];
-    uint32_t left_neighbor_index = get_neighbor_array_unit_left_index(partition_context_na, (mi_row << MI_SIZE_LOG2));
-    uint32_t top_neighbor_index  = get_neighbor_array_unit_top_index(partition_context_na, (mi_col << MI_SIZE_LOG2));
+    const uint8_t      above_byte           = *svt_aom_na_top_ptr_pu(partition_context_na, (mi_col << MI_SIZE_LOG2));
+    const uint8_t      left_byte            = *svt_aom_na_left_ptr_pu(partition_context_na, (mi_row << MI_SIZE_LOG2));
 
-    PartitionContextType above_ctx = (partition_context_na->top_array[top_neighbor_index] == INVALID_NEIGHBOR_DATA)
-        ? 0
-        : (PartitionContextType)partition_context_na->top_array[top_neighbor_index];
-    PartitionContextType left_ctx  = (partition_context_na->left_array[left_neighbor_index] == INVALID_NEIGHBOR_DATA)
-         ? 0
-         : (PartitionContextType)partition_context_na->left_array[left_neighbor_index];
+    PartitionContextType above_ctx = (above_byte == INVALID_NEIGHBOR_DATA) ? 0 : (PartitionContextType)above_byte;
+    PartitionContextType left_ctx  = (left_byte == INVALID_NEIGHBOR_DATA) ? 0 : (PartitionContextType)left_byte;
 
     const int32_t bsl   = mi_size_wide_log2[bsize] - mi_size_wide_log2[BLOCK_8X8];
     const int32_t above = (above_ctx >> bsl) & 1, left = (left_ctx >> bsl) & 1;

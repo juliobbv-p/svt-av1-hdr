@@ -1779,9 +1779,9 @@ uint64_t svt_aom_tx_size_bits(PictureControlSet* pcs, uint8_t segment_id, MdRate
 future blocks. */
 uint64_t svt_aom_get_tx_size_bits(ModeDecisionCandidateBuffer* candidateBuffer, ModeDecisionContext* ctx,
                                   PictureControlSet* pcs, uint8_t tx_depth, bool block_has_coeff) {
-    NeighborArrayUnit* txfm_context_array      = ctx->txfm_context_array;
-    uint32_t           txfm_context_left_index = get_neighbor_array_unit_left_index(txfm_context_array, ctx->blk_org_y);
-    uint32_t           txfm_context_above_index = get_neighbor_array_unit_top_index(txfm_context_array, ctx->blk_org_x);
+    NeighborArrayUnit* txfm_context_array = ctx->txfm_context_array;
+    const uint8_t*     txfm_above_ptr     = svt_aom_na_top_ptr_pu(txfm_context_array, ctx->blk_org_x);
+    const uint8_t*     txfm_left_ptr      = svt_aom_na_left_ptr_pu(txfm_context_array, ctx->blk_org_y);
 
     TxMode       tx_mode = pcs->ppcs->frm_hdr.tx_mode;
     MacroBlockD* xd      = ctx->blk_ptr->av1xd;
@@ -1789,12 +1789,8 @@ uint64_t svt_aom_get_tx_size_bits(ModeDecisionCandidateBuffer* candidateBuffer, 
     const TxSize tx_size = tx_depth_to_tx_size[tx_depth][bsize];
     MbModeInfo*  mbmi    = xd->mi[0];
 
-    svt_memcpy(ctx->above_txfm_context,
-               &(txfm_context_array->top_array[txfm_context_above_index]),
-               (ctx->blk_geom->bwidth >> MI_SIZE_LOG2) * sizeof(TXFM_CONTEXT));
-    svt_memcpy(ctx->left_txfm_context,
-               &(txfm_context_array->left_array[txfm_context_left_index]),
-               (ctx->blk_geom->bheight >> MI_SIZE_LOG2) * sizeof(TXFM_CONTEXT));
+    svt_memcpy(ctx->above_txfm_context, txfm_above_ptr, (ctx->blk_geom->bwidth >> MI_SIZE_LOG2) * sizeof(TXFM_CONTEXT));
+    svt_memcpy(ctx->left_txfm_context, txfm_left_ptr, (ctx->blk_geom->bheight >> MI_SIZE_LOG2) * sizeof(TXFM_CONTEXT));
 
     xd->above_txfm_context      = ctx->above_txfm_context;
     xd->left_txfm_context       = ctx->left_txfm_context;

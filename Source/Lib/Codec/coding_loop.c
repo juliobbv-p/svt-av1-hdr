@@ -792,15 +792,14 @@ static void perform_intra_coding_loop(PictureControlSet* pcs, EncDecContext* ed_
         }
 
         if (txb_origin_y != 0 && txb_origin_x != 0) {
+            uint32_t tl_offset = svt_aom_na_topleft_offset(ep_luma_recon_na, txb_origin_x, txb_origin_y);
             if (is_16bit) {
                 uint16_t* top_hbd  = (uint16_t*)top_neigh_array;
                 uint16_t* left_hbd = (uint16_t*)left_neigh_array;
-                top_hbd[0] = left_hbd[0] = ((uint16_t*)(ep_luma_recon_na->top_left_array) +
-                                            ep_luma_recon_na->max_pic_h + txb_origin_x - txb_origin_y)[0];
+                top_hbd[0] = left_hbd[0] = ((uint16_t*)ep_luma_recon_na->top_left_array)[tl_offset];
 
             } else {
-                top_neigh_array[0] = left_neigh_array[0] =
-                    ep_luma_recon_na->top_left_array[ep_luma_recon_na->max_pic_h + txb_origin_x - txb_origin_y];
+                top_neigh_array[0] = left_neigh_array[0] = ep_luma_recon_na->top_left_array[tl_offset];
             }
         }
 
@@ -938,15 +937,13 @@ static void perform_intra_coding_loop(PictureControlSet* pcs, EncDecContext* ed_
             }
 
             if (blk_originy_uv != 0 && blk_originx_uv != 0) {
+                uint32_t tl_offset = svt_aom_na_topleft_offset(eb_uv_neigh_array, blk_originx_uv, blk_originy_uv);
                 if (is_16bit) {
                     uint16_t* top_hbd  = (uint16_t*)top_neigh_array;
                     uint16_t* left_hbd = (uint16_t*)left_neigh_array;
-                    top_hbd[0] = left_hbd[0] = ((uint16_t*)(eb_uv_neigh_array->top_left_array) +
-                                                eb_uv_neigh_array->max_pic_h + blk_originx_uv - blk_originy_uv)[0];
+                    top_hbd[0] = left_hbd[0] = ((uint16_t*)eb_uv_neigh_array->top_left_array)[tl_offset];
                 } else {
-                    top_neigh_array[0] = left_neigh_array[0] =
-                        eb_uv_neigh_array
-                            ->top_left_array[eb_uv_neigh_array->max_pic_h + blk_originx_uv - blk_originy_uv];
+                    top_neigh_array[0] = left_neigh_array[0] = eb_uv_neigh_array->top_left_array[tl_offset];
                 }
             }
 
@@ -1713,12 +1710,10 @@ static void update_b(PictureControlSet* pcs, EncDecContext* ctx, BlkStruct* blk_
 
         // Update the CDFs based on the current block
         blk_ptr->av1xd->tile_ctx           = &pcs->ec_ctx_array[sb_index];
-        uint32_t txfm_context_left_index   = get_neighbor_array_unit_left_index(pcs->ep_txfm_context_na[tile_idx],
-                                                                              ctx->blk_org_y);
-        uint32_t txfm_context_above_index  = get_neighbor_array_unit_top_index(pcs->ep_txfm_context_na[tile_idx],
-                                                                              ctx->blk_org_x);
-        blk_ptr->av1xd->above_txfm_context = &(pcs->ep_txfm_context_na[tile_idx]->top_array[txfm_context_above_index]);
-        blk_ptr->av1xd->left_txfm_context  = &(pcs->ep_txfm_context_na[tile_idx]->left_array[txfm_context_left_index]);
+        blk_ptr->av1xd->above_txfm_context = (TXFM_CONTEXT*)svt_aom_na_top_ptr_pu(pcs->ep_txfm_context_na[tile_idx],
+                                                                                  ctx->blk_org_x);
+        blk_ptr->av1xd->left_txfm_context  = (TXFM_CONTEXT*)svt_aom_na_left_ptr_pu(pcs->ep_txfm_context_na[tile_idx],
+                                                                                  ctx->blk_org_y);
         svt_aom_tx_size_bits(pcs,
                              ctx->blk_ptr->segment_id,
                              md_ctx->md_rate_est_ctx,

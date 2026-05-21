@@ -249,10 +249,8 @@ void svt_aom_get_txb_ctx(PictureControlSet* pcs, const int32_t plane,
                          NeighborArrayUnit* dc_sign_level_coeff_neighbor_array, uint32_t blk_org_x, uint32_t blk_org_y,
                          const BlockSize plane_bsize, const TxSize tx_size, int16_t* const txb_skip_ctx,
                          int16_t* const dc_sign_ctx) {
-    uint32_t dc_sign_lvl_coeff_left_neighbor_idx = get_neighbor_array_unit_left_index(
-        dc_sign_level_coeff_neighbor_array, blk_org_y);
-    uint32_t dc_sign_lvl_coeff_top_neighbor_idx = get_neighbor_array_unit_top_index(dc_sign_level_coeff_neighbor_array,
-                                                                                    blk_org_x);
+    uint32_t dc_sign_lvl_coeff_left_neighbor_idx = svt_aom_na_left_index_pu(blk_org_y);
+    uint32_t dc_sign_lvl_coeff_top_neighbor_idx  = svt_aom_na_top_index_pu(blk_org_x);
 
     static const int8_t signs[3] = {0, -1, 1};
     int32_t             txb_w_unit;
@@ -1063,17 +1061,13 @@ static void encode_partition_av1(PictureControlSet* pcs, FRAME_CONTEXT* frame_co
     const int32_t has_rows = (blk_org_y + hbs) < pcs->ppcs->aligned_height;
     const int32_t has_cols = (blk_org_x + hbs) < pcs->ppcs->aligned_width;
 
-    uint32_t left_neighbor_index = get_neighbor_array_unit_left_index(partition_context_na, blk_org_y);
-    uint32_t top_neighbor_index  = get_neighbor_array_unit_top_index(partition_context_na, blk_org_x);
+    const uint8_t above_byte = *svt_aom_na_top_ptr_pu(partition_context_na, blk_org_x);
+    const uint8_t left_byte  = *svt_aom_na_left_ptr_pu(partition_context_na, blk_org_y);
 
     uint32_t context_index = 0;
 
-    PartitionContextType above_ctx = (partition_context_na->top_array[top_neighbor_index] == INVALID_NEIGHBOR_DATA)
-        ? 0
-        : (PartitionContextType)partition_context_na->top_array[top_neighbor_index];
-    PartitionContextType left_ctx  = (partition_context_na->left_array[left_neighbor_index] == INVALID_NEIGHBOR_DATA)
-         ? 0
-         : (PartitionContextType)partition_context_na->left_array[left_neighbor_index];
+    PartitionContextType above_ctx = (above_byte == INVALID_NEIGHBOR_DATA) ? 0 : (PartitionContextType)above_byte;
+    PartitionContextType left_ctx  = (left_byte == INVALID_NEIGHBOR_DATA) ? 0 : (PartitionContextType)left_byte;
 
     const int32_t bsl   = mi_size_wide_log2[bsize] - mi_size_wide_log2[BLOCK_8X8];
     int32_t       above = (above_ctx >> bsl) & 1, left = (left_ctx >> bsl) & 1;
@@ -4862,17 +4856,15 @@ static INLINE int svt_aom_get_segment_id(Av1Common* cm, const uint8_t* segment_i
 static void code_tx_size(PictureControlSet* pcs, uint32_t blk_org_x, uint32_t blk_org_y, EcBlkStruct* blk_ptr,
                          const BlockSize bsize, NeighborArrayUnit* txfm_context_array, FRAME_CONTEXT* ec_ctx,
                          AomWriter* w, uint8_t skip) {
-    uint32_t      txfm_context_left_index  = get_neighbor_array_unit_left_index(txfm_context_array, blk_org_y);
-    uint32_t      txfm_context_above_index = get_neighbor_array_unit_top_index(txfm_context_array, blk_org_x);
-    TxMode        tx_mode                  = pcs->ppcs->frm_hdr.tx_mode;
-    Av1Common*    cm                       = pcs->ppcs->av1_cm;
-    MacroBlockD*  xd                       = blk_ptr->av1xd;
+    TxMode       tx_mode = pcs->ppcs->frm_hdr.tx_mode;
+    Av1Common*   cm      = pcs->ppcs->av1_cm;
+    MacroBlockD* xd      = blk_ptr->av1xd;
     // xd fields (mi, up_available, left_available, etc.) are already set by
     // the caller (write_modes_b) via set_mi_row_col — no need to redo.
 
     const MbModeInfo* const mbmi              = xd->mi[0];
-    xd->above_txfm_context                    = &txfm_context_array->top_array[txfm_context_above_index];
-    xd->left_txfm_context                     = &txfm_context_array->left_array[txfm_context_left_index];
+    xd->above_txfm_context                    = (TXFM_CONTEXT*)svt_aom_na_top_ptr_pu(txfm_context_array, blk_org_x);
+    xd->left_txfm_context                     = (TXFM_CONTEXT*)svt_aom_na_left_ptr_pu(txfm_context_array, blk_org_y);
     const TxSize             tx_size          = tx_depth_to_tx_size[mbmi->block_mi.tx_depth][bsize];
     FrameHeader*             frm_hdr          = &pcs->ppcs->frm_hdr;
     SegmentationNeighborMap* segmentation_map = pcs->segmentation_neighbor_map;
