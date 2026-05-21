@@ -670,7 +670,7 @@ static EbErrorType av1_encode_tx_coef_y(PictureControlSet* pcs, EntropyCodingCon
                                         uint32_t intraLumaDir, BlockSize plane_bsize, EbPictureBufferDesc* coeff_ptr,
                                         NeighborArrayUnit* luma_dc_sign_level_coeff_na) {
     EbErrorType     return_error = EB_ErrorNone;
-    bool            is_inter     = is_inter_mode(mbmi->block_mi.mode) || mbmi->block_mi.use_intrabc;
+    const bool      is_inter     = is_inter_mode(mbmi->block_mi.mode) || mbmi->block_mi.use_intrabc;
     const BlockSize bsize        = mbmi->bsize;
     const uint8_t   tx_depth     = mbmi->block_mi.tx_depth;
     const uint16_t  txb_count    = tx_blocks_per_depth[bsize][tx_depth];
@@ -678,21 +678,21 @@ static EbErrorType av1_encode_tx_coef_y(PictureControlSet* pcs, EntropyCodingCon
     const int       tx_width     = tx_size_wide[tx_size];
     const int       tx_height    = tx_size_high[tx_size];
 
-    for (uint16_t tx_index = 0; tx_index < txb_count; tx_index++) {
-        uint16_t txb_itr = tx_index;
+    for (uint16_t txb_itr = 0; txb_itr < txb_count; txb_itr++) {
+        // Hoist tx_org lookup: same Position is used by both svt_aom_get_txb_ctx and the NA write.
+        const Position org  = tx_org[bsize][is_inter][tx_depth][txb_itr];
+        const uint32_t tx_x = blk_org_x + org.x;
+        const uint32_t tx_y = blk_org_y + org.y;
 
-        const uint32_t coeff1d_offset = ec_ctx->coded_area_sb;
-
-        int32_t* coeff_buffer = (int32_t*)coeff_ptr->y_buffer + coeff1d_offset;
+        int32_t* coeff_buffer = (int32_t*)coeff_ptr->y_buffer + ec_ctx->coded_area_sb;
 
         int16_t txb_skip_ctx = 0;
         int16_t dc_sign_ctx  = 0;
-
         svt_aom_get_txb_ctx(pcs,
                             COMPONENT_LUMA,
                             luma_dc_sign_level_coeff_na,
-                            blk_org_x + tx_org[bsize][is_inter][tx_depth][txb_itr].x,
-                            blk_org_y + tx_org[bsize][is_inter][tx_depth][txb_itr].y,
+                            tx_x,
+                            tx_y,
                             plane_bsize,
                             tx_size,
                             &txb_skip_ctx,
@@ -716,9 +716,9 @@ static EbErrorType av1_encode_tx_coef_y(PictureControlSet* pcs, EntropyCodingCon
         // Update the luma Dc Sign Level Coeff Neighbor Array
         uint8_t dc_sign_level_coeff = (uint8_t)cul_level_y;
         svt_aom_neighbor_array_unit_mode_write(luma_dc_sign_level_coeff_na,
-                                               (uint8_t*)&dc_sign_level_coeff,
-                                               blk_org_x + tx_org[bsize][is_inter][tx_depth][txb_itr].x,
-                                               blk_org_y + tx_org[bsize][is_inter][tx_depth][txb_itr].y,
+                                               &dc_sign_level_coeff,
+                                               tx_x,
+                                               tx_y,
                                                tx_width,
                                                tx_height,
                                                NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
@@ -734,21 +734,27 @@ static void av1_encode_tx_coef_uv(PictureControlSet* pcs, EntropyCodingContext* 
                                   uint32_t intraLumaDir, EbPictureBufferDesc* coeff_ptr,
                                   NeighborArrayUnit* cr_dc_sign_level_coeff_na,
                                   NeighborArrayUnit* cb_dc_sign_level_coeff_na) {
-    const bool has_uv = is_chroma_reference(blk_org_y >> 2, blk_org_x >> 2, ec_ctx->mbmi->bsize, 1, 1);
+    MbModeInfo* const mbmi   = ec_ctx->mbmi;
+    const BlockSize   bsize  = mbmi->bsize;
+    const bool        has_uv = is_chroma_reference(blk_org_y >> 2, blk_org_x >> 2, bsize, 1, 1);
 
     if (!has_uv) {
         return;
     }
-    const int32_t   is_inter       = is_inter_mode(ec_ctx->mbmi->block_mi.mode) || ec_ctx->mbmi->block_mi.use_intrabc;
-    const BlockSize bsize          = ec_ctx->mbmi->bsize;
+    const int32_t   is_inter       = is_inter_mode(mbmi->block_mi.mode) || mbmi->block_mi.use_intrabc;
     const BlockSize bsize_uv       = get_plane_block_size(bsize, 1, 1);
-    const uint8_t   tx_depth       = ec_ctx->mbmi->block_mi.tx_depth;
-    const TxSize    chroma_tx_size = av1_get_max_uv_txsize(ec_ctx->mbmi->bsize, 1, 1);
+    const uint8_t   tx_depth       = mbmi->block_mi.tx_depth;
+    const TxSize    chroma_tx_size = av1_get_max_uv_txsize(bsize, 1, 1);
     const int       tx_width_uv    = tx_size_wide[chroma_tx_size];
     const int       tx_height_uv   = tx_size_high[chroma_tx_size];
-    unsigned        txb_count      = 1;
+    const unsigned  txb_count      = 1;
 
     for (unsigned tx_index = 0; tx_index < txb_count; ++tx_index) {
+        // Hoist tx_org lookup + ROUND_UV: reused by 4 sites below.
+        const Position org  = tx_org[bsize][is_inter][tx_depth][tx_index];
+        const uint32_t uv_x = ROUND_UV(blk_org_x + org.x) >> 1;
+        const uint32_t uv_y = ROUND_UV(blk_org_y + org.y) >> 1;
+
         // cb
         int32_t* coeff_buffer = (int32_t*)coeff_ptr->u_buffer + ec_ctx->coded_area_sb_uv;
         int16_t  txb_skip_ctx = 0;
@@ -757,8 +763,8 @@ static void av1_encode_tx_coef_uv(PictureControlSet* pcs, EntropyCodingContext* 
         svt_aom_get_txb_ctx(pcs,
                             COMPONENT_CHROMA,
                             cb_dc_sign_level_coeff_na,
-                            ROUND_UV(blk_org_x + tx_org[bsize][is_inter][tx_depth][tx_index].x) >> 1,
-                            ROUND_UV(blk_org_y + tx_org[bsize][is_inter][tx_depth][tx_index].y) >> 1,
+                            uv_x,
+                            uv_y,
                             bsize_uv,
                             chroma_tx_size,
                             &txb_skip_ctx,
@@ -766,7 +772,7 @@ static void av1_encode_tx_coef_uv(PictureControlSet* pcs, EntropyCodingContext* 
 
         int32_t cul_level_cb = av1_write_coeffs_txb_1d(pcs->ppcs,
                                                        frame_context,
-                                                       ec_ctx->mbmi,
+                                                       mbmi,
                                                        ec_writer,
                                                        blk_ptr,
                                                        chroma_tx_size,
@@ -787,8 +793,8 @@ static void av1_encode_tx_coef_uv(PictureControlSet* pcs, EntropyCodingContext* 
         svt_aom_get_txb_ctx(pcs,
                             COMPONENT_CHROMA,
                             cr_dc_sign_level_coeff_na,
-                            ROUND_UV(blk_org_x + tx_org[bsize][is_inter][tx_depth][tx_index].x) >> 1,
-                            ROUND_UV(blk_org_y + tx_org[bsize][is_inter][tx_depth][tx_index].y) >> 1,
+                            uv_x,
+                            uv_y,
                             bsize_uv,
                             chroma_tx_size,
                             &txb_skip_ctx,
@@ -796,7 +802,7 @@ static void av1_encode_tx_coef_uv(PictureControlSet* pcs, EntropyCodingContext* 
 
         int32_t cul_level_cr = av1_write_coeffs_txb_1d(pcs->ppcs,
                                                        frame_context,
-                                                       ec_ctx->mbmi,
+                                                       mbmi,
                                                        ec_writer,
                                                        blk_ptr,
                                                        chroma_tx_size,
@@ -812,8 +818,8 @@ static void av1_encode_tx_coef_uv(PictureControlSet* pcs, EntropyCodingContext* 
         uint8_t dc_sign_level_coeff = (uint8_t)cul_level_cb;
         svt_aom_neighbor_array_unit_mode_write(cb_dc_sign_level_coeff_na,
                                                &dc_sign_level_coeff,
-                                               ROUND_UV(blk_org_x + tx_org[bsize][is_inter][tx_depth][tx_index].x) >> 1,
-                                               ROUND_UV(blk_org_y + tx_org[bsize][is_inter][tx_depth][tx_index].y) >> 1,
+                                               uv_x,
+                                               uv_y,
                                                tx_width_uv,
                                                tx_height_uv,
                                                NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
@@ -821,8 +827,8 @@ static void av1_encode_tx_coef_uv(PictureControlSet* pcs, EntropyCodingContext* 
         dc_sign_level_coeff = (uint8_t)cul_level_cr;
         svt_aom_neighbor_array_unit_mode_write(cr_dc_sign_level_coeff_na,
                                                &dc_sign_level_coeff,
-                                               ROUND_UV(blk_org_x + tx_org[bsize][is_inter][tx_depth][tx_index].x) >> 1,
-                                               ROUND_UV(blk_org_y + tx_org[bsize][is_inter][tx_depth][tx_index].y) >> 1,
+                                               uv_x,
+                                               uv_y,
                                                tx_width_uv,
                                                tx_height_uv,
                                                NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
@@ -841,14 +847,15 @@ static EbErrorType av1_encode_coeff_1d(PictureControlSet* pcs, EntropyCodingCont
                                        NeighborArrayUnit* luma_dc_sign_level_coeff_na,
                                        NeighborArrayUnit* cr_dc_sign_level_coeff_na,
                                        NeighborArrayUnit* cb_dc_sign_level_coeff_na) {
-    EbErrorType return_error = EB_ErrorNone;
-    int32_t     is_inter     = is_inter_mode(ec_ctx->mbmi->block_mi.mode) || ec_ctx->mbmi->block_mi.use_intrabc;
-    if (ec_ctx->mbmi->block_mi.tx_depth) {
+    EbErrorType       return_error = EB_ErrorNone;
+    MbModeInfo* const mbmi         = ec_ctx->mbmi;
+    const int32_t     is_inter     = is_inter_mode(mbmi->block_mi.mode) || mbmi->block_mi.use_intrabc;
+    if (mbmi->block_mi.tx_depth) {
         av1_encode_tx_coef_y(pcs,
                              ec_ctx,
                              frame_context,
                              ec_writer,
-                             ec_ctx->mbmi,
+                             mbmi,
                              blk_ptr,
                              blk_org_x,
                              blk_org_y,
@@ -869,11 +876,12 @@ static EbErrorType av1_encode_coeff_1d(PictureControlSet* pcs, EntropyCodingCont
                               cr_dc_sign_level_coeff_na,
                               cb_dc_sign_level_coeff_na);
     } else {
-        // Transform partitioning free path (except the 128x128 case)
+        // Transform partitioning free path (except the 128x128 case).
+        // tx_depth is 0 in this branch.
         int32_t cul_level_y, cul_level_cb = 0, cul_level_cr = 0;
 
         const bool     has_uv       = is_chroma_reference(blk_org_y >> 2, blk_org_x >> 2, luma_bsize, 1, 1);
-        const uint8_t  tx_depth     = ec_ctx->mbmi->block_mi.tx_depth;
+        const uint8_t  tx_depth     = 0;
         const uint16_t txb_count    = tx_blocks_per_depth[luma_bsize][tx_depth];
         const TxSize   tx_size      = tx_depth_to_tx_size[tx_depth][luma_bsize];
         const int      tx_width     = tx_size_wide[tx_size];
@@ -881,12 +889,17 @@ static EbErrorType av1_encode_coeff_1d(PictureControlSet* pcs, EntropyCodingCont
         const TxSize   tx_size_uv   = av1_get_max_uv_txsize(luma_bsize, 1, 1);
         const int      tx_width_uv  = tx_size_wide[tx_size_uv];
         const int      tx_height_uv = tx_size_high[tx_size_uv];
+        // bsize_uv is only consumed under `has_uv`, but hoisting unconditionally is cheaper than branching twice.
+        const BlockSize bsize_uv = has_uv ? get_plane_block_size(luma_bsize, 1, 1) : 0;
         for (uint8_t txb_itr = 0; txb_itr < txb_count; txb_itr++) {
-            int32_t* coeff_buffer;
+            // Hoist tx_org + ROUND_UV: reused by up to 7 sites per iteration.
+            const Position org  = tx_org[luma_bsize][is_inter][tx_depth][txb_itr];
+            const uint32_t tx_x = blk_org_x + org.x;
+            const uint32_t tx_y = blk_org_y + org.y;
+            const uint32_t uv_x = ROUND_UV(tx_x) >> 1;
+            const uint32_t uv_y = ROUND_UV(tx_y) >> 1;
 
-            const uint32_t coeff1d_offset = ec_ctx->coded_area_sb;
-
-            coeff_buffer = (int32_t*)coeff_ptr->y_buffer + coeff1d_offset;
+            int32_t* coeff_buffer = (int32_t*)coeff_ptr->y_buffer + ec_ctx->coded_area_sb;
 
             {
                 int16_t txb_skip_ctx = 0;
@@ -895,8 +908,8 @@ static EbErrorType av1_encode_coeff_1d(PictureControlSet* pcs, EntropyCodingCont
                 svt_aom_get_txb_ctx(pcs,
                                     COMPONENT_LUMA,
                                     luma_dc_sign_level_coeff_na,
-                                    blk_org_x + tx_org[luma_bsize][is_inter][tx_depth][txb_itr].x,
-                                    blk_org_y + tx_org[luma_bsize][is_inter][tx_depth][txb_itr].y,
+                                    tx_x,
+                                    tx_y,
                                     luma_bsize,
                                     tx_size,
                                     &txb_skip_ctx,
@@ -904,7 +917,7 @@ static EbErrorType av1_encode_coeff_1d(PictureControlSet* pcs, EntropyCodingCont
 
                 cul_level_y = av1_write_coeffs_txb_1d(pcs->ppcs,
                                                       frame_context,
-                                                      ec_ctx->mbmi,
+                                                      mbmi,
                                                       ec_writer,
                                                       blk_ptr,
                                                       tx_size,
@@ -919,7 +932,6 @@ static EbErrorType av1_encode_coeff_1d(PictureControlSet* pcs, EntropyCodingCont
             }
 
             if (has_uv) {
-                const BlockSize bsize_uv = get_plane_block_size(luma_bsize, 1, 1);
                 // cb
                 coeff_buffer = (int32_t*)coeff_ptr->u_buffer + ec_ctx->coded_area_sb_uv;
                 {
@@ -929,8 +941,8 @@ static EbErrorType av1_encode_coeff_1d(PictureControlSet* pcs, EntropyCodingCont
                     svt_aom_get_txb_ctx(pcs,
                                         COMPONENT_CHROMA,
                                         cb_dc_sign_level_coeff_na,
-                                        ROUND_UV(blk_org_x + tx_org[luma_bsize][is_inter][tx_depth][txb_itr].x) >> 1,
-                                        ROUND_UV(blk_org_y + tx_org[luma_bsize][is_inter][tx_depth][txb_itr].y) >> 1,
+                                        uv_x,
+                                        uv_y,
                                         bsize_uv,
                                         tx_size_uv,
                                         &txb_skip_ctx,
@@ -938,7 +950,7 @@ static EbErrorType av1_encode_coeff_1d(PictureControlSet* pcs, EntropyCodingCont
 
                     cul_level_cb = av1_write_coeffs_txb_1d(pcs->ppcs,
                                                            frame_context,
-                                                           ec_ctx->mbmi,
+                                                           mbmi,
                                                            ec_writer,
                                                            blk_ptr,
                                                            tx_size_uv,
@@ -961,8 +973,8 @@ static EbErrorType av1_encode_coeff_1d(PictureControlSet* pcs, EntropyCodingCont
                     svt_aom_get_txb_ctx(pcs,
                                         COMPONENT_CHROMA,
                                         cr_dc_sign_level_coeff_na,
-                                        ROUND_UV(blk_org_x + tx_org[luma_bsize][is_inter][tx_depth][txb_itr].x) >> 1,
-                                        ROUND_UV(blk_org_y + tx_org[luma_bsize][is_inter][tx_depth][txb_itr].y) >> 1,
+                                        uv_x,
+                                        uv_y,
                                         bsize_uv,
                                         tx_size_uv,
                                         &txb_skip_ctx,
@@ -970,7 +982,7 @@ static EbErrorType av1_encode_coeff_1d(PictureControlSet* pcs, EntropyCodingCont
 
                     cul_level_cr = av1_write_coeffs_txb_1d(pcs->ppcs,
                                                            frame_context,
-                                                           ec_ctx->mbmi,
+                                                           mbmi,
                                                            ec_writer,
                                                            blk_ptr,
                                                            tx_size_uv,
@@ -988,9 +1000,9 @@ static EbErrorType av1_encode_coeff_1d(PictureControlSet* pcs, EntropyCodingCont
             // Update the luma Dc Sign Level Coeff Neighbor Array
             uint8_t dc_sign_level_coeff = (uint8_t)cul_level_y;
             svt_aom_neighbor_array_unit_mode_write(luma_dc_sign_level_coeff_na,
-                                                   (uint8_t*)&dc_sign_level_coeff,
-                                                   blk_org_x + tx_org[luma_bsize][is_inter][tx_depth][txb_itr].x,
-                                                   blk_org_y + tx_org[luma_bsize][is_inter][tx_depth][txb_itr].y,
+                                                   &dc_sign_level_coeff,
+                                                   tx_x,
+                                                   tx_y,
                                                    tx_width,
                                                    tx_height,
                                                    NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
@@ -998,24 +1010,22 @@ static EbErrorType av1_encode_coeff_1d(PictureControlSet* pcs, EntropyCodingCont
             // Update the cb Dc Sign Level Coeff Neighbor Array
             if (has_uv) {
                 dc_sign_level_coeff = (uint8_t)cul_level_cb;
-                svt_aom_neighbor_array_unit_mode_write(
-                    cb_dc_sign_level_coeff_na,
-                    &dc_sign_level_coeff,
-                    ROUND_UV(blk_org_x + tx_org[luma_bsize][is_inter][tx_depth][txb_itr].x) >> 1,
-                    ROUND_UV(blk_org_y + tx_org[luma_bsize][is_inter][tx_depth][txb_itr].y) >> 1,
-                    tx_width_uv,
-                    tx_height_uv,
-                    NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
+                svt_aom_neighbor_array_unit_mode_write(cb_dc_sign_level_coeff_na,
+                                                       &dc_sign_level_coeff,
+                                                       uv_x,
+                                                       uv_y,
+                                                       tx_width_uv,
+                                                       tx_height_uv,
+                                                       NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
                 // Update the cr DC Sign Level Coeff Neighbor Array
                 dc_sign_level_coeff = (uint8_t)cul_level_cr;
-                svt_aom_neighbor_array_unit_mode_write(
-                    cr_dc_sign_level_coeff_na,
-                    &dc_sign_level_coeff,
-                    ROUND_UV(blk_org_x + tx_org[luma_bsize][is_inter][tx_depth][txb_itr].x) >> 1,
-                    ROUND_UV(blk_org_y + tx_org[luma_bsize][is_inter][tx_depth][txb_itr].y) >> 1,
-                    tx_width_uv,
-                    tx_height_uv,
-                    NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
+                svt_aom_neighbor_array_unit_mode_write(cr_dc_sign_level_coeff_na,
+                                                       &dc_sign_level_coeff,
+                                                       uv_x,
+                                                       uv_y,
+                                                       tx_width_uv,
+                                                       tx_height_uv,
+                                                       NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
                 ec_ctx->coded_area_sb_uv += tx_width_uv * tx_height_uv;
             }
             ec_ctx->coded_area_sb += tx_width * tx_height;
