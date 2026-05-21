@@ -1079,6 +1079,7 @@ void svt_aom_setup_common_rtcd_internal(EbCpuFlags flags) {
     SET_ONLY_C(svt_av1_hadamard_satd_16x16, svt_av1_hadamard_satd_16x16_c);
     SET_ONLY_C(svt_av1_hadamard_satd_8x8, svt_av1_hadamard_satd_8x8_c);
     SET_ONLY_C(svt_av1_hadamard_satd_4x4, svt_av1_hadamard_satd_4x4_c);
+    SET_ONLY_C(svt_psy_distortion, svt_psy_distortion_c);
 #if CONFIG_ENABLE_HIGH_BIT_DEPTH
     SET_ONLY_C(svt_aom_highbd_hadamard_32x32, svt_aom_highbd_hadamard_32x32_c);
     SET_ONLY_C(svt_aom_highbd_hadamard_16x16, svt_aom_highbd_hadamard_16x16_c);
@@ -1087,6 +1088,7 @@ void svt_aom_setup_common_rtcd_internal(EbCpuFlags flags) {
     SET_ONLY_C(svt_av1_highbd_hadamard_satd_16x16, svt_av1_highbd_hadamard_satd_16x16_c);
     SET_ONLY_C(svt_av1_highbd_hadamard_satd_8x8, svt_av1_highbd_hadamard_satd_8x8_c);
     SET_ONLY_C(svt_av1_highbd_hadamard_satd_4x4, svt_av1_highbd_hadamard_satd_4x4_c);
+    SET_ONLY_C(svt_psy_distortion_hbd, svt_psy_distortion_hbd_c);
 #endif
 
 #elif defined ARCH_AARCH64
@@ -1665,6 +1667,7 @@ void svt_aom_setup_common_rtcd_internal(EbCpuFlags flags) {
     SET_NEON_SVE2(svt_av1_hadamard_satd_16x16, svt_av1_hadamard_satd_16x16_c, svt_av1_hadamard_satd_16x16_neon, svt_av1_hadamard_satd_16x16_sve2);
     SET_NEON_SVE2(svt_av1_hadamard_satd_8x8, svt_av1_hadamard_satd_8x8_c, svt_av1_hadamard_satd_8x8_neon, svt_av1_hadamard_satd_8x8_sve2);
     SET_NEON(svt_av1_hadamard_satd_4x4, svt_av1_hadamard_satd_4x4_c, svt_av1_hadamard_satd_4x4_neon);
+    SET_ONLY_C(svt_psy_distortion, svt_psy_distortion_c);
 #if CONFIG_ENABLE_HIGH_BIT_DEPTH
     SET_ONLY_C(svt_aom_highbd_hadamard_32x32, svt_aom_highbd_hadamard_32x32_c);
     SET_ONLY_C(svt_aom_highbd_hadamard_16x16, svt_aom_highbd_hadamard_16x16_c);
@@ -1673,6 +1676,7 @@ void svt_aom_setup_common_rtcd_internal(EbCpuFlags flags) {
     SET_NEON_SVE2(svt_av1_highbd_hadamard_satd_16x16, svt_av1_highbd_hadamard_satd_16x16_c, svt_av1_highbd_hadamard_satd_16x16_neon, svt_av1_highbd_hadamard_satd_16x16_sve2);
     SET_NEON_SVE2(svt_av1_highbd_hadamard_satd_8x8, svt_av1_highbd_hadamard_satd_8x8_c, svt_av1_highbd_hadamard_satd_8x8_neon, svt_av1_highbd_hadamard_satd_8x8_sve2);
     SET_NEON(svt_av1_highbd_hadamard_satd_4x4, svt_av1_highbd_hadamard_satd_4x4_c, svt_av1_highbd_hadamard_satd_4x4_neon);
+    SET_ONLY_C(svt_psy_distortion_hbd, svt_psy_distortion_hbd_c);
 #endif
 #else
     SET_ONLY_C(svt_aom_blend_a64_mask, svt_aom_blend_a64_mask_c);
@@ -2241,6 +2245,7 @@ void svt_aom_setup_common_rtcd_internal(EbCpuFlags flags) {
     SET_ONLY_C(svt_av1_hadamard_satd_16x16, svt_av1_hadamard_satd_16x16_c);
     SET_ONLY_C(svt_av1_hadamard_satd_8x8, svt_av1_hadamard_satd_8x8_c);
     SET_ONLY_C(svt_av1_hadamard_satd_4x4, svt_av1_hadamard_satd_4x4_c);
+    SET_ONLY_C(svt_psy_distortion, svt_psy_distortion_c);
 #if CONFIG_ENABLE_HIGH_BIT_DEPTH
     SET_ONLY_C(svt_aom_highbd_hadamard_32x32, svt_aom_highbd_hadamard_32x32_c);
     SET_ONLY_C(svt_aom_highbd_hadamard_16x16, svt_aom_highbd_hadamard_16x16_c);
@@ -2249,6 +2254,7 @@ void svt_aom_setup_common_rtcd_internal(EbCpuFlags flags) {
     SET_ONLY_C(svt_av1_highbd_hadamard_satd_16x16, svt_av1_highbd_hadamard_satd_16x16_c);
     SET_ONLY_C(svt_av1_highbd_hadamard_satd_8x8, svt_av1_highbd_hadamard_satd_8x8_c);
     SET_ONLY_C(svt_av1_highbd_hadamard_satd_4x4, svt_av1_highbd_hadamard_satd_4x4_c);
+    SET_ONLY_C(svt_psy_distortion_hbd, svt_psy_distortion_hbd_c);
 #endif
 
 #endif

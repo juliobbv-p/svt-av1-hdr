@@ -13,47 +13,52 @@
 #include <stdbool.h>
 #include "ac_bias.h"
 #include "aom_dsp_rtcd.h"
+#include "common_dsp_rtcd.h"
+
+static int psy_energy_4x4_c(const uint8_t* src, ptrdiff_t src_stride) {
+    int16_t src16[16];
+    int32_t coeff[16];
+
+    for (int row = 0; row < 4; ++row) {
+        for (int col = 0; col < 4; ++col) {
+            src16[row * 4 + col] = src[row * src_stride + col];
+        }
+    }
+
+    svt_aom_hadamard_4x4(src16, 4, coeff);
+
+    return (svt_aom_satd(coeff, 16) << 1) - coeff[0];
+}
+
+static int psy_energy_8x8_c(const uint8_t* src, ptrdiff_t src_stride) {
+    int16_t src16[64];
+    int32_t coeff[64];
+
+    for (int row = 0; row < 8; ++row) {
+        for (int col = 0; col < 8; ++col) {
+            src16[row * 8 + col] = src[row * src_stride + col];
+        }
+    }
+
+    svt_aom_hadamard_8x8(src16, 8, coeff);
+
+    return ((svt_aom_satd(coeff, 64) + 2) >> 2) - ((coeff[0] + 2) >> 2);
+}
 
 /* Regular version of "AC Bias"
  *
  * Based on adding an "energy gap" term to each candidate block's distortion, which is the difference
  * of the "energy" (SATD - SAD) of the source and recon blocks
  */
-uint64_t svt_psy_distortion(const uint8_t* input, const uint32_t input_stride, const uint8_t* recon,
-                            const uint32_t recon_stride, const uint32_t width, const uint32_t height) {
+uint64_t svt_psy_distortion_c(const uint8_t* input, const uint32_t input_stride, const uint8_t* recon,
+                              const uint32_t recon_stride, const uint32_t width, const uint32_t height) {
     uint64_t energy_gap = 0;
 
     if (width >= 8 && height >= 8) { /* >8x8 */
         for (uint32_t j = 0; j < height; j += 8) {
             for (uint32_t i = 0; i < width; i += 8) {
-                int32_t        coeffs[64];
-                int16_t        block_as_16bit[64];
-                const uint8_t* block_input = input + j * input_stride + i;
-                const uint8_t* recon_input = recon + j * recon_stride + i;
-
-                for (int h = 0; h < 8; h++) {
-                    for (int w = 0; w < 8; w++) {
-                        block_as_16bit[h * 8 + w] = block_input[w];
-                    }
-
-                    block_input += input_stride;
-                }
-
-                svt_aom_hadamard_8x8(block_as_16bit, 8, coeffs);
-
-                int32_t input_energy = ((svt_aom_satd(coeffs, 64) + 2) >> 2) - ((coeffs[0] + 2) >> 2);
-
-                for (int h = 0; h < 8; h++) {
-                    for (int w = 0; w < 8; w++) {
-                        block_as_16bit[h * 8 + w] = recon_input[w];
-                    }
-
-                    recon_input += recon_stride;
-                }
-
-                svt_aom_hadamard_8x8(block_as_16bit, 8, coeffs);
-
-                int32_t recon_energy = ((svt_aom_satd(coeffs, 64) + 2) >> 2) - ((coeffs[0] + 2) >> 2);
+                const int input_energy = psy_energy_8x8_c(input + j * input_stride + i, input_stride);
+                const int recon_energy = psy_energy_8x8_c(recon + j * recon_stride + i, recon_stride);
 
                 energy_gap += abs(input_energy - recon_energy);
             }
@@ -61,34 +66,8 @@ uint64_t svt_psy_distortion(const uint8_t* input, const uint32_t input_stride, c
     } else {
         for (uint32_t j = 0; j < height; j += 4) { /* 4x4, 4x8, 4x16, 8x4, and 16x4 */
             for (uint32_t i = 0; i < width; i += 4) {
-                int32_t        coeffs[16];
-                int16_t        block_as_16bit[16];
-                const uint8_t* block_input = input + j * input_stride + i;
-                const uint8_t* recon_input = recon + j * recon_stride + i;
-
-                for (int h = 0; h < 4; h++) {
-                    for (int w = 0; w < 4; w++) {
-                        block_as_16bit[h * 4 + w] = block_input[w];
-                    }
-
-                    block_input += input_stride;
-                }
-
-                svt_aom_hadamard_4x4(block_as_16bit, 4, coeffs);
-
-                int32_t input_energy = (svt_aom_satd(coeffs, 16) << 1) - coeffs[0];
-
-                for (int h = 0; h < 4; h++) {
-                    for (int w = 0; w < 4; w++) {
-                        block_as_16bit[h * 4 + w] = recon_input[w];
-                    }
-
-                    recon_input += recon_stride;
-                }
-
-                svt_aom_hadamard_4x4(block_as_16bit, 4, coeffs);
-
-                int32_t recon_energy = (svt_aom_satd(coeffs, 16) << 1) - coeffs[0];
+                const int input_energy = psy_energy_4x4_c(input + j * input_stride + i, input_stride);
+                const int recon_energy = psy_energy_4x4_c(recon + j * recon_stride + i, recon_stride);
 
                 energy_gap += abs(input_energy - recon_energy);
             }
@@ -99,23 +78,32 @@ uint64_t svt_psy_distortion(const uint8_t* input, const uint32_t input_stride, c
 }
 
 #if CONFIG_ENABLE_HIGH_BIT_DEPTH
+static int highbd_psy_energy_4x4_c(const uint16_t* src, ptrdiff_t src_stride) {
+    int32_t coeff[16];
+
+    svt_aom_hadamard_4x4((const int16_t*)src, src_stride, coeff);
+
+    return (svt_aom_satd(coeff, 16) << 1) - coeff[0];
+}
+
+static int highbd_psy_energy_8x8_c(const uint16_t* src, ptrdiff_t src_stride) {
+    int32_t coeff[64];
+
+    svt_aom_highbd_hadamard_8x8((const int16_t*)src, src_stride, coeff);
+
+    return ((svt_aom_satd(coeff, 64) + 2) >> 2) - ((coeff[0] + 2) >> 2);
+}
+
 /* High bit-depth version of "AC Bias" */
-uint64_t svt_psy_distortion_hbd(const uint16_t* input, const uint32_t input_stride, const uint16_t* recon,
-                                const uint32_t recon_stride, const uint32_t width, const uint32_t height) {
+uint64_t svt_psy_distortion_hbd_c(const uint16_t* input, const uint32_t input_stride, const uint16_t* recon,
+                                  const uint32_t recon_stride, const uint32_t width, const uint32_t height) {
     uint64_t energy_gap = 0;
 
     if (width >= 8 && height >= 8) { /* >8x8 */
         for (uint32_t j = 0; j < height; j += 8) {
             for (uint32_t i = 0; i < width; i += 8) {
-                int32_t coeffs[64];
-
-                svt_aom_highbd_hadamard_8x8((int16_t*)input + j * input_stride + i, input_stride, coeffs);
-
-                int32_t input_energy = ((svt_aom_satd(coeffs, 64) + 2) >> 2) - ((coeffs[0] + 2) >> 2);
-
-                svt_aom_highbd_hadamard_8x8((int16_t*)recon + j * recon_stride + i, recon_stride, coeffs);
-
-                int32_t recon_energy = ((svt_aom_satd(coeffs, 64) + 2) >> 2) - ((coeffs[0] + 2) >> 2);
+                const int input_energy = highbd_psy_energy_8x8_c(input + j * input_stride + i, input_stride);
+                const int recon_energy = highbd_psy_energy_8x8_c(recon + j * recon_stride + i, recon_stride);
 
                 energy_gap += abs(input_energy - recon_energy);
             }
@@ -123,16 +111,8 @@ uint64_t svt_psy_distortion_hbd(const uint16_t* input, const uint32_t input_stri
     } else {
         for (uint64_t j = 0; j < height; j += 4) { /* 4x4, 4x8, 4x16, 8x4, and 16x4 */
             for (uint64_t i = 0; i < width; i += 4) {
-                int32_t coeffs[16];
-
-                // HBD coefficients can fit in 16 bits, so the regular Hadamard 4x4 function can be used here safely
-                svt_aom_hadamard_4x4((int16_t*)input + j * input_stride + i, input_stride, coeffs);
-
-                int32_t input_energy = (svt_aom_satd(coeffs, 16) << 1) - coeffs[0];
-
-                svt_aom_hadamard_4x4((int16_t*)recon + j * recon_stride + i, recon_stride, coeffs);
-
-                int32_t recon_energy = (svt_aom_satd(coeffs, 16) << 1) - coeffs[0];
+                const int input_energy = highbd_psy_energy_4x4_c(input + j * input_stride + i, input_stride);
+                const int recon_energy = highbd_psy_energy_4x4_c(recon + j * recon_stride + i, recon_stride);
 
                 energy_gap += abs(input_energy - recon_energy);
             }

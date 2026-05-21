@@ -1128,6 +1128,13 @@ int svt_av1_highbd_hadamard_satd_4x4_c(const uint16_t *src, ptrdiff_t src_stride
 RTCD_EXTERN int (*svt_av1_highbd_hadamard_satd_4x4)(const uint16_t *src, ptrdiff_t src_stride, const uint16_t *pred, ptrdiff_t pred_stride);
 #endif
 
+uint64_t svt_psy_distortion_c(const uint8_t *input, uint32_t input_stride, const uint8_t *recon, uint32_t recon_stride, uint32_t width, uint32_t height);
+RTCD_EXTERN uint64_t (*svt_psy_distortion)(const uint8_t *input, uint32_t input_stride, const uint8_t *recon, uint32_t recon_stride, uint32_t width, uint32_t height);
+#if CONFIG_ENABLE_HIGH_BIT_DEPTH
+uint64_t svt_psy_distortion_hbd_c(const uint16_t *input, uint32_t input_stride, const uint16_t *recon, uint32_t recon_stride, uint32_t width, uint32_t height);
+RTCD_EXTERN uint64_t (*svt_psy_distortion_hbd)(const uint16_t *input, uint32_t input_stride, const uint16_t *recon, uint32_t recon_stride, uint32_t width, uint32_t height);
+#endif
+
 #ifdef ARCH_AARCH64
 void svt_av1_copy_wxh_8bit_neon(uint8_t *src, uint32_t src_stride, uint8_t *dst, uint32_t dst_stride, uint32_t height, uint32_t width);
 void svt_av1_copy_wxh_16bit_neon(uint16_t *src, uint32_t src_stride, uint16_t *dst, uint32_t dst_stride, uint32_t height, uint32_t width);
