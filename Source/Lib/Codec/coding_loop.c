@@ -864,13 +864,13 @@ static void perform_intra_coding_loop(PictureControlSet* pcs, EncDecContext* ed_
         // Update the luma Dc Sign Level Coeff Neighbor Array
         {
             uint8_t dc_sign_level_coeff = (uint8_t)blk_ptr->quant_dc.y[ed_ctx->txb_itr];
-            svt_aom_neighbor_array_unit_mode_write(pcs->ep_luma_dc_sign_level_coeff_na[tile_idx],
-                                                   (uint8_t*)&dc_sign_level_coeff,
-                                                   txb_origin_x,
-                                                   txb_origin_y,
-                                                   tx_width,
-                                                   tx_height,
-                                                   NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
+            svt_aom_neighbor_array_unit_mode_write_pu(pcs->ep_luma_dc_sign_level_coeff_na[tile_idx],
+                                                      (uint8_t*)&dc_sign_level_coeff,
+                                                      txb_origin_x,
+                                                      txb_origin_y,
+                                                      tx_width,
+                                                      tx_height,
+                                                      NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
         }
     } // Transform Loop
 
@@ -1011,25 +1011,25 @@ static void perform_intra_coding_loop(PictureControlSet* pcs, EncDecContext* ed_
         // Update the cb Dc Sign Level Coeff Neighbor Array
         {
             uint8_t dc_sign_level_coeff = (uint8_t)blk_ptr->quant_dc.u[ed_ctx->txb_itr];
-            svt_aom_neighbor_array_unit_mode_write(pcs->ep_cb_dc_sign_level_coeff_na[tile_idx],
-                                                   (uint8_t*)&dc_sign_level_coeff,
-                                                   ROUND_UV(txb_origin_x) >> 1,
-                                                   ROUND_UV(txb_origin_y) >> 1,
-                                                   tx_width_uv,
-                                                   tx_height_uv,
-                                                   NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
+            svt_aom_neighbor_array_unit_mode_write_pu(pcs->ep_cb_dc_sign_level_coeff_na[tile_idx],
+                                                      (uint8_t*)&dc_sign_level_coeff,
+                                                      ROUND_UV(txb_origin_x) >> 1,
+                                                      ROUND_UV(txb_origin_y) >> 1,
+                                                      tx_width_uv,
+                                                      tx_height_uv,
+                                                      NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
         }
 
         // Update the cr DC Sign Level Coeff Neighbor Array
         {
             uint8_t dc_sign_level_coeff = (uint8_t)blk_ptr->quant_dc.v[ed_ctx->txb_itr];
-            svt_aom_neighbor_array_unit_mode_write(pcs->ep_cr_dc_sign_level_coeff_na[tile_idx],
-                                                   (uint8_t*)&dc_sign_level_coeff,
-                                                   ROUND_UV(txb_origin_x) >> 1,
-                                                   ROUND_UV(txb_origin_y) >> 1,
-                                                   tx_width_uv,
-                                                   tx_height_uv,
-                                                   NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
+            svt_aom_neighbor_array_unit_mode_write_pu(pcs->ep_cr_dc_sign_level_coeff_na[tile_idx],
+                                                      (uint8_t*)&dc_sign_level_coeff,
+                                                      ROUND_UV(txb_origin_x) >> 1,
+                                                      ROUND_UV(txb_origin_y) >> 1,
+                                                      tx_width_uv,
+                                                      tx_height_uv,
+                                                      NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
         }
     } // Transform Loop
     assert(IMPLIES(!ed_ctx->md_ctx->has_uv, blk_ptr->u_has_coeff == 0 && blk_ptr->v_has_coeff == 0));
@@ -1292,35 +1292,35 @@ static void perform_inter_coding_loop(PictureControlSet* pcs, EncDecContext* ctx
         // Update the luma Dc Sign Level Coeff Neighbor Array
         uint8_t dc_sign_level_coeff = (uint8_t)blk_ptr->quant_dc.y[ctx->txb_itr];
 
-        svt_aom_neighbor_array_unit_mode_write(pcs->ep_luma_dc_sign_level_coeff_na[tile_idx],
-                                               (uint8_t*)&dc_sign_level_coeff,
-                                               txb_origin_x,
-                                               txb_origin_y,
-                                               tx_width,
-                                               tx_height,
-                                               NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
+        svt_aom_neighbor_array_unit_mode_write_pu(pcs->ep_luma_dc_sign_level_coeff_na[tile_idx],
+                                                  (uint8_t*)&dc_sign_level_coeff,
+                                                  txb_origin_x,
+                                                  txb_origin_y,
+                                                  tx_width,
+                                                  tx_height,
+                                                  NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
 
         // Update the cb Dc Sign Level Coeff Neighbor Array
         if (md_ctx->has_uv && uv_pass) {
             dc_sign_level_coeff = (uint8_t)blk_ptr->quant_dc.u[ctx->txb_itr];
 
-            svt_aom_neighbor_array_unit_mode_write(pcs->ep_cb_dc_sign_level_coeff_na[tile_idx],
-                                                   (uint8_t*)&dc_sign_level_coeff,
-                                                   ROUND_UV(txb_origin_x) >> 1,
-                                                   ROUND_UV(txb_origin_y) >> 1,
-                                                   tx_width_uv,
-                                                   tx_height_uv,
-                                                   NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
+            svt_aom_neighbor_array_unit_mode_write_pu(pcs->ep_cb_dc_sign_level_coeff_na[tile_idx],
+                                                      (uint8_t*)&dc_sign_level_coeff,
+                                                      ROUND_UV(txb_origin_x) >> 1,
+                                                      ROUND_UV(txb_origin_y) >> 1,
+                                                      tx_width_uv,
+                                                      tx_height_uv,
+                                                      NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
             // Update the cr DC Sign Level Coeff Neighbor Array
             dc_sign_level_coeff = (uint8_t)blk_ptr->quant_dc.v[ctx->txb_itr];
 
-            svt_aom_neighbor_array_unit_mode_write(pcs->ep_cr_dc_sign_level_coeff_na[tile_idx],
-                                                   (uint8_t*)&dc_sign_level_coeff,
-                                                   ROUND_UV(txb_origin_x) >> 1,
-                                                   ROUND_UV(txb_origin_y) >> 1,
-                                                   tx_width_uv,
-                                                   tx_height_uv,
-                                                   NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
+            svt_aom_neighbor_array_unit_mode_write_pu(pcs->ep_cr_dc_sign_level_coeff_na[tile_idx],
+                                                      (uint8_t*)&dc_sign_level_coeff,
+                                                      ROUND_UV(txb_origin_x) >> 1,
+                                                      ROUND_UV(txb_origin_y) >> 1,
+                                                      tx_width_uv,
+                                                      tx_height_uv,
+                                                      NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
         }
 
     } // Transform Loop
@@ -1561,36 +1561,36 @@ void update_coeff_cdf(PictureControlSet* pcs, EncDecContext* ctx, BlkStruct* blk
     // Update the luma DC Sign Level Coeff Neighbor Array
     uint8_t dc_sign_level_coeff = (uint8_t)blk_ptr->quant_dc.y[txb_itr];
 
-    svt_aom_neighbor_array_unit_mode_write(pcs->ep_luma_dc_sign_level_coeff_na_update[tile_idx],
-                                           (uint8_t*)&dc_sign_level_coeff,
-                                           txb_origin_x,
-                                           txb_origin_y,
-                                           tx_width,
-                                           tx_height,
-                                           NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
+    svt_aom_neighbor_array_unit_mode_write_pu(pcs->ep_luma_dc_sign_level_coeff_na_update[tile_idx],
+                                              (uint8_t*)&dc_sign_level_coeff,
+                                              txb_origin_x,
+                                              txb_origin_y,
+                                              tx_width,
+                                              tx_height,
+                                              NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
 
     // Update the Cb DC Sign Level Coeff Neighbor Array
     if (md_ctx->has_uv && uv_pass) {
         dc_sign_level_coeff = (uint8_t)blk_ptr->quant_dc.u[txb_itr];
 
-        svt_aom_neighbor_array_unit_mode_write(pcs->ep_cb_dc_sign_level_coeff_na_update[tile_idx],
-                                               (uint8_t*)&dc_sign_level_coeff,
-                                               ROUND_UV(txb_origin_x) >> 1,
-                                               ROUND_UV(txb_origin_y) >> 1,
-                                               tx_width_uv,
-                                               tx_height_uv,
-                                               NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
+        svt_aom_neighbor_array_unit_mode_write_pu(pcs->ep_cb_dc_sign_level_coeff_na_update[tile_idx],
+                                                  (uint8_t*)&dc_sign_level_coeff,
+                                                  ROUND_UV(txb_origin_x) >> 1,
+                                                  ROUND_UV(txb_origin_y) >> 1,
+                                                  tx_width_uv,
+                                                  tx_height_uv,
+                                                  NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
 
         // Update the Cr DC Sign Level Coeff Neighbor Array
         dc_sign_level_coeff = (uint8_t)blk_ptr->quant_dc.v[txb_itr];
 
-        svt_aom_neighbor_array_unit_mode_write(pcs->ep_cr_dc_sign_level_coeff_na_update[tile_idx],
-                                               (uint8_t*)&dc_sign_level_coeff,
-                                               ROUND_UV(txb_origin_x) >> 1,
-                                               ROUND_UV(txb_origin_y) >> 1,
-                                               tx_width_uv,
-                                               tx_height_uv,
-                                               NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
+        svt_aom_neighbor_array_unit_mode_write_pu(pcs->ep_cr_dc_sign_level_coeff_na_update[tile_idx],
+                                                  (uint8_t*)&dc_sign_level_coeff,
+                                                  ROUND_UV(txb_origin_x) >> 1,
+                                                  ROUND_UV(txb_origin_y) >> 1,
+                                                  tx_width_uv,
+                                                  tx_height_uv,
+                                                  NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
     }
 }
 
@@ -1696,20 +1696,20 @@ static void update_b(PictureControlSet* pcs, EncDecContext* ctx, BlkStruct* blk_
     if (pcs->cdf_ctrl.update_se) {
         // Update the partition Neighbor Array
 
-        svt_aom_neighbor_array_unit_mode_write(pcs->ep_partition_context_na[tile_idx],
-                                               (uint8_t*)&partition_context_lookup[blk_geom->bsize].above,
-                                               ctx->blk_org_x,
-                                               ctx->blk_org_y,
-                                               blk_geom->bwidth,
-                                               blk_geom->bheight,
-                                               NEIGHBOR_ARRAY_UNIT_TOP_MASK);
-        svt_aom_neighbor_array_unit_mode_write(pcs->ep_partition_context_na[tile_idx],
-                                               (uint8_t*)&partition_context_lookup[blk_geom->bsize].left,
-                                               ctx->blk_org_x,
-                                               ctx->blk_org_y,
-                                               blk_geom->bwidth,
-                                               blk_geom->bheight,
-                                               NEIGHBOR_ARRAY_UNIT_LEFT_MASK);
+        svt_aom_neighbor_array_unit_mode_write_pu(pcs->ep_partition_context_na[tile_idx],
+                                                  (uint8_t*)&partition_context_lookup[blk_geom->bsize].above,
+                                                  ctx->blk_org_x,
+                                                  ctx->blk_org_y,
+                                                  blk_geom->bwidth,
+                                                  blk_geom->bheight,
+                                                  NEIGHBOR_ARRAY_UNIT_TOP_MASK);
+        svt_aom_neighbor_array_unit_mode_write_pu(pcs->ep_partition_context_na[tile_idx],
+                                                  (uint8_t*)&partition_context_lookup[blk_geom->bsize].left,
+                                                  ctx->blk_org_x,
+                                                  ctx->blk_org_y,
+                                                  blk_geom->bwidth,
+                                                  blk_geom->bheight,
+                                                  NEIGHBOR_ARRAY_UNIT_LEFT_MASK);
 
         // Update the CDFs based on the current block
         blk_ptr->av1xd->tile_ctx           = &pcs->ec_ctx_array[sb_index];

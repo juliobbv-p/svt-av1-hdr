@@ -163,20 +163,20 @@ static void mode_decision_update_neighbor_arrays(PictureControlSet* pcs, ModeDec
 
     const uint16_t tile_idx = ctx->tile_index;
 
-    svt_aom_neighbor_array_unit_mode_write(ctx->leaf_partition_na,
-                                           (uint8_t*)&partition_context_lookup[bsize].above,
-                                           org_x,
-                                           org_y,
-                                           bwidth,
-                                           bheight,
-                                           NEIGHBOR_ARRAY_UNIT_TOP_MASK);
-    svt_aom_neighbor_array_unit_mode_write(ctx->leaf_partition_na,
-                                           (uint8_t*)&partition_context_lookup[bsize].left,
-                                           org_x,
-                                           org_y,
-                                           bwidth,
-                                           bheight,
-                                           NEIGHBOR_ARRAY_UNIT_LEFT_MASK);
+    svt_aom_neighbor_array_unit_mode_write_pu(ctx->leaf_partition_na,
+                                              (uint8_t*)&partition_context_lookup[bsize].above,
+                                              org_x,
+                                              org_y,
+                                              bwidth,
+                                              bheight,
+                                              NEIGHBOR_ARRAY_UNIT_TOP_MASK);
+    svt_aom_neighbor_array_unit_mode_write_pu(ctx->leaf_partition_na,
+                                              (uint8_t*)&partition_context_lookup[bsize].left,
+                                              org_x,
+                                              org_y,
+                                              bwidth,
+                                              bheight,
+                                              NEIGHBOR_ARRAY_UNIT_LEFT_MASK);
     if (ctx->rate_est_ctrls.update_skip_ctx_dc_sign_ctx) {
         const uint8_t  tx_depth     = ctx->blk_ptr->block_mi.tx_depth;
         const uint16_t txb_count    = tx_blocks_per_depth[bsize][tx_depth];
@@ -190,15 +190,15 @@ static void mode_decision_update_neighbor_arrays(PictureControlSet* pcs, ModeDec
             const Position txb_org             = {org_x + tx_org[bsize][is_inter][tx_depth][txb_itr].x,
                                                   org_y + tx_org[bsize][is_inter][tx_depth][txb_itr].y};
             uint8_t        dc_sign_level_coeff = (uint8_t)ctx->blk_ptr->quant_dc.y[txb_itr];
-            svt_aom_neighbor_array_unit_mode_write(ctx->luma_dc_sign_level_coeff_na,
-                                                   (uint8_t*)&dc_sign_level_coeff,
-                                                   txb_org.x,
-                                                   txb_org.y,
-                                                   tx_width,
-                                                   tx_height,
-                                                   NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
+            svt_aom_neighbor_array_unit_mode_write_pu(ctx->luma_dc_sign_level_coeff_na,
+                                                      (uint8_t*)&dc_sign_level_coeff,
+                                                      txb_org.x,
+                                                      txb_org.y,
+                                                      tx_width,
+                                                      tx_height,
+                                                      NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
 
-            svt_aom_neighbor_array_unit_mode_write(
+            svt_aom_neighbor_array_unit_mode_write_pu(
                 pcs->md_tx_depth_1_luma_dc_sign_level_coeff_na[MD_NEIGHBOR_ARRAY_INDEX][tile_idx],
                 (uint8_t*)&dc_sign_level_coeff,
                 txb_org.x,
@@ -210,23 +210,23 @@ static void mode_decision_update_neighbor_arrays(PictureControlSet* pcs, ModeDec
             if (has_chroma && ctx->uv_ctrls.uv_mode <= CHROMA_MODE_1 && (tx_depth == 0 || txb_itr == 0)) {
                 //  Update chroma CB cbf and Dc context
                 uint8_t dc_sign_level_coeff_cb = (uint8_t)ctx->blk_ptr->quant_dc.u[txb_itr];
-                svt_aom_neighbor_array_unit_mode_write(ctx->cb_dc_sign_level_coeff_na,
-                                                       (uint8_t*)&dc_sign_level_coeff_cb,
-                                                       ROUND_UV(txb_org.x) >> 1,
-                                                       ROUND_UV(txb_org.y) >> 1,
-                                                       tx_width_uv,
-                                                       tx_height_uv,
-                                                       NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
+                svt_aom_neighbor_array_unit_mode_write_pu(ctx->cb_dc_sign_level_coeff_na,
+                                                          (uint8_t*)&dc_sign_level_coeff_cb,
+                                                          ROUND_UV(txb_org.x) >> 1,
+                                                          ROUND_UV(txb_org.y) >> 1,
+                                                          tx_width_uv,
+                                                          tx_height_uv,
+                                                          NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
 
                 //  Update chroma CR cbf and Dc context
                 uint8_t dc_sign_level_coeff_cr = (uint8_t)ctx->blk_ptr->quant_dc.v[txb_itr];
-                svt_aom_neighbor_array_unit_mode_write(ctx->cr_dc_sign_level_coeff_na,
-                                                       (uint8_t*)&dc_sign_level_coeff_cr,
-                                                       ROUND_UV(txb_org.x) >> 1,
-                                                       ROUND_UV(txb_org.y) >> 1,
-                                                       tx_width_uv,
-                                                       tx_height_uv,
-                                                       NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
+                svt_aom_neighbor_array_unit_mode_write_pu(ctx->cr_dc_sign_level_coeff_na,
+                                                          (uint8_t*)&dc_sign_level_coeff_cr,
+                                                          ROUND_UV(txb_org.x) >> 1,
+                                                          ROUND_UV(txb_org.y) >> 1,
+                                                          tx_width_uv,
+                                                          tx_height_uv,
+                                                          NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
             }
         }
     }
@@ -235,10 +235,10 @@ static void mode_decision_update_neighbor_arrays(PictureControlSet* pcs, ModeDec
         uint8_t bw      = tx_size_wide[tx_size];
         uint8_t bh      = tx_size_high[tx_size];
 
-        svt_aom_neighbor_array_unit_mode_write(
+        svt_aom_neighbor_array_unit_mode_write_pu(
             ctx->txfm_context_array, &bw, org_x, org_y, bwidth, bheight, NEIGHBOR_ARRAY_UNIT_TOP_MASK);
 
-        svt_aom_neighbor_array_unit_mode_write(
+        svt_aom_neighbor_array_unit_mode_write_pu(
             ctx->txfm_context_array, &bh, org_x, org_y, bwidth, bheight, NEIGHBOR_ARRAY_UNIT_LEFT_MASK);
     }
     if (!ctx->skip_intra || ctx->inter_intra_comp_ctrls.enabled) {
@@ -432,13 +432,13 @@ void svt_aom_copy_neighbour_arrays(PictureControlSet* pcs, ModeDecisionContext* 
     const int       bheight_uv   = block_size_high[bsize_uv];
     const bool      has_chroma   = is_chroma_reference(mi_row, mi_col, bsize, 1, 1);
 
-    svt_aom_copy_neigh_arr(pcs->mdleaf_partition_na[src_idx][tile_idx],
-                           pcs->mdleaf_partition_na[dst_idx][tile_idx],
-                           blk_org_x,
-                           blk_org_y,
-                           bwidth,
-                           bheight,
-                           NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
+    svt_aom_copy_neigh_arr_pu(pcs->mdleaf_partition_na[src_idx][tile_idx],
+                              pcs->mdleaf_partition_na[dst_idx][tile_idx],
+                              blk_org_x,
+                              blk_org_y,
+                              bwidth,
+                              bheight,
+                              NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
 
     // if using 8bit MD and bypassing encdec, need to save 8bit and 10bit recon
     if (ctx->encoder_bit_depth > EB_EIGHT_BIT && ctx->bypass_encdec && !ctx->hbd_md && ctx->pd_pass == PD_PASS_1) {
@@ -610,48 +610,48 @@ void svt_aom_copy_neighbour_arrays(PictureControlSet* pcs, ModeDecisionContext* 
     }
 
     //svt_aom_neighbor_array_unit_reset(pcs->md_y_dcs_na[depth]);
-    svt_aom_copy_neigh_arr(pcs->md_y_dcs_na[src_idx][tile_idx],
-                           pcs->md_y_dcs_na[dst_idx][tile_idx],
-                           blk_org_x,
-                           blk_org_y,
-                           bwidth,
-                           bheight,
-                           NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
+    svt_aom_copy_neigh_arr_pu(pcs->md_y_dcs_na[src_idx][tile_idx],
+                              pcs->md_y_dcs_na[dst_idx][tile_idx],
+                              blk_org_x,
+                              blk_org_y,
+                              bwidth,
+                              bheight,
+                              NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
 
-    svt_aom_copy_neigh_arr(pcs->md_tx_depth_1_luma_dc_sign_level_coeff_na[src_idx][tile_idx],
-                           pcs->md_tx_depth_1_luma_dc_sign_level_coeff_na[dst_idx][tile_idx],
-                           blk_org_x,
-                           blk_org_y,
-                           bwidth,
-                           bheight,
-                           NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
+    svt_aom_copy_neigh_arr_pu(pcs->md_tx_depth_1_luma_dc_sign_level_coeff_na[src_idx][tile_idx],
+                              pcs->md_tx_depth_1_luma_dc_sign_level_coeff_na[dst_idx][tile_idx],
+                              blk_org_x,
+                              blk_org_y,
+                              bwidth,
+                              bheight,
+                              NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
     if (has_chroma && ctx->uv_ctrls.uv_mode <= CHROMA_MODE_1) {
-        svt_aom_copy_neigh_arr(pcs->md_cb_dc_sign_level_coeff_na[src_idx][tile_idx],
-                               pcs->md_cb_dc_sign_level_coeff_na[dst_idx][tile_idx],
-                               blk_org_x_uv,
-                               blk_org_y_uv,
-                               bwidth_uv,
-                               bheight_uv,
-                               NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
+        svt_aom_copy_neigh_arr_pu(pcs->md_cb_dc_sign_level_coeff_na[src_idx][tile_idx],
+                                  pcs->md_cb_dc_sign_level_coeff_na[dst_idx][tile_idx],
+                                  blk_org_x_uv,
+                                  blk_org_y_uv,
+                                  bwidth_uv,
+                                  bheight_uv,
+                                  NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
         //svt_aom_neighbor_array_unit_reset(pcs->md_cr_dc_sign_level_coeff_na[depth]);
 
-        svt_aom_copy_neigh_arr(pcs->md_cr_dc_sign_level_coeff_na[src_idx][tile_idx],
-                               pcs->md_cr_dc_sign_level_coeff_na[dst_idx][tile_idx],
-                               blk_org_x_uv,
-                               blk_org_y_uv,
-                               bwidth_uv,
-                               bheight_uv,
-                               NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
+        svt_aom_copy_neigh_arr_pu(pcs->md_cr_dc_sign_level_coeff_na[src_idx][tile_idx],
+                                  pcs->md_cr_dc_sign_level_coeff_na[dst_idx][tile_idx],
+                                  blk_org_x_uv,
+                                  blk_org_y_uv,
+                                  bwidth_uv,
+                                  bheight_uv,
+                                  NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
     }
 
     //svt_aom_neighbor_array_unit_reset(pcs->md_txfm_context_array[depth]);
-    svt_aom_copy_neigh_arr(pcs->md_txfm_context_array[src_idx][tile_idx],
-                           pcs->md_txfm_context_array[dst_idx][tile_idx],
-                           blk_org_x,
-                           blk_org_y,
-                           bwidth,
-                           bheight,
-                           NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
+    svt_aom_copy_neigh_arr_pu(pcs->md_txfm_context_array[src_idx][tile_idx],
+                              pcs->md_txfm_context_array[dst_idx][tile_idx],
+                              blk_org_x,
+                              blk_org_y,
+                              bwidth,
+                              bheight,
+                              NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
 }
 
 // Update the neighbour arrays with the data from the passed block. Assumes the passed block is valid
@@ -4134,7 +4134,7 @@ void tx_update_neighbor_arrays(PictureControlSet* pcs, ModeDecisionContext* ctx,
                 ctx->hbd_md);
         }
         int8_t dc_sign_level_coeff = cand_bf->quant_dc.y[ctx->txb_itr];
-        svt_aom_neighbor_array_unit_mode_write(
+        svt_aom_neighbor_array_unit_mode_write_pu(
             pcs->md_tx_depth_1_luma_dc_sign_level_coeff_na[MD_NEIGHBOR_ARRAY_INDEX][tile_idx],
             (uint8_t*)&dc_sign_level_coeff,
             ctx->blk_org_x + tx_org[ctx->blk_geom->bsize][is_inter][ctx->tx_depth][ctx->txb_itr].x,
@@ -4223,13 +4223,13 @@ static void tx_reset_neighbor_arrays(PictureControlSet* pcs, ModeDecisionContext
                 }
             }
         }
-        svt_aom_copy_neigh_arr(pcs->md_y_dcs_na[MD_NEIGHBOR_ARRAY_INDEX][tile_idx],
-                               pcs->md_tx_depth_1_luma_dc_sign_level_coeff_na[MD_NEIGHBOR_ARRAY_INDEX][tile_idx],
-                               ctx->blk_org_x,
-                               ctx->blk_org_y,
-                               ctx->blk_geom->bwidth,
-                               ctx->blk_geom->bheight,
-                               NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
+        svt_aom_copy_neigh_arr_pu(pcs->md_y_dcs_na[MD_NEIGHBOR_ARRAY_INDEX][tile_idx],
+                                  pcs->md_tx_depth_1_luma_dc_sign_level_coeff_na[MD_NEIGHBOR_ARRAY_INDEX][tile_idx],
+                                  ctx->blk_org_x,
+                                  ctx->blk_org_y,
+                                  ctx->blk_geom->bwidth,
+                                  ctx->blk_geom->bheight,
+                                  NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
     }
 }
 
@@ -10319,41 +10319,41 @@ void svt_aom_pick_partition_lpd1(SequenceControlSet* scs, PictureControlSet* pcs
         // The current block is the last at a given d1 level (b/c fixed partition); update d2 info
         // Always update the partition context array because may be needed for other SBs which
         // have NSQ or multiple depths enabled
-        svt_aom_neighbor_array_unit_mode_write(ctx->leaf_partition_na,
-                                               (uint8_t*)&partition_context_lookup[ctx->blk_geom->bsize].above,
-                                               ctx->blk_org_x,
-                                               ctx->blk_org_y,
-                                               ctx->blk_geom->bwidth,
-                                               ctx->blk_geom->bheight,
-                                               NEIGHBOR_ARRAY_UNIT_TOP_MASK);
-        svt_aom_neighbor_array_unit_mode_write(ctx->leaf_partition_na,
-                                               (uint8_t*)&partition_context_lookup[ctx->blk_geom->bsize].left,
-                                               ctx->blk_org_x,
-                                               ctx->blk_org_y,
-                                               ctx->blk_geom->bwidth,
-                                               ctx->blk_geom->bheight,
-                                               NEIGHBOR_ARRAY_UNIT_LEFT_MASK);
+        svt_aom_neighbor_array_unit_mode_write_pu(ctx->leaf_partition_na,
+                                                  (uint8_t*)&partition_context_lookup[ctx->blk_geom->bsize].above,
+                                                  ctx->blk_org_x,
+                                                  ctx->blk_org_y,
+                                                  ctx->blk_geom->bwidth,
+                                                  ctx->blk_geom->bheight,
+                                                  NEIGHBOR_ARRAY_UNIT_TOP_MASK);
+        svt_aom_neighbor_array_unit_mode_write_pu(ctx->leaf_partition_na,
+                                                  (uint8_t*)&partition_context_lookup[ctx->blk_geom->bsize].left,
+                                                  ctx->blk_org_x,
+                                                  ctx->blk_org_y,
+                                                  ctx->blk_geom->bwidth,
+                                                  ctx->blk_geom->bheight,
+                                                  NEIGHBOR_ARRAY_UNIT_LEFT_MASK);
         // If TXS enabled at picture level, there are necessary context updates
         if (pcs->ppcs->frm_hdr.tx_mode == TX_MODE_SELECT) {
             uint8_t tx_size = tx_depth_to_tx_size[ctx->blk_ptr->block_mi.tx_depth][ctx->blk_geom->bsize];
             uint8_t bw      = tx_size_wide[tx_size];
             uint8_t bh      = tx_size_high[tx_size];
 
-            svt_aom_neighbor_array_unit_mode_write(ctx->txfm_context_array,
-                                                   &bw,
-                                                   ctx->blk_org_x,
-                                                   ctx->blk_org_y,
-                                                   ctx->blk_geom->bwidth,
-                                                   ctx->blk_geom->bheight,
-                                                   NEIGHBOR_ARRAY_UNIT_TOP_MASK);
+            svt_aom_neighbor_array_unit_mode_write_pu(ctx->txfm_context_array,
+                                                      &bw,
+                                                      ctx->blk_org_x,
+                                                      ctx->blk_org_y,
+                                                      ctx->blk_geom->bwidth,
+                                                      ctx->blk_geom->bheight,
+                                                      NEIGHBOR_ARRAY_UNIT_TOP_MASK);
 
-            svt_aom_neighbor_array_unit_mode_write(ctx->txfm_context_array,
-                                                   &bh,
-                                                   ctx->blk_org_x,
-                                                   ctx->blk_org_y,
-                                                   ctx->blk_geom->bwidth,
-                                                   ctx->blk_geom->bheight,
-                                                   NEIGHBOR_ARRAY_UNIT_LEFT_MASK);
+            svt_aom_neighbor_array_unit_mode_write_pu(ctx->txfm_context_array,
+                                                      &bh,
+                                                      ctx->blk_org_x,
+                                                      ctx->blk_org_y,
+                                                      ctx->blk_geom->bwidth,
+                                                      ctx->blk_geom->bheight,
+                                                      NEIGHBOR_ARRAY_UNIT_LEFT_MASK);
         }
         // Define temp mi_row/col to prevent overwriting the variables, which are forwarded
         // when splitting the partition. This should not matter since the partition is fixed.

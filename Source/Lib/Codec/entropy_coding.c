@@ -715,13 +715,13 @@ static EbErrorType av1_encode_tx_coef_y(PictureControlSet* pcs, EntropyCodingCon
 
         // Update the luma Dc Sign Level Coeff Neighbor Array
         uint8_t dc_sign_level_coeff = (uint8_t)cul_level_y;
-        svt_aom_neighbor_array_unit_mode_write(luma_dc_sign_level_coeff_na,
-                                               &dc_sign_level_coeff,
-                                               tx_x,
-                                               tx_y,
-                                               tx_width,
-                                               tx_height,
-                                               NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
+        svt_aom_neighbor_array_unit_mode_write_pu(luma_dc_sign_level_coeff_na,
+                                                  &dc_sign_level_coeff,
+                                                  tx_x,
+                                                  tx_y,
+                                                  tx_width,
+                                                  tx_height,
+                                                  NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
 
         ec_ctx->coded_area_sb += tx_width * tx_height;
     }
@@ -816,22 +816,22 @@ static void av1_encode_tx_coef_uv(PictureControlSet* pcs, EntropyCodingContext* 
                                                        ec_ctx);
         // Update the cb Dc Sign Level Coeff Neighbor Array
         uint8_t dc_sign_level_coeff = (uint8_t)cul_level_cb;
-        svt_aom_neighbor_array_unit_mode_write(cb_dc_sign_level_coeff_na,
-                                               &dc_sign_level_coeff,
-                                               uv_x,
-                                               uv_y,
-                                               tx_width_uv,
-                                               tx_height_uv,
-                                               NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
+        svt_aom_neighbor_array_unit_mode_write_pu(cb_dc_sign_level_coeff_na,
+                                                  &dc_sign_level_coeff,
+                                                  uv_x,
+                                                  uv_y,
+                                                  tx_width_uv,
+                                                  tx_height_uv,
+                                                  NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
         // Update the cr DC Sign Level Coeff Neighbor Array
         dc_sign_level_coeff = (uint8_t)cul_level_cr;
-        svt_aom_neighbor_array_unit_mode_write(cr_dc_sign_level_coeff_na,
-                                               &dc_sign_level_coeff,
-                                               uv_x,
-                                               uv_y,
-                                               tx_width_uv,
-                                               tx_height_uv,
-                                               NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
+        svt_aom_neighbor_array_unit_mode_write_pu(cr_dc_sign_level_coeff_na,
+                                                  &dc_sign_level_coeff,
+                                                  uv_x,
+                                                  uv_y,
+                                                  tx_width_uv,
+                                                  tx_height_uv,
+                                                  NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
 
         ec_ctx->coded_area_sb_uv += tx_width_uv * tx_height_uv;
     }
@@ -999,33 +999,33 @@ static EbErrorType av1_encode_coeff_1d(PictureControlSet* pcs, EntropyCodingCont
 
             // Update the luma Dc Sign Level Coeff Neighbor Array
             uint8_t dc_sign_level_coeff = (uint8_t)cul_level_y;
-            svt_aom_neighbor_array_unit_mode_write(luma_dc_sign_level_coeff_na,
-                                                   &dc_sign_level_coeff,
-                                                   tx_x,
-                                                   tx_y,
-                                                   tx_width,
-                                                   tx_height,
-                                                   NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
+            svt_aom_neighbor_array_unit_mode_write_pu(luma_dc_sign_level_coeff_na,
+                                                      &dc_sign_level_coeff,
+                                                      tx_x,
+                                                      tx_y,
+                                                      tx_width,
+                                                      tx_height,
+                                                      NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
 
             // Update the cb Dc Sign Level Coeff Neighbor Array
             if (has_uv) {
                 dc_sign_level_coeff = (uint8_t)cul_level_cb;
-                svt_aom_neighbor_array_unit_mode_write(cb_dc_sign_level_coeff_na,
-                                                       &dc_sign_level_coeff,
-                                                       uv_x,
-                                                       uv_y,
-                                                       tx_width_uv,
-                                                       tx_height_uv,
-                                                       NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
+                svt_aom_neighbor_array_unit_mode_write_pu(cb_dc_sign_level_coeff_na,
+                                                          &dc_sign_level_coeff,
+                                                          uv_x,
+                                                          uv_y,
+                                                          tx_width_uv,
+                                                          tx_height_uv,
+                                                          NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
                 // Update the cr DC Sign Level Coeff Neighbor Array
                 dc_sign_level_coeff = (uint8_t)cul_level_cr;
-                svt_aom_neighbor_array_unit_mode_write(cr_dc_sign_level_coeff_na,
-                                                       &dc_sign_level_coeff,
-                                                       uv_x,
-                                                       uv_y,
-                                                       tx_width_uv,
-                                                       tx_height_uv,
-                                                       NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
+                svt_aom_neighbor_array_unit_mode_write_pu(cr_dc_sign_level_coeff_na,
+                                                          &dc_sign_level_coeff,
+                                                          uv_x,
+                                                          uv_y,
+                                                          tx_width_uv,
+                                                          tx_height_uv,
+                                                          NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
                 ec_ctx->coded_area_sb_uv += tx_width_uv * tx_height_uv;
             }
             ec_ctx->coded_area_sb += tx_width * tx_height;
@@ -4287,49 +4287,49 @@ static void ec_update_neighbors(PictureControlSet* pcs, EntropyCodingContext* ec
     const bool         has_uv                      = is_chroma_reference(blk_org_y >> 2, blk_org_x >> 2, bsize, 1, 1);
 
     // Update the Leaf Depth Neighbor Array
-    svt_aom_neighbor_array_unit_mode_write(partition_context_na,
-                                           (uint8_t*)&partition_context_lookup[bsize].above,
-                                           blk_org_x,
-                                           blk_org_y,
-                                           bwidth,
-                                           bheight,
-                                           NEIGHBOR_ARRAY_UNIT_TOP_MASK);
-    svt_aom_neighbor_array_unit_mode_write(partition_context_na,
-                                           (uint8_t*)&partition_context_lookup[bsize].left,
-                                           blk_org_x,
-                                           blk_org_y,
-                                           bwidth,
-                                           bheight,
-                                           NEIGHBOR_ARRAY_UNIT_LEFT_MASK);
+    svt_aom_neighbor_array_unit_mode_write_pu(partition_context_na,
+                                              (uint8_t*)&partition_context_lookup[bsize].above,
+                                              blk_org_x,
+                                              blk_org_y,
+                                              bwidth,
+                                              bheight,
+                                              NEIGHBOR_ARRAY_UNIT_TOP_MASK);
+    svt_aom_neighbor_array_unit_mode_write_pu(partition_context_na,
+                                              (uint8_t*)&partition_context_lookup[bsize].left,
+                                              blk_org_x,
+                                              blk_org_y,
+                                              bwidth,
+                                              bheight,
+                                              NEIGHBOR_ARRAY_UNIT_LEFT_MASK);
     if (skip_coeff) {
         uint8_t dc_sign_level_coeff = 0;
 
-        svt_aom_neighbor_array_unit_mode_write(luma_dc_sign_level_coeff_na,
-                                               (uint8_t*)&dc_sign_level_coeff,
-                                               blk_org_x,
-                                               blk_org_y,
-                                               bwidth,
-                                               bheight,
-                                               NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
+        svt_aom_neighbor_array_unit_mode_write_pu(luma_dc_sign_level_coeff_na,
+                                                  (uint8_t*)&dc_sign_level_coeff,
+                                                  blk_org_x,
+                                                  blk_org_y,
+                                                  bwidth,
+                                                  bheight,
+                                                  NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
 
         if (has_uv) {
             const BlockSize bsize_uv   = get_plane_block_size(bsize, 1, 1);
             const int       bwidth_uv  = block_size_wide[bsize_uv];
             const int       bheight_uv = block_size_high[bsize_uv];
-            svt_aom_neighbor_array_unit_mode_write(cb_dc_sign_level_coeff_na,
-                                                   &dc_sign_level_coeff,
-                                                   ((blk_org_x >> 3) << 3) >> 1,
-                                                   ((blk_org_y >> 3) << 3) >> 1,
-                                                   bwidth_uv,
-                                                   bheight_uv,
-                                                   NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
-            svt_aom_neighbor_array_unit_mode_write(cr_dc_sign_level_coeff_na,
-                                                   &dc_sign_level_coeff,
-                                                   ((blk_org_x >> 3) << 3) >> 1,
-                                                   ((blk_org_y >> 3) << 3) >> 1,
-                                                   bwidth_uv,
-                                                   bheight_uv,
-                                                   NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
+            svt_aom_neighbor_array_unit_mode_write_pu(cb_dc_sign_level_coeff_na,
+                                                      &dc_sign_level_coeff,
+                                                      ((blk_org_x >> 3) << 3) >> 1,
+                                                      ((blk_org_y >> 3) << 3) >> 1,
+                                                      bwidth_uv,
+                                                      bheight_uv,
+                                                      NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
+            svt_aom_neighbor_array_unit_mode_write_pu(cr_dc_sign_level_coeff_na,
+                                                      &dc_sign_level_coeff,
+                                                      ((blk_org_x >> 3) << 3) >> 1,
+                                                      ((blk_org_y >> 3) << 3) >> 1,
+                                                      bwidth_uv,
+                                                      bheight_uv,
+                                                      NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
             ec_ctx->coded_area_sb_uv += bwidth_uv * bheight_uv;
         }
         ec_ctx->coded_area_sb += bwidth * bheight;
