@@ -53,26 +53,6 @@ typedef struct NeighborArrayUnit {
     uint32_t max_pic_h;
 } NeighborArrayUnit;
 
-typedef struct NeighborArrayUnit32 {
-    EbDctor   dctor;
-    uint32_t* left_array;
-    uint32_t* top_array;
-    uint32_t* top_left_array;
-    uint16_t  left_array_size;
-    uint16_t  top_array_size;
-    uint16_t  top_left_array_size;
-    uint8_t   unit_size;
-    uint8_t   granularity_normal;
-    uint8_t   granularity_normal_log2;
-    uint8_t   granularity_top_left;
-    uint8_t   granularity_top_left_log2;
-} NeighborArrayUnit32;
-
-EbErrorType svt_aom_neighbor_array_unit_ctor32(NeighborArrayUnit32* na_unit_ptr, uint32_t max_picture_width,
-                                               uint32_t max_picture_height, uint32_t unit_size,
-                                               uint8_t granularity_normal, uint8_t granularity_top_left,
-                                               uint8_t type_mask);
-
 EbErrorType svt_aom_neighbor_array_unit_ctor(NeighborArrayUnit* na_unit_ptr, uint32_t max_picture_width,
                                              uint32_t max_picture_height, uint32_t unit_size,
                                              uint8_t granularity_normal, uint8_t granularity_top_left,
@@ -80,15 +60,9 @@ EbErrorType svt_aom_neighbor_array_unit_ctor(NeighborArrayUnit* na_unit_ptr, uin
 
 void svt_aom_neighbor_array_unit_reset(NeighborArrayUnit* na_unit_ptr);
 
-void svt_aom_neighbor_array_unit_reset32(NeighborArrayUnit32* na_unit_ptr);
-
 /*************************************************
      * Neighbor Array Unit Get Left Index
      *************************************************/
-static INLINE uint32_t get_neighbor_array_unit_left_index32(NeighborArrayUnit32* na_unit_ptr, uint32_t loc_y) {
-    return (loc_y >> na_unit_ptr->granularity_normal_log2);
-}
-
 static INLINE uint32_t get_neighbor_array_unit_left_index(NeighborArrayUnit* na_unit_ptr, uint32_t loc_y) {
     return (loc_y >> na_unit_ptr->granularity_normal_log2);
 }
@@ -96,10 +70,6 @@ static INLINE uint32_t get_neighbor_array_unit_left_index(NeighborArrayUnit* na_
 /*************************************************
      * Neighbor Array Unit Get Top Index
      *************************************************/
-static INLINE uint32_t get_neighbor_array_unit_top_index32(NeighborArrayUnit32* na_unit_ptr, uint32_t loc_x) {
-    return (loc_x >> na_unit_ptr->granularity_normal_log2);
-}
-
 static INLINE uint32_t get_neighbor_array_unit_top_index(NeighborArrayUnit* na_unit_ptr, uint32_t loc_x) {
     return (loc_x >> na_unit_ptr->granularity_normal_log2);
 }
@@ -126,10 +96,6 @@ void svt_aom_neighbor_array_unit16bit_sample_write(NeighborArrayUnit* na_unit_pt
                                                    uint32_t src_origin_x, uint32_t src_origin_y, uint32_t pic_origin_x,
                                                    uint32_t pic_origin_y, uint32_t block_width, uint32_t block_height,
                                                    uint8_t neighbor_array_type_mask);
-
-void svt_aom_neighbor_array_unit_mode_write32(NeighborArrayUnit32* na_unit_ptr, uint32_t value, uint32_t org_x,
-                                              uint32_t org_y, uint32_t block_width, uint32_t block_height,
-                                              uint8_t neighbor_array_type_mask);
 
 void svt_aom_neighbor_array_unit_mode_write(NeighborArrayUnit* na_unit_ptr, uint8_t* value, uint32_t org_x,
                                             uint32_t org_y, uint32_t block_width, uint32_t block_height,
