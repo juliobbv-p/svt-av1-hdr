@@ -1063,22 +1063,17 @@ static void encode_partition_av1(PictureControlSet* pcs, FRAME_CONTEXT* frame_co
     const int32_t has_rows = (blk_org_y + hbs) < pcs->ppcs->aligned_height;
     const int32_t has_cols = (blk_org_x + hbs) < pcs->ppcs->aligned_width;
 
-    uint32_t partition_context_left_neighbor_index = get_neighbor_array_unit_left_index(partition_context_na,
-                                                                                        blk_org_y);
-    uint32_t partition_context_top_neighbor_index  = get_neighbor_array_unit_top_index(partition_context_na, blk_org_x);
+    uint32_t left_neighbor_index = get_neighbor_array_unit_left_index(partition_context_na, blk_org_y);
+    uint32_t top_neighbor_index  = get_neighbor_array_unit_top_index(partition_context_na, blk_org_x);
 
     uint32_t context_index = 0;
 
-    const PartitionContextType above_ctx =
-        (((PartitionContext*)partition_context_na->top_array)[partition_context_top_neighbor_index].above ==
-         (char)INVALID_NEIGHBOR_DATA)
+    PartitionContextType above_ctx = (partition_context_na->top_array[top_neighbor_index] == INVALID_NEIGHBOR_DATA)
         ? 0
-        : ((PartitionContext*)partition_context_na->top_array)[partition_context_top_neighbor_index].above;
-    const PartitionContextType left_ctx =
-        (((PartitionContext*)partition_context_na->left_array)[partition_context_left_neighbor_index].left ==
-         (char)INVALID_NEIGHBOR_DATA)
-        ? 0
-        : ((PartitionContext*)partition_context_na->left_array)[partition_context_left_neighbor_index].left;
+        : (PartitionContextType)partition_context_na->top_array[top_neighbor_index];
+    PartitionContextType left_ctx  = (partition_context_na->left_array[left_neighbor_index] == INVALID_NEIGHBOR_DATA)
+         ? 0
+         : (PartitionContextType)partition_context_na->left_array[left_neighbor_index];
 
     const int32_t bsl   = mi_size_wide_log2[bsize] - mi_size_wide_log2[BLOCK_8X8];
     int32_t       above = (above_ctx >> bsl) & 1, left = (left_ctx >> bsl) & 1;
@@ -4290,19 +4285,22 @@ static void ec_update_neighbors(PictureControlSet* pcs, EntropyCodingContext* ec
     const int          bwidth                      = block_size_wide[bsize];
     const int          bheight                     = block_size_high[bsize];
     const bool         has_uv                      = is_chroma_reference(blk_org_y >> 2, blk_org_x >> 2, bsize, 1, 1);
-    PartitionContext   partition;
 
     // Update the Leaf Depth Neighbor Array
-    partition.above = partition_context_lookup[bsize].above;
-    partition.left  = partition_context_lookup[bsize].left;
-
     svt_aom_neighbor_array_unit_mode_write(partition_context_na,
-                                           (uint8_t*)&partition,
+                                           (uint8_t*)&partition_context_lookup[bsize].above,
                                            blk_org_x,
                                            blk_org_y,
                                            bwidth,
                                            bheight,
-                                           NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
+                                           NEIGHBOR_ARRAY_UNIT_TOP_MASK);
+    svt_aom_neighbor_array_unit_mode_write(partition_context_na,
+                                           (uint8_t*)&partition_context_lookup[bsize].left,
+                                           blk_org_x,
+                                           blk_org_y,
+                                           bwidth,
+                                           bheight,
+                                           NEIGHBOR_ARRAY_UNIT_LEFT_MASK);
     if (skip_coeff) {
         uint8_t dc_sign_level_coeff = 0;
 

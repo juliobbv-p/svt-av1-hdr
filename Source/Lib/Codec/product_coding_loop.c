@@ -163,17 +163,20 @@ static void mode_decision_update_neighbor_arrays(PictureControlSet* pcs, ModeDec
 
     const uint16_t tile_idx = ctx->tile_index;
 
-    struct PartitionContext partition;
-    partition.above = partition_context_lookup[bsize].above;
-    partition.left  = partition_context_lookup[bsize].left;
-
     svt_aom_neighbor_array_unit_mode_write(ctx->leaf_partition_na,
-                                           (uint8_t*)(&partition),
+                                           (uint8_t*)&partition_context_lookup[bsize].above,
                                            org_x,
                                            org_y,
                                            bwidth,
                                            bheight,
-                                           NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
+                                           NEIGHBOR_ARRAY_UNIT_TOP_MASK);
+    svt_aom_neighbor_array_unit_mode_write(ctx->leaf_partition_na,
+                                           (uint8_t*)&partition_context_lookup[bsize].left,
+                                           org_x,
+                                           org_y,
+                                           bwidth,
+                                           bheight,
+                                           NEIGHBOR_ARRAY_UNIT_LEFT_MASK);
     if (ctx->rate_est_ctrls.update_skip_ctx_dc_sign_ctx) {
         const uint8_t  tx_depth     = ctx->blk_ptr->block_mi.tx_depth;
         const uint16_t txb_count    = tx_blocks_per_depth[bsize][tx_depth];
@@ -10316,17 +10319,20 @@ void svt_aom_pick_partition_lpd1(SequenceControlSet* scs, PictureControlSet* pcs
         // The current block is the last at a given d1 level (b/c fixed partition); update d2 info
         // Always update the partition context array because may be needed for other SBs which
         // have NSQ or multiple depths enabled
-        struct PartitionContext partition;
-        partition.above = partition_context_lookup[ctx->blk_geom->bsize].above;
-        partition.left  = partition_context_lookup[ctx->blk_geom->bsize].left;
-
         svt_aom_neighbor_array_unit_mode_write(ctx->leaf_partition_na,
-                                               (uint8_t*)(&partition),
+                                               (uint8_t*)&partition_context_lookup[ctx->blk_geom->bsize].above,
                                                ctx->blk_org_x,
                                                ctx->blk_org_y,
                                                ctx->blk_geom->bwidth,
                                                ctx->blk_geom->bheight,
-                                               NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
+                                               NEIGHBOR_ARRAY_UNIT_TOP_MASK);
+        svt_aom_neighbor_array_unit_mode_write(ctx->leaf_partition_na,
+                                               (uint8_t*)&partition_context_lookup[ctx->blk_geom->bsize].left,
+                                               ctx->blk_org_x,
+                                               ctx->blk_org_y,
+                                               ctx->blk_geom->bwidth,
+                                               ctx->blk_geom->bheight,
+                                               NEIGHBOR_ARRAY_UNIT_LEFT_MASK);
         // If TXS enabled at picture level, there are necessary context updates
         if (pcs->ppcs->frm_hdr.tx_mode == TX_MODE_SELECT) {
             uint8_t tx_size = tx_depth_to_tx_size[ctx->blk_ptr->block_mi.tx_depth][ctx->blk_geom->bsize];
@@ -10380,21 +10386,18 @@ static void update_part_neighs(ModeDecisionContext* ctx, PC_TREE* pc_tree, const
     const uint32_t blk_org_x = mi_col << MI_SIZE_LOG2;
     const uint32_t blk_org_y = mi_row << MI_SIZE_LOG2;
 
-    NeighborArrayUnit* leaf_partition_na             = ctx->leaf_partition_na;
-    const uint32_t     partition_left_neighbor_index = get_neighbor_array_unit_left_index(leaf_partition_na, blk_org_y);
-    const uint32_t     partition_above_neighbor_index = get_neighbor_array_unit_top_index(leaf_partition_na, blk_org_x);
+    NeighborArrayUnit* leaf_partition_na    = ctx->leaf_partition_na;
+    const uint32_t     left_neighbor_index  = get_neighbor_array_unit_left_index(leaf_partition_na, blk_org_y);
+    const uint32_t     above_neighbor_index = get_neighbor_array_unit_top_index(leaf_partition_na, blk_org_x);
 
     // Generate Partition context
-    pc_tree->above_part_ctx =
-        (((PartitionContext*)leaf_partition_na->top_array)[partition_above_neighbor_index].above ==
-         (char)INVALID_NEIGHBOR_DATA)
+    pc_tree->above_part_ctx = (leaf_partition_na->top_array[above_neighbor_index] == INVALID_NEIGHBOR_DATA)
         ? 0
-        : ((PartitionContext*)leaf_partition_na->top_array)[partition_above_neighbor_index].above;
+        : (PartitionContextType)leaf_partition_na->top_array[above_neighbor_index];
 
-    pc_tree->left_part_ctx = (((PartitionContext*)leaf_partition_na->left_array)[partition_left_neighbor_index].left ==
-                              (char)INVALID_NEIGHBOR_DATA)
+    pc_tree->left_part_ctx = (leaf_partition_na->left_array[left_neighbor_index] == INVALID_NEIGHBOR_DATA)
         ? 0
-        : ((PartitionContext*)leaf_partition_na->left_array)[partition_left_neighbor_index].left;
+        : (PartitionContextType)leaf_partition_na->left_array[left_neighbor_index];
 }
 
 void svt_aom_init_sb_data(SequenceControlSet* scs, PictureControlSet* pcs, ModeDecisionContext* ctx) {

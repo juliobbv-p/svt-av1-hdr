@@ -1695,17 +1695,21 @@ static void update_b(PictureControlSet* pcs, EncDecContext* ctx, BlkStruct* blk_
     }
     if (pcs->cdf_ctrl.update_se) {
         // Update the partition Neighbor Array
-        PartitionContext partition;
-        partition.above = partition_context_lookup[blk_geom->bsize].above;
-        partition.left  = partition_context_lookup[blk_geom->bsize].left;
 
         svt_aom_neighbor_array_unit_mode_write(pcs->ep_partition_context_na[tile_idx],
-                                               (uint8_t*)&partition,
+                                               (uint8_t*)&partition_context_lookup[blk_geom->bsize].above,
                                                ctx->blk_org_x,
                                                ctx->blk_org_y,
                                                blk_geom->bwidth,
                                                blk_geom->bheight,
-                                               NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
+                                               NEIGHBOR_ARRAY_UNIT_TOP_MASK);
+        svt_aom_neighbor_array_unit_mode_write(pcs->ep_partition_context_na[tile_idx],
+                                               (uint8_t*)&partition_context_lookup[blk_geom->bsize].left,
+                                               ctx->blk_org_x,
+                                               ctx->blk_org_y,
+                                               blk_geom->bwidth,
+                                               blk_geom->bheight,
+                                               NEIGHBOR_ARRAY_UNIT_LEFT_MASK);
 
         // Update the CDFs based on the current block
         blk_ptr->av1xd->tile_ctx           = &pcs->ec_ctx_array[sb_index];
