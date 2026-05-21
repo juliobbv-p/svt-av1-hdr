@@ -10,8 +10,10 @@
 
 #include <algorithm>
 #include <ostream>
+#include <type_traits>
 
 #include "aom_dsp_rtcd.h"
+#include "common_dsp_rtcd.h"
 #include "test/acm_random.h"
 #include "util.h"
 
@@ -20,6 +22,12 @@ namespace {
 using libaom_test::ACMRandom;
 
 using HadamardFunc = void (*)(const int16_t *a, ptrdiff_t a_stride, int32_t *b);
+using HadamardSatdFunc = int (*)(const uint8_t *src, ptrdiff_t src_stride,
+                                 const uint8_t *pred, ptrdiff_t pred_stride);
+using HighbdHadamardSatdFunc = int (*)(const uint16_t *src,
+                                       ptrdiff_t src_stride,
+                                       const uint16_t *pred,
+                                       ptrdiff_t pred_stride);
 
 template <typename HadamardFuncType>
 struct FuncWithSize {
@@ -30,6 +38,8 @@ struct FuncWithSize {
 };
 
 using HadamardFuncWithSize = FuncWithSize<HadamardFunc>;
+using HadamardSatdFuncWithSize = FuncWithSize<HadamardSatdFunc>;
+using HighbdHadamardSatdFuncWithSize = FuncWithSize<HighbdHadamardSatdFunc>;
 
 template <typename HadamardFuncType>
 std::ostream &operator<<(std::ostream &os,
@@ -135,7 +145,169 @@ INSTANTIATE_TEST_SUITE_P(
                       HadamardFuncWithSize(&svt_aom_hadamard_32x32_neon, 32)));
 #endif  // ARCH_AARCH64
 
+#ifdef ARCH_AARCH64
+template <typename PixelType, typename HadamardSatdFuncType>
+class HadamardSatdTestBase
+    : public ::testing::TestWithParam<FuncWithSize<HadamardSatdFuncType>> {
+  public:
+    HadamardSatdTestBase(const FuncWithSize<HadamardSatdFuncType> &func_param,
+                         HadamardSatdFuncType ref_func)
+        : bwh_(func_param.block_size),
+          block_size_(bwh_ * bwh_),
+          max_value_(std::is_same<PixelType, uint8_t>::value ? 255 : 1023),
+          satd_func_(func_param.func),
+          satd_ref_func_(ref_func) {
+    }
+
+    void SetUp() override {
+        rnd_.Reset(ACMRandom::DeterministicSeed());
+    }
+
+    void CompareReferenceVaryStride() {
+        const int kMaxBlockSize = 32 * 32;
+        DECLARE_ALIGNED(16, PixelType, src[kMaxBlockSize * 8]);
+        DECLARE_ALIGNED(16, PixelType, pred[kMaxBlockSize * 8]);
+        FillRandom(src, pred, kMaxBlockSize * 8);
+
+        // Force RTCD dispatch to C so the C SATD reference does not call
+        // optimized Hadamard function pointers while comparing against the SIMD
+        // implementation.
+        svt_aom_setup_common_rtcd_internal(0);
+        svt_aom_setup_rtcd_internal(0);
+        for (int stride = 8; stride < 64; stride += 8) {
+            if (stride < bwh_)
+                continue;
+
+            const int satd_ref = satd_ref_func_(src, stride, pred, stride);
+            const int satd = satd_func_(src, stride, pred, stride);
+            EXPECT_EQ(satd_ref, satd);
+        }
+    }
+
+    void ExtremeValues() {
+        const int kMaxBlockSize = 32 * 32;
+        DECLARE_ALIGNED(16, PixelType, src[kMaxBlockSize]);
+        DECLARE_ALIGNED(16, PixelType, pred[kMaxBlockSize]);
+
+        // Force RTCD dispatch to C so the C SATD reference does not call
+        // optimized Hadamard function pointers while comparing against the SIMD
+        // implementation.
+        svt_aom_setup_common_rtcd_internal(0);
+        svt_aom_setup_rtcd_internal(0);
+        for (int pattern = 0; pattern < 4; ++pattern) {
+            FillExtreme(src, pred, block_size_, pattern);
+
+            const int satd_ref = satd_ref_func_(src, bwh_, pred, bwh_);
+            const int satd = satd_func_(src, bwh_, pred, bwh_);
+            EXPECT_EQ(satd_ref, satd);
+        }
+    }
+
+  private:
+    void FillRandom(PixelType *src, PixelType *pred, int count) {
+        for (int i = 0; i < count; ++i) {
+            src[i] = static_cast<PixelType>(rnd_.Rand16() & max_value_);
+            pred[i] = static_cast<PixelType>(rnd_.Rand16() & max_value_);
+        }
+    }
+
+    void FillExtreme(PixelType *src, PixelType *pred, int count, int pattern) {
+        for (int i = 0; i < count; ++i) {
+            const bool high = pattern < 2 ? pattern == 0 : ((i + pattern) & 1);
+            src[i] = static_cast<PixelType>(high ? max_value_ : 0);
+            pred[i] = static_cast<PixelType>(high ? 0 : max_value_);
+        }
+    }
+
+    ACMRandom rnd_;
+    int bwh_;
+    int block_size_;
+    int max_value_;
+    HadamardSatdFuncType satd_func_;
+    HadamardSatdFuncType satd_ref_func_;
+};
+
+class HadamardSatdTest
+    : public HadamardSatdTestBase<uint8_t, HadamardSatdFunc> {
+  public:
+    HadamardSatdTest()
+        : HadamardSatdTestBase(GetParam(),
+                               GetReferenceFunc(GetParam().block_size)) {
+    }
+
+  private:
+    static HadamardSatdFunc GetReferenceFunc(int block_size) {
+        switch (block_size) {
+        case 4: return svt_av1_hadamard_satd_4x4_c;
+        case 8: return svt_av1_hadamard_satd_8x8_c;
+        case 16: return svt_av1_hadamard_satd_16x16_c;
+        case 32: return svt_av1_hadamard_satd_32x32_c;
+        default: return nullptr;
+        }
+    }
+};
+
+TEST_P(HadamardSatdTest, CompareReferenceVaryStride) {
+    CompareReferenceVaryStride();
+}
+
+TEST_P(HadamardSatdTest, ExtremeValues) {
+    ExtremeValues();
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    NEON, HadamardSatdTest,
+    ::testing::Values(
+        HadamardSatdFuncWithSize(&svt_av1_hadamard_satd_4x4_neon, 4),
+        HadamardSatdFuncWithSize(&svt_av1_hadamard_satd_8x8_neon, 8),
+        HadamardSatdFuncWithSize(&svt_av1_hadamard_satd_16x16_neon, 16),
+        HadamardSatdFuncWithSize(&svt_av1_hadamard_satd_32x32_neon, 32)));
+#endif  // ARCH_AARCH64
+
 #if CONFIG_ENABLE_HIGH_BIT_DEPTH
+
+#if ARCH_AARCH64
+class HighbdHadamardSatdTest
+    : public HadamardSatdTestBase<uint16_t, HighbdHadamardSatdFunc> {
+  public:
+    HighbdHadamardSatdTest()
+        : HadamardSatdTestBase(GetParam(),
+                               GetReferenceFunc(GetParam().block_size)) {
+    }
+
+  private:
+    static HighbdHadamardSatdFunc GetReferenceFunc(int block_size) {
+        switch (block_size) {
+        case 4: return svt_av1_highbd_hadamard_satd_4x4_c;
+        case 8: return svt_av1_highbd_hadamard_satd_8x8_c;
+        case 16: return svt_av1_highbd_hadamard_satd_16x16_c;
+        case 32: return svt_av1_highbd_hadamard_satd_32x32_c;
+        default: return nullptr;
+        }
+    }
+};
+
+TEST_P(HighbdHadamardSatdTest, CompareReferenceVaryStride) {
+    CompareReferenceVaryStride();
+}
+
+TEST_P(HighbdHadamardSatdTest, ExtremeValues) {
+    ExtremeValues();
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    NEON, HighbdHadamardSatdTest,
+    ::testing::Values(
+        HighbdHadamardSatdFuncWithSize(&svt_av1_highbd_hadamard_satd_4x4_neon,
+                                       4),
+        HighbdHadamardSatdFuncWithSize(&svt_av1_highbd_hadamard_satd_8x8_neon,
+                                       8),
+        HighbdHadamardSatdFuncWithSize(&svt_av1_highbd_hadamard_satd_16x16_neon,
+                                       16),
+        HighbdHadamardSatdFuncWithSize(&svt_av1_highbd_hadamard_satd_32x32_neon,
+                                       32)));
+#endif  // ARCH_AARCH64
+
 class HadamardHighbdTest : public HadamardTestBase<int32_t, HadamardFunc> {
   protected:
     HadamardHighbdTest()

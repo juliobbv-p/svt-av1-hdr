@@ -69,11 +69,10 @@ static inline uint8x8_t load_unaligned_u8_4x1(const uint8_t* buf) {
 }
 
 // Load two blocks of 32-bits into a single vector.
-static inline uint8x8_t load_u8x4_strided_x2(uint8_t* src, ptrdiff_t stride) {
+static inline uint8x8_t load_u8x4_strided_x2(const uint8_t* src, ptrdiff_t stride) {
     uint8x8_t ret = vdup_n_u8(0);
     load_u8_4x1_lane(src, &ret, 0);
-    src += stride;
-    load_u8_4x1_lane(src, &ret, 1);
+    load_u8_4x1_lane(src + stride, &ret, 1);
     return ret;
 }
 

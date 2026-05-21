@@ -1661,18 +1661,18 @@ void svt_aom_setup_common_rtcd_internal(EbCpuFlags flags) {
     SET_NEON(svt_aom_hadamard_16x16, svt_aom_hadamard_16x16_c, svt_aom_hadamard_16x16_neon);
     SET_NEON(svt_aom_hadamard_8x8, svt_aom_hadamard_8x8_c, svt_aom_hadamard_8x8_neon);
     SET_NEON(svt_aom_hadamard_4x4, svt_aom_hadamard_4x4_c, svt_aom_hadamard_4x4_neon);
-    SET_ONLY_C(svt_av1_hadamard_satd_32x32, svt_av1_hadamard_satd_32x32_c);
-    SET_ONLY_C(svt_av1_hadamard_satd_16x16, svt_av1_hadamard_satd_16x16_c);
-    SET_ONLY_C(svt_av1_hadamard_satd_8x8, svt_av1_hadamard_satd_8x8_c);
-    SET_ONLY_C(svt_av1_hadamard_satd_4x4, svt_av1_hadamard_satd_4x4_c);
+    SET_NEON(svt_av1_hadamard_satd_32x32, svt_av1_hadamard_satd_32x32_c, svt_av1_hadamard_satd_32x32_neon);
+    SET_NEON(svt_av1_hadamard_satd_16x16, svt_av1_hadamard_satd_16x16_c, svt_av1_hadamard_satd_16x16_neon);
+    SET_NEON(svt_av1_hadamard_satd_8x8, svt_av1_hadamard_satd_8x8_c, svt_av1_hadamard_satd_8x8_neon);
+    SET_NEON(svt_av1_hadamard_satd_4x4, svt_av1_hadamard_satd_4x4_c, svt_av1_hadamard_satd_4x4_neon);
 #if CONFIG_ENABLE_HIGH_BIT_DEPTH
     SET_ONLY_C(svt_aom_highbd_hadamard_32x32, svt_aom_highbd_hadamard_32x32_c);
     SET_ONLY_C(svt_aom_highbd_hadamard_16x16, svt_aom_highbd_hadamard_16x16_c);
     SET_NEON(svt_aom_highbd_hadamard_8x8, svt_aom_highbd_hadamard_8x8_c, svt_aom_highbd_hadamard_8x8_neon);
-    SET_ONLY_C(svt_av1_highbd_hadamard_satd_32x32, svt_av1_highbd_hadamard_satd_32x32_c);
-    SET_ONLY_C(svt_av1_highbd_hadamard_satd_16x16, svt_av1_highbd_hadamard_satd_16x16_c);
-    SET_ONLY_C(svt_av1_highbd_hadamard_satd_8x8, svt_av1_highbd_hadamard_satd_8x8_c);
-    SET_ONLY_C(svt_av1_highbd_hadamard_satd_4x4, svt_av1_highbd_hadamard_satd_4x4_c);
+    SET_NEON(svt_av1_highbd_hadamard_satd_32x32, svt_av1_highbd_hadamard_satd_32x32_c, svt_av1_highbd_hadamard_satd_32x32_neon);
+    SET_NEON(svt_av1_highbd_hadamard_satd_16x16, svt_av1_highbd_hadamard_satd_16x16_c, svt_av1_highbd_hadamard_satd_16x16_neon);
+    SET_NEON(svt_av1_highbd_hadamard_satd_8x8, svt_av1_highbd_hadamard_satd_8x8_c, svt_av1_highbd_hadamard_satd_8x8_neon);
+    SET_NEON(svt_av1_highbd_hadamard_satd_4x4, svt_av1_highbd_hadamard_satd_4x4_c, svt_av1_highbd_hadamard_satd_4x4_neon);
 #endif
 #else
     SET_ONLY_C(svt_aom_blend_a64_mask, svt_aom_blend_a64_mask_c);
