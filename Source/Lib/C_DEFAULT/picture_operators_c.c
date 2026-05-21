@@ -9,12 +9,14 @@
 * PATENTS file, you can obtain it at https://www.aomedia.org/license/patent-license.
 */
 
-#include "picture_operators_c.h"
 #include <stdint.h>
 #include <stdio.h>
-#include "utility.h"
-#include "common_dsp_rtcd.h"
+
 #include "ac_bias.h"
+#include "aom_dsp_rtcd.h"
+#include "common_dsp_rtcd.h"
+#include "picture_operators_c.h"
+#include "utility.h"
 
 /*********************************
 * Picture Copy Kernel
@@ -230,6 +232,40 @@ void svt_aom_hadamard_32x32_c(const int16_t* src_diff, ptrdiff_t src_stride, int
 
         ++coeff;
     }
+}
+
+int svt_av1_hadamard_satd_4x4_c(const uint8_t* src, ptrdiff_t src_stride, const uint8_t* pred, ptrdiff_t pred_stride) {
+    DECLARE_ALIGNED(16, int16_t, diff[4 * 4]);
+    DECLARE_ALIGNED(16, int32_t, coeff[4 * 4]);
+    svt_aom_subtract_block(4, 4, diff, 4, src, src_stride, pred, pred_stride);
+    svt_aom_hadamard_4x4(diff, 4, coeff);
+    return svt_aom_satd(coeff, 4 * 4);
+}
+
+int svt_av1_hadamard_satd_8x8_c(const uint8_t* src, ptrdiff_t src_stride, const uint8_t* pred, ptrdiff_t pred_stride) {
+    DECLARE_ALIGNED(16, int16_t, diff[8 * 8]);
+    DECLARE_ALIGNED(16, int32_t, coeff[8 * 8]);
+    svt_aom_subtract_block(8, 8, diff, 8, src, src_stride, pred, pred_stride);
+    svt_aom_hadamard_8x8(diff, 8, coeff);
+    return svt_aom_satd(coeff, 8 * 8);
+}
+
+int svt_av1_hadamard_satd_16x16_c(const uint8_t* src, ptrdiff_t src_stride, const uint8_t* pred,
+                                  ptrdiff_t pred_stride) {
+    DECLARE_ALIGNED(16, int16_t, diff[16 * 16]);
+    DECLARE_ALIGNED(16, int32_t, coeff[16 * 16]);
+    svt_aom_subtract_block(16, 16, diff, 16, src, src_stride, pred, pred_stride);
+    svt_aom_hadamard_16x16(diff, 16, coeff);
+    return svt_aom_satd(coeff, 16 * 16);
+}
+
+int svt_av1_hadamard_satd_32x32_c(const uint8_t* src, ptrdiff_t src_stride, const uint8_t* pred,
+                                  ptrdiff_t pred_stride) {
+    DECLARE_ALIGNED(16, int16_t, diff[32 * 32]);
+    DECLARE_ALIGNED(16, int32_t, coeff[32 * 32]);
+    svt_aom_subtract_block(32, 32, diff, 32, src, src_stride, pred, pred_stride);
+    svt_aom_hadamard_32x32(diff, 32, coeff);
+    return svt_aom_satd(coeff, 32 * 32);
 }
 
 // Specializing on the (power-of-two) block width lets the compiler emit inline
