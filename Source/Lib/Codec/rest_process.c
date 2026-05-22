@@ -101,7 +101,11 @@ EbErrorType svt_aom_rest_context_ctor(EbThreadContext* thread_ctx, const EbEncHa
         : svt_aom_get_enable_restoration_default(
               config->enc_mode, config->enable_restoration_filtering, scs->input_resolution, config->fast_decode);
 
+#if FIX_MR_STILL_IMAGE
+    uint8_t enable_sg = allintra ? svt_aom_get_enable_sg_allintra(config->enc_mode)
+#else
     uint8_t enable_sg = allintra ? svt_aom_get_enable_sg_allintra()
+#endif
 #if TUNE_SIMPLIFY_SETTINGS
         : rtc_tune ? svt_aom_get_enable_sg_rtc(scs->input_resolution, config->fast_decode)
 #else

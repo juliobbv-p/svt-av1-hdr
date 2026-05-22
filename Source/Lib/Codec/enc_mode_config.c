@@ -1918,12 +1918,25 @@ static uint8_t svt_aom_get_sg_filter_level_rtc(EncMode enc_mode, uint8_t input_r
 }
 #endif
 
+#if FIX_MR_STILL_IMAGE
+static uint8_t svt_aom_get_sg_filter_level_allintra(EncMode enc_mode) {
+    uint8_t sg_filter_lvl;
+    if (enc_mode <= ENC_MR) {
+        sg_filter_lvl = 1;
+    } else {
+        sg_filter_lvl = 0;
+    }
+
+    return sg_filter_lvl;
+}
+#else
 static uint8_t svt_aom_get_sg_filter_level_allintra() {
     uint8_t sg_filter_lvl;
     sg_filter_lvl = 0;
 
     return sg_filter_lvl;
 }
+#endif
 
 static void dlf_level_modulation(PictureControlSet* pcs, uint8_t* default_dlf_level, uint8_t modulation_mode) {
     uint8_t dlf_level = *default_dlf_level;
@@ -3218,7 +3231,13 @@ void svt_aom_sig_deriv_multi_processes_allintra(SequenceControlSet* scs, Picture
 #endif
         // Use intrabc_level 1 or 2 to achieve maximum intra-BC coding gain (higher computational complexity)
 #if OPT_SC_STILL_IMAGE
+#if FIX_MR_STILL_IMAGE
+        if (enc_mode <= ENC_MR) {
+            intrabc_level = 1;
+        } else if (enc_mode <= ENC_M0) {
+#else
         if (enc_mode <= ENC_M0) {
+#endif
             intrabc_level = 3;
         } else if (enc_mode <= ENC_M1) {
             intrabc_level = 4;
@@ -3344,13 +3363,25 @@ void svt_aom_sig_deriv_multi_processes_allintra(SequenceControlSet* scs, Picture
         cdef_search_level = (int8_t)(scs->static_config.cdef_level);
     } else {
         if ((fast_decode == 0 || input_resolution <= INPUT_SIZE_360p_RANGE)) {
+#if FIX_MR_STILL_IMAGE
+            if (enc_mode <= ENC_MR) {
+                cdef_search_level = 1;
+#if OPT_NSC_STILL_IMAGE
+            } else if (enc_mode <= ENC_M0) {
+                cdef_search_level = 2;
+#endif
+            } else if (enc_mode <= ENC_M3) {
+                cdef_search_level = 3;
+#else
 #if OPT_NSC_STILL_IMAGE
             if (enc_mode <= ENC_M0) {
                 cdef_search_level = 2;
             } else
 #endif
+
                 if (enc_mode <= ENC_M3) {
                 cdef_search_level = 3;
+#endif
             } else if (enc_mode <= ENC_M5) {
                 cdef_search_level = 5;
             } else if (enc_mode <= ENC_M6) {
@@ -3409,7 +3440,11 @@ void svt_aom_sig_deriv_multi_processes_allintra(SequenceControlSet* scs, Picture
                                         scs->max_initial_input_luma_width * scs->max_initial_input_luma_height);
 
         wn = svt_aom_get_wn_filter_level_allintra(enc_mode);
+#if FIX_MR_STILL_IMAGE
+        sg = svt_aom_get_sg_filter_level_allintra(enc_mode);
+#else
         sg = svt_aom_get_sg_filter_level_allintra();
+#endif
     }
 
     Av1Common* cm = pcs->av1_cm;
@@ -3423,7 +3458,18 @@ void svt_aom_sig_deriv_multi_processes_allintra(SequenceControlSet* scs, Picture
     // 0                                     OFF
     // 1                                     ON
     pcs->frame_end_cdf_update_mode = 1;
-    pcs->max_can_count             = svt_aom_get_max_can_count(enc_mode);
+#if FIX_MR_STILL_IMAGE
+    if (scs->enable_hbd_mode_decision == DEFAULT) {
+        if (enc_mode <= ENC_MR) {
+            pcs->hbd_md = 1;
+        } else {
+            pcs->hbd_md = 2;
+        }
+    } else {
+        pcs->hbd_md = scs->enable_hbd_mode_decision;
+    }
+#endif
+    pcs->max_can_count = svt_aom_get_max_can_count(enc_mode);
 }
 
 /******************************************************
@@ -3631,11 +3677,19 @@ uint8_t svt_aom_get_enable_sg_rtc(EncMode enc_mode, uint8_t input_resolution, ui
 }
 #endif
 
+#if FIX_MR_STILL_IMAGE
+uint8_t svt_aom_get_enable_sg_allintra(EncMode enc_mode) {
+    uint8_t sg = 0;
+    sg         = svt_aom_get_sg_filter_level_allintra(enc_mode);
+    return (sg > 0);
+}
+#else
 uint8_t svt_aom_get_enable_sg_allintra() {
     uint8_t sg = 0;
     sg         = svt_aom_get_sg_filter_level_allintra();
     return (sg > 0);
 }
+#endif
 
 /*
 * return true if restoration filtering is enabled; false otherwise
@@ -3706,7 +3760,11 @@ uint8_t svt_aom_get_enable_restoration_allintra(EncMode enc_mode, int8_t config_
             break;
         }
     }
+#if FIX_MR_STILL_IMAGE
+    uint8_t sg = svt_aom_get_enable_sg_allintra(enc_mode);
+#else
     uint8_t sg = svt_aom_get_enable_sg_allintra();
+#endif
     return (sg > 0 || wn > 0);
 }
 
@@ -10364,6 +10422,12 @@ uint8_t svt_aom_get_nsq_search_level_allintra(PictureControlSet* pcs, EncMode en
         nsq_search_level = 0;
     }
 
+#if FIX_MR_STILL_IMAGE
+    if ((pcs->coeff_lvl == VLOW_LVL || pcs->coeff_lvl == LOW_LVL) && (enc_mode <= ENC_MR)) {
+        nsq_search_level = MAX(nsq_search_level - 3, 1);
+    }
+#endif
+
     // If NSQ search is off, don't apply offsets
     if (nsq_search_level == 0) {
         return nsq_search_level;
@@ -13043,7 +13107,13 @@ void svt_aom_sig_deriv_mode_decision_config_allintra(SequenceControlSet* scs, Pi
         }
 #endif
     } else {
+#if FIX_MR_STILL_IMAGE
+        if (enc_mode <= ENC_MR) {
+            pcs->pic_block_based_depth_refinement_level = 3;
+        } else if (enc_mode <= ENC_M4) {
+#else
         if (enc_mode <= ENC_M4) {
+#endif
             pcs->pic_block_based_depth_refinement_level = 6;
         } else if (enc_mode <= ENC_M5) {
             pcs->pic_block_based_depth_refinement_level = 9;
@@ -13061,11 +13131,21 @@ void svt_aom_sig_deriv_mode_decision_config_allintra(SequenceControlSet* scs, Pi
         // Upper QP cutoff: QP 39 = (63 - QP) * 3
         pcs->lambda_weight = CLIP3(0, 72, MIN(ppcs->picture_qp * 4, (63 - ppcs->picture_qp) * 3)) + 128;
     } else { // Tune 0 to 2
+#if FIX_MR_STILL_IMAGE
+        if (!(enc_mode <= ENC_MR)) {
+            if (ppcs->picture_qp >= 56) {
+                pcs->lambda_weight = 175;
+            } else if (ppcs->picture_qp >= 16) {
+                pcs->lambda_weight = 150;
+            }
+        }
+#else
         if (ppcs->picture_qp >= 56) {
             pcs->lambda_weight = 175;
         } else if (ppcs->picture_qp >= 16) {
             pcs->lambda_weight = 150;
         }
+#endif
     }
     // Extended CRF range (63.25 - 70), increase lambda weight toward further bit saving
     // Max lambda weight increase: 28 * 28 = 784

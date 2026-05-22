@@ -3833,7 +3833,25 @@ void set_qp_based_th_scaling_ctrls_all_intra(SequenceControlSet* scs) {
     QpBasedThScaling* qp_ctrls = &scs->qp_based_th_scaling_ctrls;
     const EncMode     enc_mode = scs->static_config.enc_mode;
 
+#if FIX_MR_STILL_IMAGE
+    if (enc_mode <= ENC_MR) {
+        qp_ctrls->tf_me_qp_based_th_scaling        = 0;
+        qp_ctrls->tf_ref_qp_based_th_scaling       = 0;
+        qp_ctrls->depths_qp_based_th_scaling       = 0;
+        qp_ctrls->hme_qp_based_th_scaling          = 0;
+        qp_ctrls->me_qp_based_th_scaling           = 0;
+        qp_ctrls->nsq_qp_based_th_scaling          = 0;
+        qp_ctrls->nic_max_qp_based_th_scaling      = 1;
+        qp_ctrls->nic_pruning_qp_based_th_scaling  = 1;
+        qp_ctrls->pme_qp_based_th_scaling          = 0;
+        qp_ctrls->txt_qp_based_th_scaling          = 1;
+        qp_ctrls->cap_max_size_qp_based_th_scaling = 0;
+        qp_ctrls->lpd0_qp_based_th_scaling         = 0;
+        qp_ctrls->intra_bc_mesh_qp_scaling         = 0;
+    } else if (enc_mode <= ENC_M3) {
+#else
     if (enc_mode <= ENC_M3) {
+#endif
         qp_ctrls->tf_me_qp_based_th_scaling        = 0;
         qp_ctrls->tf_ref_qp_based_th_scaling       = 0;
         qp_ctrls->depths_qp_based_th_scaling       = 0;

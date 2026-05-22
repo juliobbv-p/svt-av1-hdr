@@ -84,7 +84,11 @@ uint8_t svt_aom_get_enable_sg_rtc(uint8_t input_resolution, uint8_t fast_decode)
 #else
 uint8_t svt_aom_get_enable_sg_rtc(EncMode enc_mode, uint8_t input_resolution, uint8_t fast_decode);
 #endif
+#if FIX_MR_STILL_IMAGE
+uint8_t svt_aom_get_enable_sg_allintra(EncMode enc_mode);
+#else
 uint8_t svt_aom_get_enable_sg_allintra();
+#endif
 uint8_t svt_aom_get_enable_restoration_default(EncMode enc_mode, int8_t config_enable_restoration,
                                                uint8_t input_resolution, uint8_t fast_decode);
 #if TUNE_SIMPLIFY_SETTINGS
