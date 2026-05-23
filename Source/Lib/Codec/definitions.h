@@ -592,21 +592,18 @@ static __inline void mem_put_le32(void* vmem, MEM_VALUE_T val) {
 #define svt_log2f_safe(x) get_msb((x) | 1)
 #define svt_log2f get_msb
 
-#ifdef _MSC_VER
-#if defined(_M_X64) || defined(_M_IX86)
-#include <intrin.h>
-#define USE_MSC_INTRINSICS
-#endif
-#endif
-
 // use GNU builtins where available.
 #if defined(__GNUC__) && ((__GNUC__ == 3 && __GNUC_MINOR__ >= 4) || __GNUC__ >= 4)
 static INLINE int32_t get_msb(uint32_t n) {
     assert(n != 0);
     return 31 - __builtin_clz(n);
 }
-#elif defined(USE_MSC_INTRINSICS)
-#pragma intrinsic(_BitScanReverse)
+
+#define svt_ctz(x) __builtin_ctz(x)
+#define svt_ctzll(x) __builtin_ctzll(x)
+
+#elif defined(_MSC_VER)
+#include <intrin.h>
 
 static INLINE int32_t get_msb(uint32_t n) {
     unsigned long first_set_bit;
@@ -615,7 +612,18 @@ static INLINE int32_t get_msb(uint32_t n) {
     return first_set_bit;
 }
 
-#undef USE_MSC_INTRINSICS
+static inline int svt_ctz(unsigned long x) {
+    unsigned long k;
+    _BitScanForward(&k, x);
+    return k;
+}
+
+static inline int svt_ctzll(unsigned __int64 x) {
+    unsigned long k;
+    _BitScanForward64(&k, x);
+    return k;
+}
+
 #else
 // Returns (int32_t)floor(log2(n)). n must be > 0.
 /*static*/ INLINE int32_t get_msb(uint32_t n) {

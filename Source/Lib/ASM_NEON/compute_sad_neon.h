@@ -20,14 +20,6 @@
 #include "sum_neon.h"
 #include "utility.h"
 
-#if __GNUC__
-#define svt_ctzll(id, x) id = (unsigned long)__builtin_ctzll(x)
-#elif defined(_MSC_VER)
-#include <intrin.h>
-
-#define svt_ctzll(id, x) _BitScanForward64(&id, x)
-#endif
-
 /* Find the position of the first occurrence of 'value' in the vector 'x'.
  * Returns the position (index) of the first occurrence of 'value' in the vector 'x'. */
 static inline uint16_t findposq_u32(uint32x4_t x, uint32_t value) {
@@ -41,9 +33,7 @@ static inline uint16_t findposq_u32(uint32x4_t x, uint32_t value) {
     uint64_t idx = vget_lane_u64(vreinterpret_u64_u16(is_one), 0);
 
     /* Calculate the position as an index, dividing by 16 to account for 16-bit lanes. */
-    uint64_t res;
-    svt_ctzll(res, idx);
-    return res >> 4;
+    return svt_ctzll(idx) >> 4;
 }
 
 static inline void update_best_sad_u32(uint32x4_t sad4, uint64_t* best_sad, int16_t* x_search_center,
@@ -71,9 +61,7 @@ static inline uint16_t findposq_u16(uint16x8_t x, uint16_t value) {
     uint64_t idx = vget_lane_u64(vreinterpret_u64_u8(is_one), 0);
 
     /* Calculate the position as an index, dividing by 8 to account for 8-bit lanes. */
-    uint64_t res;
-    svt_ctzll(res, idx);
-    return res >> 3;
+    return svt_ctzll(idx) >> 3;
 }
 
 static inline void update_best_sad_u16(uint16x8_t sad8, uint64_t* best_sad, int16_t* x_search_center,
