@@ -212,6 +212,7 @@
 #define MAX_TX_SIZE_TOKEN "--max-tx-size"
 #define AC_BIAS_TOKEN "--ac-bias"
 #define HBD_MDS_TOKEN "--hbd-mds"
+#define ENABLE_INTRABC_TOKEN "--enable-intrabc"
 
 static EbErrorType validate_error(EbErrorType err, const char* token, const char* value) {
     switch (err) {
@@ -950,6 +951,7 @@ ConfigDescription config_entry_specific[] = {
     {SCREEN_CONTENT_TOKEN,
      "Set screen content detection level, default is 2 [0: off, 1: on, 2: content adaptive, 3: content adaptive "
      "(anti-alias aware)]"},
+    {ENABLE_INTRABC_TOKEN, "Enable Intra Block Copy, default is 1 [0: off, 1: on]"},
 #if CONFIG_ENABLE_FILM_GRAIN
     // Annex A parameters
     {FILM_GRAIN_TOKEN, "Enable film grain, default is 0 [0: off, 1-50: level of denoising for film grain]"},
@@ -1178,6 +1180,7 @@ ConfigEntry config_entry[] = {
     {ENABLE_TF_KEY_TOKEN, "EnableTfKey", set_cfg_generic_token},
     {ENABLE_OVERLAYS, "EnableOverlays", set_cfg_generic_token},
     {SCREEN_CONTENT_TOKEN, "ScreenContentMode", set_cfg_generic_token},
+    {ENABLE_INTRABC_TOKEN, "EnableIntraBC", set_cfg_generic_token},
 
 #if CONFIG_ENABLE_FILM_GRAIN
     {FILM_GRAIN_TOKEN, "FilmGrain", set_cfg_generic_token},

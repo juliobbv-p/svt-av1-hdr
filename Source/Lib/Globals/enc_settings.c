@@ -980,6 +980,7 @@ EbErrorType svt_av1_set_default_params(EbSvtAv1EncConfiguration* config_ptr) {
     config_ptr->optimal_buffer_level_ms  = 600; // default settings for CBR
     config_ptr->recode_loop              = ALLOW_RECODE_DEFAULT;
     config_ptr->screen_content_mode      = 2;
+    config_ptr->enable_intrabc           = true;
 
     // Annex A parameters
     config_ptr->profile = 0;
@@ -2449,6 +2450,7 @@ EB_API EbErrorType svt_av1_enc_parse_parameter(EbSvtAv1EncConfiguration* config_
         {"rtc", &config_struct->rtc},
         {"adaptive-film-grain", &config_struct->adaptive_film_grain},
         {"enable-kf-tf", &config_struct->enable_tf_key},
+        {"enable-intrabc", &config_struct->enable_intrabc},
     };
     const size_t bool_opts_size = sizeof(bool_opts) / sizeof(bool_opts[0]);
 

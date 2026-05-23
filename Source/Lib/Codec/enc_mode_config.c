@@ -2247,6 +2247,8 @@ static void svt_aom_set_dlf_controls(PictureParentControlSet* pcs, uint8_t dlf_l
 /*
     set controls for intra block copy
 */
+#define MAX_INTRABC_LEVEL 7
+
 static void set_intrabc_level(PictureParentControlSet* pcs, uint8_t ibc_level) {
     IntrabcCtrls* intrabc_ctrls = &pcs->intrabc_ctrls;
 
@@ -2402,7 +2404,7 @@ static void set_intrabc_level(PictureParentControlSet* pcs, uint8_t ibc_level) {
 
         break;
 
-    case 7:
+    case MAX_INTRABC_LEVEL:
 
         intrabc_ctrls->enabled = 1;
 
@@ -2628,10 +2630,13 @@ void svt_aom_sig_deriv_multi_processes_default(SequenceControlSet* scs, PictureP
 
     // Set intra-bc level
     uint8_t intrabc_level = 0;
+    if (!scs->static_config.enable_intrabc) {
+        intrabc_level = 0;
+    } else
 #if TUNE_SIMPLIFY_SETTINGS
-    if (sc_class5) {
+        if (sc_class5) {
 #else
-    if (sc_class1) {
+        if (sc_class1) {
 #endif
         if (is_islice) {
 #if OPT_SC_RA
@@ -3223,11 +3228,14 @@ void svt_aom_sig_deriv_multi_processes_allintra(SequenceControlSet* scs, Picture
     pcs->multi_pass_pd_level = MULTI_PASS_PD_ON;
 
     // Set intra-bc level
-    uint8_t intrabc_level;
+    uint8_t intrabc_level = 0;
+    if (!scs->static_config.enable_intrabc) {
+        intrabc_level = 0;
+    } else
 #if OPT_SC_STILL_IMAGE
-    if (sc_class5) {
+        if (sc_class5) {
 #else
-    if (sc_class1) {
+        if (sc_class1) {
 #endif
         // Use intrabc_level 1 or 2 to achieve maximum intra-BC coding gain (higher computational complexity)
 #if OPT_SC_STILL_IMAGE
@@ -3246,7 +3254,7 @@ void svt_aom_sig_deriv_multi_processes_allintra(SequenceControlSet* scs, Picture
         } else if (enc_mode <= ENC_M3) {
             intrabc_level = 6;
         } else if (enc_mode <= ENC_M4) {
-            intrabc_level = 7;
+            intrabc_level = MAX_INTRABC_LEVEL;
         } else {
             intrabc_level = 0;
         }
@@ -3279,7 +3287,7 @@ void svt_aom_sig_deriv_multi_processes_allintra(SequenceControlSet* scs, Picture
 #endif
 #if !TUNE_M5_SC_STILL_IMAGE
         } else if (enc_mode <= ENC_M5) {
-            intrabc_level = 7;
+            intrabc_level = MAX_INTRABC_LEVEL;
 #endif
 #else
         } else if (enc_mode <= ENC_M5) {

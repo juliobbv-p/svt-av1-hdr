@@ -4494,6 +4494,9 @@ static void copy_api_from_app(SequenceControlSet* scs, EbSvtAv1EncConfiguration*
     // CDEF
     scs->static_config.cdef_level = config_struct->cdef_level;
 
+    // Intra Block Copy
+    scs->static_config.enable_intrabc = config_struct->enable_intrabc;
+
     // Restoration filtering
     scs->static_config.enable_restoration_filtering = config_struct->enable_restoration_filtering;
 
