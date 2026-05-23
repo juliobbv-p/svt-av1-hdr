@@ -106,7 +106,9 @@ set(multi_arch_files
     SatdTest.cc
     SelfGuidedUtilTest.cc
     SpatialFullDistortionTest.cc
+    SubpelVariancePerfTest.cc
     TemporalFilterTestPlanewise.cc
+    VariancePerfTest.cc
     VarianceTest.cc
     WedgeUtilTest.cc
     av1_convolve_scale_test.cc
