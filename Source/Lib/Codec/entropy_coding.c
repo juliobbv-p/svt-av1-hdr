@@ -4977,6 +4977,7 @@ static EbErrorType write_modes_b(PictureControlSet* pcs, EntropyCodingContext* e
     const int          bheight                     = block_size_high[bsize];
     bool               skip_coeff                  = mbmi->block_mi.skip;
     const bool         has_uv                      = is_chroma_reference(blk_org_y >> 2, blk_org_x >> 2, bsize, 1, 1);
+    const bool         all_skip                    = sb_ptr->all_skip;
     ec_ctx->mbmi                                   = mbmi;
 
     const uint8_t skip_mode = mbmi->block_mi.skip_mode;
@@ -5037,8 +5038,9 @@ static EbErrorType write_modes_b(PictureControlSet* pcs, EntropyCodingContext* e
                 (((blk_org_x >> 2) & (scs->seq_header.sb_mi_size - 1)) == 0);
             if ((bsize != scs->seq_header.sb_size || skip_coeff == 0) && super_block_upper_left) {
                 assert(current_q_index > 0);
-                int32_t reduced_delta_qindex = (current_q_index - pcs->ppcs->prev_qindex[tile_idx]) /
-                    frm_hdr->delta_q_params.delta_q_res;
+                int32_t reduced_delta_qindex = all_skip
+                    ? 0
+                    : (current_q_index - pcs->ppcs->prev_qindex[tile_idx]) / frm_hdr->delta_q_params.delta_q_res;
 
                 //write_delta_qindex(xd, reduced_delta_qindex, w);
                 av1_write_delta_q_index(frame_context, reduced_delta_qindex, ec_writer);
@@ -5049,7 +5051,7 @@ static EbErrorType write_modes_b(PictureControlSet* pcs, EntropyCodingContext* e
                 current_q_index,
                 pcs->ppcs->prev_qindex);
                 }*/
-                pcs->ppcs->prev_qindex[tile_idx] = current_q_index;
+                pcs->ppcs->prev_qindex[tile_idx] = all_skip ? pcs->ppcs->prev_qindex[tile_idx] : current_q_index;
             }
         }
 
@@ -5179,10 +5181,11 @@ static EbErrorType write_modes_b(PictureControlSet* pcs, EntropyCodingContext* e
                 (((blk_org_x >> 2) & (scs->seq_header.sb_mi_size - 1)) == 0);
             if ((bsize != scs->seq_header.sb_size || skip_coeff == 0) && super_block_upper_left) {
                 assert(current_q_index > 0);
-                int32_t reduced_delta_qindex = (current_q_index - pcs->ppcs->prev_qindex[tile_idx]) /
-                    frm_hdr->delta_q_params.delta_q_res;
+                int32_t reduced_delta_qindex = all_skip
+                    ? 0
+                    : (current_q_index - pcs->ppcs->prev_qindex[tile_idx]) / frm_hdr->delta_q_params.delta_q_res;
                 av1_write_delta_q_index(frame_context, reduced_delta_qindex, ec_writer);
-                pcs->ppcs->prev_qindex[tile_idx] = current_q_index;
+                pcs->ppcs->prev_qindex[tile_idx] = all_skip ? pcs->ppcs->prev_qindex[tile_idx] : current_q_index;
             }
         }
         if (frm_hdr->tx_mode == TX_MODE_SELECT) {
