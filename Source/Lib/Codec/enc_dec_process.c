@@ -3136,6 +3136,7 @@ EbErrorType svt_aom_mode_decision_kernel_iter(void* context) {
                         pcs->sb_max_sq_size[sb_index] = 0;
                     }
                     sb_ptr->final_blk_cnt = 0;
+                    sb_ptr->all_skip = true;
                     svt_aom_encode_sb(scs,
                                       pcs,
                                       ed_ctx,

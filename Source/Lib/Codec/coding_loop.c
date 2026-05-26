@@ -1641,6 +1641,7 @@ static void update_b(PictureControlSet* pcs, EncDecContext* ctx, BlkStruct* blk_
         pcs->sb_max_sq_size[sb_index] = MAX(blk_geom->sq_size, pcs->sb_max_sq_size[sb_index]);
     }
     ctx->tot_total_rate += blk_ptr->total_rate;
+    sb_ptr->all_skip &= !blk_ptr->block_has_coeff;
 
     // If needed, copy recon and qcoeffs from MD buffers to EC buffers and update coeff-related CDFs
     if (pcs->cdf_ctrl.update_coef || (md_ctx->bypass_encdec && !(md_ctx->fixed_partition))) {
