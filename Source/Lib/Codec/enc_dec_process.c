@@ -3116,6 +3116,7 @@ void* svt_aom_mode_decision_kernel(void* input_ptr) {
                             pcs->sb_max_sq_size[sb_index] = 0;
                         }
                         sb_ptr->final_blk_cnt = 0;
+                        sb_ptr->all_skip      = true;
                         svt_aom_encode_sb(scs,
                                           pcs,
                                           ed_ctx,

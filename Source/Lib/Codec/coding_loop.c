@@ -1646,6 +1646,7 @@ static void update_b(PictureControlSet* pcs, EncDecContext* ctx, BlkStruct* blk_
     svt_block_on_mutex(pcs->ppcs->pcs_total_rate_mutex);
     pcs->ppcs->pcs_total_rate += blk_ptr->total_rate;
     svt_release_mutex(pcs->ppcs->pcs_total_rate_mutex);
+    sb_ptr->all_skip &= !blk_ptr->block_has_coeff;
 
     // If needed, copy recon and qcoeffs from MD buffers to EC buffers and update coeff-related CDFs
     if (pcs->cdf_ctrl.update_coef || (md_ctx->bypass_encdec && !(md_ctx->fixed_partition))) {

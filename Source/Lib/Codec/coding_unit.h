@@ -272,6 +272,7 @@ typedef struct SuperBlock {
     uint8_t                qindex;
     TileInfo               tile_info;
     uint16_t               final_blk_cnt; // number of block(s) posted from EncDec to EC
+    bool                   all_skip;
 } SuperBlock;
 
 EbErrorType svt_aom_largest_coding_unit_ctor(SuperBlock* larget_coding_unit_ptr, uint8_t sb_size, uint16_t sb_origin_x,
