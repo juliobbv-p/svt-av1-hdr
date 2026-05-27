@@ -17,6 +17,67 @@
 #include "mem_neon.h"
 #include "sum_neon.h"
 
+static inline int psy_energy_4x4_neon(const uint8_t* src, ptrdiff_t src_stride) {
+    const uint8x8_t s02_u8 = load_u8x4_strided_x2((uint8_t*)src + 0 * src_stride, 2 * src_stride);
+    const uint8x8_t s13_u8 = load_u8x4_strided_x2((uint8_t*)src + 1 * src_stride, 2 * src_stride);
+
+    const int16x8_t s02 = vreinterpretq_s16_u16(vmovl_u8(s02_u8));
+    const int16x8_t s13 = vreinterpretq_s16_u16(vmovl_u8(s13_u8));
+
+    int16x8_t a0 = vhaddq_s16(s02, s13);
+    int16x8_t a1 = vhsubq_s16(s02, s13);
+
+    int16x8_t b0 = vreinterpretq_s16_s64(vtrn1q_s64(vreinterpretq_s64_s16(a0), vreinterpretq_s64_s16(a1)));
+    int16x8_t b1 = vreinterpretq_s16_s64(vtrn2q_s64(vreinterpretq_s64_s16(a0), vreinterpretq_s64_s16(a1)));
+
+    a0 = vaddq_s16(b0, b1);
+    a1 = vsubq_s16(b0, b1);
+
+    b0 = vtrn1q_s16(a0, a1);
+    b1 = vtrn2q_s16(a0, a1);
+
+    a0 = vhaddq_s16(b0, b1);
+    a1 = vhsubq_s16(b0, b1);
+
+    b0 = vreinterpretq_s16_s32(vtrn1q_s32(vreinterpretq_s32_s16(a0), vreinterpretq_s32_s16(a1)));
+    b1 = vreinterpretq_s16_s32(vtrn2q_s32(vreinterpretq_s32_s16(a0), vreinterpretq_s32_s16(a1)));
+
+    const int dc = vgetq_lane_s16(vaddq_s16(b0, b1), 0);
+
+    a0 = vabsq_s16(b0);
+    a1 = vabsq_s16(b1);
+
+    const int satd = vaddlvq_s16(vmaxq_s16(a0, a1)) << 1;
+    return (satd << 1) - dc;
+}
+
+static inline int highbd_psy_energy_4x4_neon(const uint16_t* src, ptrdiff_t src_stride) {
+    int16x4_t s0, s1, s2, s3;
+    load_s16_4x4((int16_t*)src, src_stride, &s0, &s1, &s2, &s3);
+
+    int16x8_t a0 = vcombine_s16(vhadd_s16(s0, s1), vhsub_s16(s0, s1));
+    int16x8_t a1 = vcombine_s16(vhadd_s16(s2, s3), vhsub_s16(s2, s3));
+
+    int16x8_t b0 = vaddq_s16(a0, a1);
+    int16x8_t b1 = vsubq_s16(a0, a1);
+
+    a0 = vtrn1q_s16(b0, b1);
+    a1 = vtrn2q_s16(b0, b1);
+
+    b0 = vhaddq_s16(a0, a1);
+    b1 = vhsubq_s16(a0, a1);
+
+    a0 = vreinterpretq_s16_s32(vtrn1q_s32(vreinterpretq_s32_s16(b0), vreinterpretq_s32_s16(b1)));
+    a1 = vreinterpretq_s16_s32(vtrn2q_s32(vreinterpretq_s32_s16(b0), vreinterpretq_s32_s16(b1)));
+
+    const int dc = vgetq_lane_s16(vaddq_s16(a0, a1), 0);
+
+    const int16x8_t max = vmaxq_s16(vabsq_s16(a0), vabsq_s16(a1));
+    const int       sum = vaddlvq_s16(max);
+
+    return (sum << 2) - dc;
+}
+
 static inline void hadamard_8x8_v_pass_neon(int16x8_t* a) {
     const int16x8_t b0 = vaddq_s16(a[0], a[1]);
     const int16x8_t b1 = vsubq_s16(a[0], a[1]);
@@ -47,7 +108,7 @@ static inline void hadamard_8x8_v_pass_neon(int16x8_t* a) {
 }
 
 static inline void hadamard_8x8_neon(const uint8_t* src, ptrdiff_t src_stride, const uint8_t* pred,
-                                     ptrdiff_t pred_stride, int16x8_t* coeff, int32x4_t* satd, int32x4_t* dc) {
+                                     ptrdiff_t pred_stride, int16x8_t* coeff, int32x4_t* satd, int16x8_t* dc) {
     uint8x8_t s[8];
     load_u8_8x8(src, src_stride, &s[0], &s[1], &s[2], &s[3], &s[4], &s[5], &s[6], &s[7]);
 
@@ -67,7 +128,7 @@ static inline void hadamard_8x8_neon(const uint8_t* src, ptrdiff_t src_stride, c
     hadamard_8x8_v_pass_neon(a);
 
     if (dc != NULL) {
-        *dc = vpaddlq_s16(a[0]);
+        *dc = a[0];
     }
 
     int16x8_t b0 = vtrn1q_s16(a[0], a[1]);
@@ -287,6 +348,62 @@ static inline void highbd_hadamard_8x8_neon(const uint16_t* src, ptrdiff_t src_s
     };
 
     *satd = horizontal_add_4d_u16x8(max);
+}
+
+static inline uint32x4_t highbd_hadamard_8x8_h_pass_satd_neon(int16x8_t s[8]) {
+    int16x8_t a0 = vtrn1q_s16(s[0], s[1]);
+    int16x8_t a1 = vtrn2q_s16(s[0], s[1]);
+    int16x8_t a2 = vtrn1q_s16(s[2], s[3]);
+    int16x8_t a3 = vtrn2q_s16(s[2], s[3]);
+    int16x8_t a4 = vtrn1q_s16(s[4], s[5]);
+    int16x8_t a5 = vtrn2q_s16(s[4], s[5]);
+    int16x8_t a6 = vtrn1q_s16(s[6], s[7]);
+    int16x8_t a7 = vtrn2q_s16(s[6], s[7]);
+
+    int16x8_t b0 = vaddq_s16(a0, a1);
+    int16x8_t b1 = vsubq_s16(a0, a1);
+    int16x8_t b2 = vaddq_s16(a2, a3);
+    int16x8_t b3 = vsubq_s16(a2, a3);
+    int16x8_t b4 = vaddq_s16(a4, a5);
+    int16x8_t b5 = vsubq_s16(a4, a5);
+    int16x8_t b6 = vaddq_s16(a6, a7);
+    int16x8_t b7 = vsubq_s16(a6, a7);
+
+    a0 = vreinterpretq_s16_s32(vtrn1q_s32(vreinterpretq_s32_s16(b0), vreinterpretq_s32_s16(b1)));
+    a1 = vreinterpretq_s16_s32(vtrn2q_s32(vreinterpretq_s32_s16(b0), vreinterpretq_s32_s16(b1)));
+    a2 = vreinterpretq_s16_s32(vtrn1q_s32(vreinterpretq_s32_s16(b2), vreinterpretq_s32_s16(b3)));
+    a3 = vreinterpretq_s16_s32(vtrn2q_s32(vreinterpretq_s32_s16(b2), vreinterpretq_s32_s16(b3)));
+    a4 = vreinterpretq_s16_s32(vtrn1q_s32(vreinterpretq_s32_s16(b4), vreinterpretq_s32_s16(b5)));
+    a5 = vreinterpretq_s16_s32(vtrn2q_s32(vreinterpretq_s32_s16(b4), vreinterpretq_s32_s16(b5)));
+    a6 = vreinterpretq_s16_s32(vtrn1q_s32(vreinterpretq_s32_s16(b6), vreinterpretq_s32_s16(b7)));
+    a7 = vreinterpretq_s16_s32(vtrn2q_s32(vreinterpretq_s32_s16(b6), vreinterpretq_s32_s16(b7)));
+
+    b0 = vabsq_s16(vaddq_s16(a0, a1));
+    b1 = vabdq_s16(a0, a1);
+    b2 = vabsq_s16(vaddq_s16(a2, a3));
+    b3 = vabdq_s16(a2, a3);
+    b4 = vabsq_s16(vaddq_s16(a4, a5));
+    b5 = vabdq_s16(a4, a5);
+    b6 = vabsq_s16(vaddq_s16(a6, a7));
+    b7 = vabdq_s16(a6, a7);
+
+    a0 = vreinterpretq_s16_s64(vtrn1q_s64(vreinterpretq_s64_s16(b0), vreinterpretq_s64_s16(b1)));
+    a1 = vreinterpretq_s16_s64(vtrn2q_s64(vreinterpretq_s64_s16(b0), vreinterpretq_s64_s16(b1)));
+    a2 = vreinterpretq_s16_s64(vtrn1q_s64(vreinterpretq_s64_s16(b2), vreinterpretq_s64_s16(b3)));
+    a3 = vreinterpretq_s16_s64(vtrn2q_s64(vreinterpretq_s64_s16(b2), vreinterpretq_s64_s16(b3)));
+    a4 = vreinterpretq_s16_s64(vtrn1q_s64(vreinterpretq_s64_s16(b4), vreinterpretq_s64_s16(b5)));
+    a5 = vreinterpretq_s16_s64(vtrn2q_s64(vreinterpretq_s64_s16(b4), vreinterpretq_s64_s16(b5)));
+    a6 = vreinterpretq_s16_s64(vtrn1q_s64(vreinterpretq_s64_s16(b6), vreinterpretq_s64_s16(b7)));
+    a7 = vreinterpretq_s16_s64(vtrn2q_s64(vreinterpretq_s64_s16(b6), vreinterpretq_s64_s16(b7)));
+
+    const uint16x8_t max[4] = {
+        vmaxq_u16(vreinterpretq_u16_s16(a0), vreinterpretq_u16_s16(a1)),
+        vmaxq_u16(vreinterpretq_u16_s16(a2), vreinterpretq_u16_s16(a3)),
+        vmaxq_u16(vreinterpretq_u16_s16(a4), vreinterpretq_u16_s16(a5)),
+        vmaxq_u16(vreinterpretq_u16_s16(a6), vreinterpretq_u16_s16(a7)),
+    };
+
+    return horizontal_add_4d_u16x8(max);
 }
 
 #endif // SVT_AV1_HADAMARD_PATH_NEON_H_

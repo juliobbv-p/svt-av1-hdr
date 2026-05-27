@@ -15,6 +15,7 @@
 add_library(ASM_NEON OBJECT)
 target_sources(
   ASM_NEON
+  PUBLIC ac_bias_neon.c
   PUBLIC aom_convolve8_neon.c
   PUBLIC aom_sum_squares_neon.c
   PUBLIC av1_inv_txfm_neon.c
@@ -39,6 +40,7 @@ target_sources(
   PUBLIC deblocking_filter_intrinsic_neon.c
   PUBLIC encodetxb_neon.c
   PUBLIC hadamard_path_neon.c
+  PUBLIC highbd_ac_bias_neon.c
   PUBLIC highbd_blend_a64_mask_neon.c
   PUBLIC highbd_convolve_neon.c
   PUBLIC highbd_convolve_scale_neon.c

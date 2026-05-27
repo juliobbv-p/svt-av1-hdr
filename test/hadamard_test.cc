@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <ostream>
 #include <type_traits>
+#include <utility>
 
 #include "aom_dsp_rtcd.h"
 #include "common_dsp_rtcd.h"
@@ -263,6 +264,158 @@ INSTANTIATE_TEST_SUITE_P(
         HadamardSatdFuncWithSize(&svt_av1_hadamard_satd_16x16_neon, 16),
         HadamardSatdFuncWithSize(&svt_av1_hadamard_satd_32x32_neon, 32)));
 
+template <typename Pixel>
+using PsyDistortionFunc = uint64_t (*)(const Pixel *input,
+                                       uint32_t input_stride,
+                                       const Pixel *recon,
+                                       uint32_t recon_stride, uint32_t width,
+                                       uint32_t height);
+constexpr uint32_t kPsyMaxDimension = 128;
+
+// Union of dimensions passed to get_svt_psy_full_dist(): cropped 4x4-aligned
+// chroma transforms, cropped 8x8-aligned luma transforms, and full coding
+// block geometries.
+const std::pair<int, int> kPsyBlockSizes[] = {
+    {4, 4},    {8, 4},    {12, 4},    {16, 4},  {20, 4},  {24, 4},  {28, 4},
+    {32, 4},   {4, 8},    {8, 8},     {12, 8},  {16, 8},  {20, 8},  {24, 8},
+    {28, 8},   {32, 8},   {4, 12},    {8, 12},  {12, 12}, {16, 12}, {20, 12},
+    {24, 12},  {28, 12},  {32, 12},   {4, 16},  {8, 16},  {12, 16}, {16, 16},
+    {20, 16},  {24, 16},  {28, 16},   {32, 16}, {4, 20},  {8, 20},  {12, 20},
+    {16, 20},  {20, 20},  {24, 20},   {28, 20}, {32, 20}, {4, 24},  {8, 24},
+    {12, 24},  {16, 24},  {20, 24},   {24, 24}, {28, 24}, {32, 24}, {4, 28},
+    {8, 28},   {12, 28},  {16, 28},   {20, 28}, {24, 28}, {28, 28}, {32, 28},
+    {4, 32},   {8, 32},   {12, 32},   {16, 32}, {20, 32}, {24, 32}, {28, 32},
+    {32, 32},  {40, 8},   {48, 8},    {56, 8},  {64, 8},  {40, 16}, {48, 16},
+    {56, 16},  {64, 16},  {40, 24},   {48, 24}, {56, 24}, {64, 24}, {40, 32},
+    {48, 32},  {56, 32},  {64, 32},   {8, 40},  {16, 40}, {24, 40}, {32, 40},
+    {40, 40},  {48, 40},  {56, 40},   {64, 40}, {8, 48},  {16, 48}, {24, 48},
+    {32, 48},  {40, 48},  {48, 48},   {56, 48}, {64, 48}, {8, 56},  {16, 56},
+    {24, 56},  {32, 56},  {40, 56},   {48, 56}, {56, 56}, {64, 56}, {8, 64},
+    {16, 64},  {24, 64},  {32, 64},   {40, 64}, {48, 64}, {56, 64}, {64, 64},
+    {64, 128}, {128, 64}, {128, 128},
+};
+
+constexpr uint32_t kPsyPadding = 16;
+constexpr uint32_t kPsyMaxStride = kPsyMaxDimension + kPsyPadding;
+constexpr uint32_t kPsyBufferSize = kPsyMaxStride * kPsyMaxStride;
+
+template <typename PixelType>
+class PsyDistortionTestBase
+    : public ::testing::TestWithParam<PsyDistortionFunc<PixelType>> {
+  public:
+    PsyDistortionTestBase(PsyDistortionFunc<PixelType> dist_func,
+                          PsyDistortionFunc<PixelType> dist_ref_func)
+        : max_value_(std::is_same<PixelType, uint8_t>::value ? 255 : 1023),
+          dist_func_(dist_func),
+          dist_ref_func_(dist_ref_func) {
+    }
+
+    void SetUp() override {
+        rnd_.Reset(ACMRandom::DeterministicSeed());
+    }
+
+    void CompareReferenceVaryStride() {
+        DECLARE_ALIGNED(16, PixelType, input[kPsyBufferSize]);
+        DECLARE_ALIGNED(16, PixelType, recon[kPsyBufferSize]);
+
+        FillRandom(input, recon, kPsyBufferSize);
+
+        // Force RTCD dispatch to C so the C distortion reference does not call
+        // optimized Hadamard function pointers while comparing against the SIMD
+        // implementation.
+        svt_aom_setup_common_rtcd_internal(0);
+        svt_aom_setup_rtcd_internal(0);
+        for (const std::pair<int, int> &block_size : kPsyBlockSizes) {
+            const uint32_t width = block_size.first;
+            const uint32_t height = block_size.second;
+            for (uint32_t padding = 8; padding <= kPsyPadding; padding += 8) {
+                const uint32_t stride = width + padding;
+
+                const uint64_t dist_ref =
+                    dist_ref_func_(input, stride, recon, stride, width, height);
+                const uint64_t dist =
+                    dist_func_(input, stride, recon, stride, width, height);
+                EXPECT_EQ(dist_ref, dist);
+            }
+        }
+    }
+
+    void ExtremeValues() {
+        DECLARE_ALIGNED(16, PixelType, input[kPsyBufferSize]);
+        DECLARE_ALIGNED(16, PixelType, recon[kPsyBufferSize]);
+
+        // Force RTCD dispatch to C so the C distortion reference does not call
+        // optimized Hadamard function pointers while comparing against the SIMD
+        // implementation.
+        svt_aom_setup_common_rtcd_internal(0);
+        svt_aom_setup_rtcd_internal(0);
+        for (const std::pair<int, int> &block_size : kPsyBlockSizes) {
+            const uint32_t width = block_size.first;
+            const uint32_t height = block_size.second;
+            const uint32_t stride = width + kPsyPadding;
+            for (int pattern = 0; pattern < 4; ++pattern) {
+                FillExtreme(input,
+                            recon,
+                            stride,
+                            stride,
+                            height + kPsyPadding,
+                            pattern);
+
+                const uint64_t dist_ref =
+                    dist_ref_func_(input, stride, recon, stride, width, height);
+                const uint64_t dist =
+                    dist_func_(input, stride, recon, stride, width, height);
+                EXPECT_EQ(dist_ref, dist);
+            }
+        }
+    }
+
+  private:
+    void FillRandom(PixelType *input, PixelType *recon, uint32_t count) {
+        for (uint32_t i = 0; i < count; ++i) {
+            input[i] = static_cast<PixelType>(rnd_.Rand16() & max_value_);
+            recon[i] = static_cast<PixelType>(rnd_.Rand16() & max_value_);
+        }
+    }
+
+    void FillExtreme(PixelType *input, PixelType *recon, uint32_t stride,
+                     uint32_t width, uint32_t height, int pattern) {
+        for (uint32_t y = 0; y < height; ++y) {
+            for (uint32_t x = 0; x < width; ++x) {
+                const bool high = pattern < 2 ? pattern == 0
+                                              : ((y * width + x + pattern) & 1);
+                input[y * stride + x] =
+                    static_cast<PixelType>(high ? max_value_ : 0);
+                recon[y * stride + x] =
+                    static_cast<PixelType>(high ? 0 : max_value_);
+            }
+        }
+    }
+
+    ACMRandom rnd_;
+    int max_value_;
+    PsyDistortionFunc<PixelType> dist_func_;
+    PsyDistortionFunc<PixelType> dist_ref_func_;
+};
+
+class PsyDistortionTest : public PsyDistortionTestBase<uint8_t> {
+  public:
+    PsyDistortionTest()
+        : PsyDistortionTestBase(GetParam(), &svt_psy_distortion_c) {
+    }
+};
+
+TEST_P(PsyDistortionTest, CompareReferenceVaryStride) {
+    CompareReferenceVaryStride();
+}
+
+TEST_P(PsyDistortionTest, ExtremeValues) {
+    ExtremeValues();
+}
+
+INSTANTIATE_TEST_SUITE_P(NEON, PsyDistortionTest,
+                         ::testing::Values(&svt_psy_distortion_neon));
+
 #if HAVE_SVE2
 INSTANTIATE_TEST_SUITE_P(
     SVE2, HadamardSatdTest,
@@ -327,6 +480,27 @@ INSTANTIATE_TEST_SUITE_P(
         HighbdHadamardSatdFuncWithSize(&svt_av1_highbd_hadamard_satd_32x32_sve2,
                                        32)));
 #endif  // HAVE_SVE2
+#endif  // ARCH_AARCH64
+
+#if ARCH_AARCH64
+class HighbdPsyDistortionTest : public PsyDistortionTestBase<uint16_t> {
+  public:
+    HighbdPsyDistortionTest()
+        : PsyDistortionTestBase(GetParam(), &svt_psy_distortion_hbd_c) {
+    }
+};
+
+TEST_P(HighbdPsyDistortionTest, CompareReferenceVaryStride) {
+    CompareReferenceVaryStride();
+}
+
+TEST_P(HighbdPsyDistortionTest, ExtremeValues) {
+    ExtremeValues();
+}
+
+INSTANTIATE_TEST_SUITE_P(NEON, HighbdPsyDistortionTest,
+                         ::testing::Values(&svt_psy_distortion_hbd_neon));
+
 #endif  // ARCH_AARCH64
 
 class HadamardHighbdTest : public HadamardTestBase<int32_t, HadamardFunc> {
