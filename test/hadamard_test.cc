@@ -262,6 +262,15 @@ INSTANTIATE_TEST_SUITE_P(
         HadamardSatdFuncWithSize(&svt_av1_hadamard_satd_8x8_neon, 8),
         HadamardSatdFuncWithSize(&svt_av1_hadamard_satd_16x16_neon, 16),
         HadamardSatdFuncWithSize(&svt_av1_hadamard_satd_32x32_neon, 32)));
+
+#if HAVE_SVE2
+INSTANTIATE_TEST_SUITE_P(
+    SVE2, HadamardSatdTest,
+    ::testing::Values(
+        HadamardSatdFuncWithSize(&svt_av1_hadamard_satd_8x8_sve2, 8),
+        HadamardSatdFuncWithSize(&svt_av1_hadamard_satd_16x16_sve2, 16),
+        HadamardSatdFuncWithSize(&svt_av1_hadamard_satd_32x32_sve2, 32)));
+#endif  // HAVE_SVE2
 #endif  // ARCH_AARCH64
 
 #if CONFIG_ENABLE_HIGH_BIT_DEPTH
@@ -306,6 +315,18 @@ INSTANTIATE_TEST_SUITE_P(
                                        16),
         HighbdHadamardSatdFuncWithSize(&svt_av1_highbd_hadamard_satd_32x32_neon,
                                        32)));
+
+#if HAVE_SVE2
+INSTANTIATE_TEST_SUITE_P(
+    SVE2, HighbdHadamardSatdTest,
+    ::testing::Values(
+        HighbdHadamardSatdFuncWithSize(&svt_av1_highbd_hadamard_satd_8x8_sve2,
+                                       8),
+        HighbdHadamardSatdFuncWithSize(&svt_av1_highbd_hadamard_satd_16x16_sve2,
+                                       16),
+        HighbdHadamardSatdFuncWithSize(&svt_av1_highbd_hadamard_satd_32x32_sve2,
+                                       32)));
+#endif  // HAVE_SVE2
 #endif  // ARCH_AARCH64
 
 class HadamardHighbdTest : public HadamardTestBase<int32_t, HadamardFunc> {

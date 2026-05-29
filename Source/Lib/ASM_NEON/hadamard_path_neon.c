@@ -14,8 +14,8 @@
 #include "aom_dsp_rtcd.h"
 #include "coding_loop.h"
 #include "definitions.h"
+#include "hadamard_path_neon.h"
 #include "mem_neon.h"
-#include "sum_neon.h"
 #include "transpose_neon.h"
 
 static inline void hadamard_4x4_one_pass(int16x4_t* a0, int16x4_t* a1, int16x4_t* a2, int16x4_t* a3) {
@@ -48,35 +48,6 @@ void svt_aom_hadamard_4x4_neon(const int16_t* src_diff, ptrdiff_t src_stride, tr
     store_s16_to_tran_low(coeff + 12, a3);
 }
 
-static inline void hadamard_8x8_one_pass(int16x8_t* a) {
-    const int16x8_t b0 = vaddq_s16(a[0], a[1]);
-    const int16x8_t b1 = vsubq_s16(a[0], a[1]);
-    const int16x8_t b2 = vaddq_s16(a[2], a[3]);
-    const int16x8_t b3 = vsubq_s16(a[2], a[3]);
-    const int16x8_t b4 = vaddq_s16(a[4], a[5]);
-    const int16x8_t b5 = vsubq_s16(a[4], a[5]);
-    const int16x8_t b6 = vaddq_s16(a[6], a[7]);
-    const int16x8_t b7 = vsubq_s16(a[6], a[7]);
-
-    const int16x8_t c0 = vaddq_s16(b0, b2);
-    const int16x8_t c1 = vaddq_s16(b1, b3);
-    const int16x8_t c2 = vsubq_s16(b0, b2);
-    const int16x8_t c3 = vsubq_s16(b1, b3);
-    const int16x8_t c4 = vaddq_s16(b4, b6);
-    const int16x8_t c5 = vaddq_s16(b5, b7);
-    const int16x8_t c6 = vsubq_s16(b4, b6);
-    const int16x8_t c7 = vsubq_s16(b5, b7);
-
-    a[0] = vaddq_s16(c0, c4);
-    a[1] = vsubq_s16(c2, c6);
-    a[2] = vsubq_s16(c0, c4);
-    a[3] = vaddq_s16(c2, c6);
-    a[4] = vaddq_s16(c3, c7);
-    a[5] = vsubq_s16(c3, c7);
-    a[6] = vsubq_s16(c1, c5);
-    a[7] = vaddq_s16(c1, c5);
-}
-
 void svt_aom_hadamard_8x8_neon(const int16_t* src_diff, ptrdiff_t src_stride, int32_t* coeff) {
     int16x8_t a[8];
 
@@ -89,9 +60,9 @@ void svt_aom_hadamard_8x8_neon(const int16_t* src_diff, ptrdiff_t src_stride, in
     a[6] = vld1q_s16(src_diff + 6 * src_stride);
     a[7] = vld1q_s16(src_diff + 7 * src_stride);
 
-    hadamard_8x8_one_pass(a);
+    hadamard_8x8_v_pass_neon(a);
     transpose_elems_inplace_s16_8x8(a + 0, a + 1, a + 2, a + 3, a + 4, a + 5, a + 6, a + 7);
-    hadamard_8x8_one_pass(a);
+    hadamard_8x8_v_pass_neon(a);
 
     store_s16q_to_tran_low(coeff + 0, a[0]);
     store_s16q_to_tran_low(coeff + 8, a[1]);
@@ -275,152 +246,16 @@ int svt_av1_hadamard_satd_4x4_neon(const uint8_t* src, ptrdiff_t src_stride, con
 
 int svt_av1_hadamard_satd_8x8_neon(const uint8_t* src, ptrdiff_t src_stride, const uint8_t* pred,
                                    ptrdiff_t pred_stride) {
-    uint8x8_t s0, s1, s2, s3, s4, s5, s6, s7;
-    uint8x8_t p0, p1, p2, p3, p4, p5, p6, p7;
-
-    load_u8_8x8(src, src_stride, &s0, &s1, &s2, &s3, &s4, &s5, &s6, &s7);
-    load_u8_8x8(pred, pred_stride, &p0, &p1, &p2, &p3, &p4, &p5, &p6, &p7);
-
-    int16x8_t a[8];
-    a[0] = vreinterpretq_s16_u16(vsubl_u8(s0, p0));
-    a[1] = vreinterpretq_s16_u16(vsubl_u8(s1, p1));
-    a[2] = vreinterpretq_s16_u16(vsubl_u8(s2, p2));
-    a[3] = vreinterpretq_s16_u16(vsubl_u8(s3, p3));
-    a[4] = vreinterpretq_s16_u16(vsubl_u8(s4, p4));
-    a[5] = vreinterpretq_s16_u16(vsubl_u8(s5, p5));
-    a[6] = vreinterpretq_s16_u16(vsubl_u8(s6, p6));
-    a[7] = vreinterpretq_s16_u16(vsubl_u8(s7, p7));
-
-    hadamard_8x8_one_pass(a);
-
-    int16x8_t b0 = vtrn1q_s16(a[0], a[1]);
-    int16x8_t b1 = vtrn2q_s16(a[0], a[1]);
-    int16x8_t b2 = vtrn1q_s16(a[2], a[3]);
-    int16x8_t b3 = vtrn2q_s16(a[2], a[3]);
-    int16x8_t b4 = vtrn1q_s16(a[4], a[5]);
-    int16x8_t b5 = vtrn2q_s16(a[4], a[5]);
-    int16x8_t b6 = vtrn1q_s16(a[6], a[7]);
-    int16x8_t b7 = vtrn2q_s16(a[6], a[7]);
-
-    a[0] = vaddq_s16(b0, b1);
-    a[1] = vsubq_s16(b0, b1);
-    a[2] = vaddq_s16(b2, b3);
-    a[3] = vsubq_s16(b2, b3);
-    a[4] = vaddq_s16(b4, b5);
-    a[5] = vsubq_s16(b4, b5);
-    a[6] = vaddq_s16(b6, b7);
-    a[7] = vsubq_s16(b6, b7);
-
-    b0 = vreinterpretq_s16_s32(vtrn1q_s32(vreinterpretq_s32_s16(a[0]), vreinterpretq_s32_s16(a[1])));
-    b1 = vreinterpretq_s16_s32(vtrn2q_s32(vreinterpretq_s32_s16(a[0]), vreinterpretq_s32_s16(a[1])));
-    b2 = vreinterpretq_s16_s32(vtrn1q_s32(vreinterpretq_s32_s16(a[2]), vreinterpretq_s32_s16(a[3])));
-    b3 = vreinterpretq_s16_s32(vtrn2q_s32(vreinterpretq_s32_s16(a[2]), vreinterpretq_s32_s16(a[3])));
-    b4 = vreinterpretq_s16_s32(vtrn1q_s32(vreinterpretq_s32_s16(a[4]), vreinterpretq_s32_s16(a[5])));
-    b5 = vreinterpretq_s16_s32(vtrn2q_s32(vreinterpretq_s32_s16(a[4]), vreinterpretq_s32_s16(a[5])));
-    b6 = vreinterpretq_s16_s32(vtrn1q_s32(vreinterpretq_s32_s16(a[6]), vreinterpretq_s32_s16(a[7])));
-    b7 = vreinterpretq_s16_s32(vtrn2q_s32(vreinterpretq_s32_s16(a[6]), vreinterpretq_s32_s16(a[7])));
-
-    a[0] = vabsq_s16(vaddq_s16(b0, b1));
-    a[1] = vabdq_s16(b0, b1);
-    a[2] = vabsq_s16(vaddq_s16(b2, b3));
-    a[3] = vabdq_s16(b2, b3);
-    a[4] = vabsq_s16(vaddq_s16(b4, b5));
-    a[5] = vabdq_s16(b4, b5);
-    a[6] = vabsq_s16(vaddq_s16(b6, b7));
-    a[7] = vabdq_s16(b6, b7);
-
-    b0 = vreinterpretq_s16_s64(vtrn1q_s64(vreinterpretq_s64_s16(a[0]), vreinterpretq_s64_s16(a[1])));
-    b1 = vreinterpretq_s16_s64(vtrn2q_s64(vreinterpretq_s64_s16(a[0]), vreinterpretq_s64_s16(a[1])));
-    b2 = vreinterpretq_s16_s64(vtrn1q_s64(vreinterpretq_s64_s16(a[2]), vreinterpretq_s64_s16(a[3])));
-    b3 = vreinterpretq_s16_s64(vtrn2q_s64(vreinterpretq_s64_s16(a[2]), vreinterpretq_s64_s16(a[3])));
-    b4 = vreinterpretq_s16_s64(vtrn1q_s64(vreinterpretq_s64_s16(a[4]), vreinterpretq_s64_s16(a[5])));
-    b5 = vreinterpretq_s16_s64(vtrn2q_s64(vreinterpretq_s64_s16(a[4]), vreinterpretq_s64_s16(a[5])));
-    b6 = vreinterpretq_s16_s64(vtrn1q_s64(vreinterpretq_s64_s16(a[6]), vreinterpretq_s64_s16(a[7])));
-    b7 = vreinterpretq_s16_s64(vtrn2q_s64(vreinterpretq_s64_s16(a[6]), vreinterpretq_s64_s16(a[7])));
-
-    int16x8_t max[4];
-    max[0] = vmaxq_s16(b0, b1);
-    max[1] = vmaxq_s16(b2, b3);
-    max[2] = vmaxq_s16(b4, b5);
-    max[3] = vmaxq_s16(b6, b7);
-
-    int32x4_t sum = horizontal_add_4d_s16x8(max);
-    return vaddvq_s32(sum) << 1;
+    EB_ASSUME(pred != NULL);
+    int32x4_t satd;
+    hadamard_8x8_neon(src, src_stride, pred, pred_stride, NULL, &satd, NULL);
+    return vaddvq_s32(satd) << 1;
 }
 
-static inline void hadamard_8x8_neon(const uint8_t* src, ptrdiff_t src_stride, const uint8_t* pred,
-                                     ptrdiff_t pred_stride, int16x8_t coeff[8]) {
-    uint8x8_t s0, s1, s2, s3, s4, s5, s6, s7;
-    uint8x8_t p0, p1, p2, p3, p4, p5, p6, p7;
-
-    load_u8_8x8(src, src_stride, &s0, &s1, &s2, &s3, &s4, &s5, &s6, &s7);
-    load_u8_8x8(pred, pred_stride, &p0, &p1, &p2, &p3, &p4, &p5, &p6, &p7);
-
-    int16x8_t a[8];
-    a[0] = vreinterpretq_s16_u16(vsubl_u8(s0, p0));
-    a[1] = vreinterpretq_s16_u16(vsubl_u8(s1, p1));
-    a[2] = vreinterpretq_s16_u16(vsubl_u8(s2, p2));
-    a[3] = vreinterpretq_s16_u16(vsubl_u8(s3, p3));
-    a[4] = vreinterpretq_s16_u16(vsubl_u8(s4, p4));
-    a[5] = vreinterpretq_s16_u16(vsubl_u8(s5, p5));
-    a[6] = vreinterpretq_s16_u16(vsubl_u8(s6, p6));
-    a[7] = vreinterpretq_s16_u16(vsubl_u8(s7, p7));
-
-    hadamard_8x8_one_pass(a);
-
-    int16x8_t b0 = vtrn1q_s16(a[0], a[1]);
-    int16x8_t b1 = vtrn2q_s16(a[0], a[1]);
-    int16x8_t b2 = vtrn1q_s16(a[2], a[3]);
-    int16x8_t b3 = vtrn2q_s16(a[2], a[3]);
-    int16x8_t b4 = vtrn1q_s16(a[4], a[5]);
-    int16x8_t b5 = vtrn2q_s16(a[4], a[5]);
-    int16x8_t b6 = vtrn1q_s16(a[6], a[7]);
-    int16x8_t b7 = vtrn2q_s16(a[6], a[7]);
-
-    a[0] = vaddq_s16(b0, b1);
-    a[1] = vsubq_s16(b0, b1);
-    a[2] = vaddq_s16(b2, b3);
-    a[3] = vsubq_s16(b2, b3);
-    a[4] = vaddq_s16(b4, b5);
-    a[5] = vsubq_s16(b4, b5);
-    a[6] = vaddq_s16(b6, b7);
-    a[7] = vsubq_s16(b6, b7);
-
-    b0 = vreinterpretq_s16_s32(vtrn1q_s32(vreinterpretq_s32_s16(a[0]), vreinterpretq_s32_s16(a[1])));
-    b1 = vreinterpretq_s16_s32(vtrn2q_s32(vreinterpretq_s32_s16(a[0]), vreinterpretq_s32_s16(a[1])));
-    b2 = vreinterpretq_s16_s32(vtrn1q_s32(vreinterpretq_s32_s16(a[2]), vreinterpretq_s32_s16(a[3])));
-    b3 = vreinterpretq_s16_s32(vtrn2q_s32(vreinterpretq_s32_s16(a[2]), vreinterpretq_s32_s16(a[3])));
-    b4 = vreinterpretq_s16_s32(vtrn1q_s32(vreinterpretq_s32_s16(a[4]), vreinterpretq_s32_s16(a[5])));
-    b5 = vreinterpretq_s16_s32(vtrn2q_s32(vreinterpretq_s32_s16(a[4]), vreinterpretq_s32_s16(a[5])));
-    b6 = vreinterpretq_s16_s32(vtrn1q_s32(vreinterpretq_s32_s16(a[6]), vreinterpretq_s32_s16(a[7])));
-    b7 = vreinterpretq_s16_s32(vtrn2q_s32(vreinterpretq_s32_s16(a[6]), vreinterpretq_s32_s16(a[7])));
-
-    a[0] = vaddq_s16(b0, b1);
-    a[1] = vsubq_s16(b0, b1);
-    a[2] = vaddq_s16(b2, b3);
-    a[3] = vsubq_s16(b2, b3);
-    a[4] = vaddq_s16(b4, b5);
-    a[5] = vsubq_s16(b4, b5);
-    a[6] = vaddq_s16(b6, b7);
-    a[7] = vsubq_s16(b6, b7);
-
-    b0 = vreinterpretq_s16_s64(vtrn1q_s64(vreinterpretq_s64_s16(a[0]), vreinterpretq_s64_s16(a[1])));
-    b1 = vreinterpretq_s16_s64(vtrn2q_s64(vreinterpretq_s64_s16(a[0]), vreinterpretq_s64_s16(a[1])));
-    b2 = vreinterpretq_s16_s64(vtrn1q_s64(vreinterpretq_s64_s16(a[2]), vreinterpretq_s64_s16(a[3])));
-    b3 = vreinterpretq_s16_s64(vtrn2q_s64(vreinterpretq_s64_s16(a[2]), vreinterpretq_s64_s16(a[3])));
-    b4 = vreinterpretq_s16_s64(vtrn1q_s64(vreinterpretq_s64_s16(a[4]), vreinterpretq_s64_s16(a[5])));
-    b5 = vreinterpretq_s16_s64(vtrn2q_s64(vreinterpretq_s64_s16(a[4]), vreinterpretq_s64_s16(a[5])));
-    b6 = vreinterpretq_s16_s64(vtrn1q_s64(vreinterpretq_s64_s16(a[6]), vreinterpretq_s64_s16(a[7])));
-    b7 = vreinterpretq_s16_s64(vtrn2q_s64(vreinterpretq_s64_s16(a[6]), vreinterpretq_s64_s16(a[7])));
-
-    coeff[0] = vaddq_s16(b0, b1);
-    coeff[1] = vsubq_s16(b0, b1);
-    coeff[2] = vaddq_s16(b2, b3);
-    coeff[3] = vsubq_s16(b2, b3);
-    coeff[4] = vaddq_s16(b4, b5);
-    coeff[5] = vsubq_s16(b4, b5);
-    coeff[6] = vaddq_s16(b6, b7);
-    coeff[7] = vsubq_s16(b6, b7);
+static void hadamard_8x8_coeff_neon(const uint8_t* src, ptrdiff_t src_stride, const uint8_t* pred,
+                                    ptrdiff_t pred_stride, int16x8_t coeff[8]) {
+    EB_ASSUME(pred != NULL);
+    hadamard_8x8_neon(src, src_stride, pred, pred_stride, coeff, NULL, NULL);
 }
 
 int svt_av1_hadamard_satd_16x16_neon(const uint8_t* src, ptrdiff_t src_stride, const uint8_t* pred,
@@ -428,10 +263,10 @@ int svt_av1_hadamard_satd_16x16_neon(const uint8_t* src, ptrdiff_t src_stride, c
     // Divide 16x16 block into 8x8 quadrants.
     int16x8_t q0[8], q1[8], q2[8], q3[8];
 
-    hadamard_8x8_neon(src + 0 + 0 * src_stride, src_stride, pred + 0 + 0 * pred_stride, pred_stride, q0);
-    hadamard_8x8_neon(src + 8 + 0 * src_stride, src_stride, pred + 8 + 0 * pred_stride, pred_stride, q1);
-    hadamard_8x8_neon(src + 0 + 8 * src_stride, src_stride, pred + 0 + 8 * pred_stride, pred_stride, q2);
-    hadamard_8x8_neon(src + 8 + 8 * src_stride, src_stride, pred + 8 + 8 * pred_stride, pred_stride, q3);
+    hadamard_8x8_coeff_neon(src + 0 + 0 * src_stride, src_stride, pred + 0 + 0 * pred_stride, pred_stride, q0);
+    hadamard_8x8_coeff_neon(src + 8 + 0 * src_stride, src_stride, pred + 8 + 0 * pred_stride, pred_stride, q1);
+    hadamard_8x8_coeff_neon(src + 0 + 8 * src_stride, src_stride, pred + 0 + 8 * pred_stride, pred_stride, q2);
+    hadamard_8x8_coeff_neon(src + 8 + 8 * src_stride, src_stride, pred + 8 + 8 * pred_stride, pred_stride, q3);
 
     int32x4_t acc0 = vdupq_n_s32(0);
     int32x4_t acc1 = vdupq_n_s32(0);
@@ -448,15 +283,15 @@ int svt_av1_hadamard_satd_16x16_neon(const uint8_t* src, ptrdiff_t src_stride, c
     return vaddvq_s32(vaddq_s32(acc0, acc1)) << 1;
 }
 
-static inline void hadamard_16x16_neon(const uint8_t* src, ptrdiff_t src_stride, const uint8_t* pred,
-                                       ptrdiff_t pred_stride, int16x8_t coeff[32]) {
+static void hadamard_16x16_neon(const uint8_t* src, ptrdiff_t src_stride, const uint8_t* pred, ptrdiff_t pred_stride,
+                                int16x8_t coeff[32]) {
     // Divide 16x16 block into 8x8 quadrants.
     int16x8_t q0[8], q1[8], q2[8], q3[8];
 
-    hadamard_8x8_neon(src + 0 + 0 * src_stride, src_stride, pred + 0 + 0 * pred_stride, pred_stride, q0);
-    hadamard_8x8_neon(src + 8 + 0 * src_stride, src_stride, pred + 8 + 0 * pred_stride, pred_stride, q1);
-    hadamard_8x8_neon(src + 0 + 8 * src_stride, src_stride, pred + 0 + 8 * pred_stride, pred_stride, q2);
-    hadamard_8x8_neon(src + 8 + 8 * src_stride, src_stride, pred + 8 + 8 * pred_stride, pred_stride, q3);
+    hadamard_8x8_coeff_neon(src + 0 + 0 * src_stride, src_stride, pred + 0 + 0 * pred_stride, pred_stride, q0);
+    hadamard_8x8_coeff_neon(src + 8 + 0 * src_stride, src_stride, pred + 8 + 0 * pred_stride, pred_stride, q1);
+    hadamard_8x8_coeff_neon(src + 0 + 8 * src_stride, src_stride, pred + 0 + 8 * pred_stride, pred_stride, q2);
+    hadamard_8x8_coeff_neon(src + 8 + 8 * src_stride, src_stride, pred + 8 + 8 * pred_stride, pred_stride, q3);
 
     for (int i = 0; i < 8; ++i) {
         const int16x8_t b0 = vhaddq_s16(q0[i], q1[i]);
