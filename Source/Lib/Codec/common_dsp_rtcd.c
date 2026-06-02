@@ -384,7 +384,7 @@ EbCpuFlags svt_aom_get_cpu_flags_to_use() { return 0; }
 #define SET_FUNCTIONS_AVX2(ptr, c, mmx, sse, sse2, sse3, ssse3, sse4_1, sse4_2, avx, avx2, avx512) \
     do {                                                                                           \
         CHECK_PTR_IS_NOT_SET(ptr)                                                                  \
-        SET_FUNCTIONS_X86(ptr, neon, neon_dotprod, neon_i8mm, sve, sve2)                           \
+        SET_FUNCTIONS_X86(ptr, mmx, sse, sse2, sse3, ssse3, sse4_1, sse4_2, avx, avx2, avx512)     \
         CHECK_PTR_IS_SET(ptr)                                                                      \
     } while (0)
 #else
