@@ -10098,7 +10098,11 @@ void svt_aom_sig_deriv_mode_decision_config_allintra(SequenceControlSet* scs, Pi
     pcs->md_pme_level = 0;
 
     // Set the level for mds0
-    pcs->mds0_level = 0;
+    if (pcs->scs->static_config.complex_hvs == 1) {
+        pcs->mds0_level = 3;
+    } else {
+        pcs->mds0_level = 0;
+    }
 
     /*
     disallow_4x4
