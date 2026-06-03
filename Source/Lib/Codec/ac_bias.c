@@ -209,3 +209,21 @@ double get_effective_ac_bias(const double ac_bias, const bool is_islice, const u
         return ac_bias;
     }
 }
+
+double get_effective_ac_bias_mds0(const double ac_bias, const bool is_islice, const uint8_t temporal_layer_index) {
+    if (is_islice) {
+        return 0.05;
+    }
+    switch (temporal_layer_index) {
+    case 0:
+        return ac_bias * 0.1;
+    case 1:
+        return ac_bias * 0.2;
+    case 2:
+        return ac_bias * 0.3;
+    case 3:
+        return ac_bias * 0.5;
+    default:
+        return ac_bias * 0.7;
+    }
+}
