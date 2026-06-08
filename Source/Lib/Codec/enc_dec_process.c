@@ -642,8 +642,8 @@ static const int64_t cc2_10 = 3857925; // (64^2*(.03*1023)^2
 static const int64_t cc1_12 = 6868593; // (64^2*(.01*4095)^2
 static const int64_t cc2_12 = 61817334; // (64^2*(.03*4095)^2
 
-double similarity(uint32_t sum_s, uint32_t sum_r, uint32_t sum_sq_s, uint32_t sum_sq_r, uint32_t sum_sxr, int count,
-                  uint32_t bd) {
+double svt_aom_similarity(uint32_t sum_s, uint32_t sum_r, uint32_t sum_sq_s, uint32_t sum_sq_r, uint32_t sum_sxr,
+                          int count, uint32_t bd) {
     double  ssim_n, ssim_d;
     int64_t c1, c2;
 
@@ -673,20 +673,20 @@ double similarity(uint32_t sum_s, uint32_t sum_r, uint32_t sum_sq_s, uint32_t su
 static double ssim_8x8(const uint8_t* s, int sp, const uint8_t* r, int rp) {
     uint32_t sum_s = 0, sum_r = 0, sum_sq_s = 0, sum_sq_r = 0, sum_sxr = 0;
     svt_aom_ssim_parms_8x8_c(s, sp, r, rp, &sum_s, &sum_r, &sum_sq_s, &sum_sq_r, &sum_sxr);
-    return similarity(sum_s, sum_r, sum_sq_s, sum_sq_r, sum_sxr, 64, 8);
+    return svt_aom_similarity(sum_s, sum_r, sum_sq_s, sum_sq_r, sum_sxr, 64, 8);
 }
 
 static double highbd_ssim_8x8(const uint8_t* s, int sp, const uint8_t* sinc, int spinc, const uint16_t* r, int rp,
                               uint32_t bd, uint32_t shift) {
     uint32_t sum_s = 0, sum_r = 0, sum_sq_s = 0, sum_sq_r = 0, sum_sxr = 0;
     svt_aom_highbd_ssim_parms_8x8_c(s, sp, sinc, spinc, r, rp, &sum_s, &sum_r, &sum_sq_s, &sum_sq_r, &sum_sxr);
-    return similarity(sum_s >> shift,
-                      sum_r >> shift,
-                      sum_sq_s >> (2 * shift),
-                      sum_sq_r >> (2 * shift),
-                      sum_sxr >> (2 * shift),
-                      64,
-                      bd);
+    return svt_aom_similarity(sum_s >> shift,
+                              sum_r >> shift,
+                              sum_sq_s >> (2 * shift),
+                              sum_sq_r >> (2 * shift),
+                              sum_sxr >> (2 * shift),
+                              64,
+                              bd);
 }
 
 // We are using a 8x8 moving window with starting location of each 8x8 window

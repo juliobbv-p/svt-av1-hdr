@@ -959,6 +959,10 @@ RTCD_EXTERN double (*svt_ssim_8x8_hbd)(const uint16_t* s, uint32_t sp, const uin
 double svt_ssim_8x8_hbd_c(const uint16_t* s, uint32_t sp, const uint16_t* r, uint32_t rp);
 RTCD_EXTERN double (*svt_ssim_4x4_hbd)(const uint16_t* s, uint32_t sp, const uint16_t* r, uint32_t rp);
 double svt_ssim_4x4_hbd_c(const uint16_t* s, uint32_t sp, const uint16_t* r, uint32_t rp);
+double svt_ssim_8x8_neon_dotprod(const uint8_t* s, uint32_t sp, const uint8_t* r, uint32_t rp);
+double svt_ssim_4x4_neon_dotprod(const uint8_t* s, uint32_t sp, const uint8_t* r, uint32_t rp);
+double svt_ssim_8x8_hbd_neon(const uint16_t* s, uint32_t sp, const uint16_t* r, uint32_t rp);
+double svt_ssim_4x4_hbd_neon(const uint16_t* s, uint32_t sp, const uint16_t* r, uint32_t rp);
 
 #ifdef ARCH_AARCH64
 void svt_av1_calc_indices_dim1_neon(const int* data, const int* centroids, uint8_t* indices, int n, int k);

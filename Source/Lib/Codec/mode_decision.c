@@ -18,6 +18,7 @@
 #include <limits.h>
 
 #include "common_utils.h"
+#include "enc_dec_process.h"
 #include "definitions.h"
 #include "sequence_control_set.h"
 #include "mode_decision.h"
@@ -4198,9 +4199,6 @@ void svt_aom_set_tuned_blk_lambda(ModeDecisionContext* ctx, PictureControlSet* p
     }
 }
 
-double similarity(uint32_t sum_s, uint32_t sum_r, uint32_t sum_sq_s, uint32_t sum_sq_r, uint32_t sum_sxr, int count,
-                  uint32_t bd);
-
 double svt_ssim_4x4_c(const uint8_t* s, uint32_t sp, const uint8_t* r, uint32_t rp) {
     const int32_t count = 4 * 4;
 
@@ -4222,7 +4220,7 @@ double svt_ssim_4x4_c(const uint8_t* s, uint32_t sp, const uint8_t* r, uint32_t 
     //
     // similarity
     //
-    double score = similarity(sum_s, sum_r, sum_sq_s, sum_sq_r, sum_sxr, count, 8);
+    double score = svt_aom_similarity(sum_s, sum_r, sum_sq_s, sum_sq_r, sum_sxr, count, 8);
     return score;
 }
 
@@ -4250,7 +4248,7 @@ double svt_ssim_8x8_c(const uint8_t* s, uint32_t sp, const uint8_t* r, uint32_t 
     //
     // similarity
     //
-    double score = similarity(sum_s, sum_r, sum_sq_s, sum_sq_r, sum_sxr, count, 8);
+    double score = svt_aom_similarity(sum_s, sum_r, sum_sq_s, sum_sq_r, sum_sxr, count, 8);
     return score;
 }
 
@@ -4275,7 +4273,7 @@ double svt_ssim_4x4_hbd_c(const uint16_t* s, uint32_t sp, const uint16_t* r, uin
     //
     // similarity
     //
-    double score = similarity(sum_s, sum_r, sum_sq_s, sum_sq_r, sum_sxr, count, 10);
+    double score = svt_aom_similarity(sum_s, sum_r, sum_sq_s, sum_sq_r, sum_sxr, count, 10);
     return score;
 }
 
@@ -4300,7 +4298,7 @@ double svt_ssim_8x8_hbd_c(const uint16_t* s, uint32_t sp, const uint16_t* r, uin
     //
     // similarity
     //
-    double score = similarity(sum_s, sum_r, sum_sq_s, sum_sq_r, sum_sxr, count, 10);
+    double score = svt_aom_similarity(sum_s, sum_r, sum_sq_s, sum_sq_r, sum_sxr, count, 10);
     return score;
 }
 

@@ -29,6 +29,7 @@ target_sources(
   PUBLIC cfl_neon.c
   PUBLIC compound_convolve_neon.c
   PUBLIC compute_sad_neon.c
+  PUBLIC ssim_neon.c
   PUBLIC sad_x4d_neon.c
   PUBLIC convolve_neon.c
   PUBLIC convolve_scale_neon.c
