@@ -3662,14 +3662,11 @@ static uint32_t write_sequence_header_obu(SequenceControlSet* scs, uint8_t* cons
                 //    write_dec_model_op_parameters(cm, &wb, i);
             }
             if (scs->seq_header.initial_display_delay_present_flag) {
-                SVT_ERROR("display_model_info_present_flag not supported\n");
-                //svt_aom_wb_write_bit(&wb,
-                //    cm->op_params[i].display_model_param_present_flag);
-                //if (cm->op_params[i].display_model_param_present_flag) {
-                //    assert(cm->op_params[i].initial_display_delay <= 10);
-                //    svt_aom_wb_write_literal(&wb, cm->op_params[i].initial_display_delay - 1,
-                //        4);
-                //}
+                svt_aom_wb_write_bit(&wb, scs->seq_header.operating_point[i].initial_display_delay_present_for_this_op);
+                if (scs->seq_header.operating_point[i].initial_display_delay_present_for_this_op) {
+                    assert(scs->seq_header.operating_point[i].initial_display_delay <= 10);
+                    svt_aom_wb_write_literal(&wb, scs->seq_header.operating_point[i].initial_display_delay - 1, 4);
+                }
             }
         }
     }
