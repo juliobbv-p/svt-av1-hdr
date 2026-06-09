@@ -132,7 +132,7 @@ Terrifically slow encoding modes for research purposes.
 
 - `--sharpness` *0 to 7* (**[Merged to Mainline](https://gitlab.com/AOMediaCodec/SVT-AV1/-/merge_requests/2346)**)
 
-A parameter for modifying loopfilter deblock sharpness and rate distortion to improve visual fidelity. The default is 0 (no sharpness).
+A parameter for modifying loopfilter deblock sharpness and rate distortion to improve visual fidelity. The default is 1.
 
 - `--dolby-vision-rpu` *path to file*
 
