@@ -38,7 +38,7 @@ void release_enc_config(EbConfig *config_ptr) {
 }
 
 EbConfigWrapper create_enc_config() {
-    EbConfigWrapper app_cfg(svt_config_ctor(), &svt_config_dtor);
+    EbConfigWrapper app_cfg(svt_config_ctor(false), &svt_config_dtor);
     assert(app_cfg);
     if (!set_default_config(&app_cfg->config)) {
         return EbConfigWrapper(nullptr, &svt_config_dtor);
