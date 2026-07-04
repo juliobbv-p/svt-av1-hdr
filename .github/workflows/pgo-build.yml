@@ -105,7 +105,7 @@ jobs:
     - run: cd hdr10plus_tool/hdr10plus && RUSTFLAGS="-Ctarget-cpu=x86-64-v3 -Copt-level=3" cargo cinstall --verbose --release --library-type staticlib --prefix "$(cygpath -m -a ../../rustlibs)" && cd ../..
     - run: cmake --fresh -B svt_build -G Ninja -DCMAKE_C_COMPILER="clang" -DCMAKE_CXX_COMPILER="clang++" -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_APPS=ON -DTHREADS_PREFER_PTHREAD_FLAG=OFF -DCMAKE_USE_WIN32_THREADS_INIT=ON -DSVT_AV1_LTO=OFF -DENABLE_AVX512=ON -DCMAKE_C_FLAGS_RELEASE="-DLIBDOVI_FOUND=1 -DLIBHDR10PLUS_RS_FOUND=1 $(pkg-config --cflags --static --dont-define-prefix rustlibs/lib/pkgconfig/dovi.pc) $(pkg-config --cflags --static --dont-define-prefix rustlibs/lib/pkgconfig/hdr10plus-rs.pc) -DNDEBUG -O3 -flto=full -fwhole-program-vtables -march=icelake-server -mtune=znver5 -mprefer-vector-width=512 -fno-exceptions -fno-rtti -fno-stack-protector -fno-sanitize=all -fno-dwarf2-cfi-asm -Wno-deprecated -fprofile-generate=FoodMarket2 -ftemporal-profile" -DCMAKE_CXX_FLAGS_RELEASE="-DLIBDOVI_FOUND=1 -DLIBHDR10PLUS_RS_FOUND=1 $(pkg-config --cflags --static --dont-define-prefix rustlibs/lib/pkgconfig/dovi.pc) $(pkg-config --cflags --static --dont-define-prefix rustlibs/lib/pkgconfig/hdr10plus-rs.pc) -DNDEBUG -O3 -flto=full -fwhole-program-vtables -march=icelake-server -mtune=znver5 -mprefer-vector-width=512 -fno-exceptions -fno-rtti -fno-stack-protector -fno-sanitize=all -fno-dwarf2-cfi-asm -Wno-deprecated -fprofile-generate=FoodMarket2 -ftemporal-profile" -DCMAKE_EXE_LINKER_FLAGS_RELEASE="-fuse-ld=lld $(pkg-config --libs --static --dont-define-prefix rustlibs/lib/pkgconfig/dovi.pc) $(pkg-config --libs --static --dont-define-prefix rustlibs/lib/pkgconfig/hdr10plus-rs.pc) -flto=full -fwhole-program-vtables" && ninja -v -C svt_build
     - id: profile-avx512
-      run: Bin/Release/SvtAv1EncApp.exe -i FoodMarket2/FoodMarket2.y4m -b /dev/null --preset 2 --crf 20.00 --tune 0 --film-grain 8 --enable-dlf 2 --cdef-scaling 1
+      run: Bin/Release/SvtAv1EncApp.exe -i FoodMarket2/FoodMarket2.y4m -b /dev/null --preset 2 --crf 20.00 --tune 0 --film-grain 8 --enable-dlf 2
       continue-on-error: true
     - run: llvm-profdata merge -o FoodMarket2/default.profdata FoodMarket2/*.profraw
       if: ${{ steps.profile-avx512.outcome != 'failure' }}
@@ -119,7 +119,7 @@ jobs:
       if: ${{ steps.profile-avx512.outcome != 'failure' }}
     - run: Bin/Release/SvtAv1EncApp.exe --help | grep hdr10plus
       if: ${{ steps.profile-avx512.outcome != 'failure' }}
-    - run: Bin/Release/SvtAv1EncApp.exe -i FoodMarket2/FoodMarket2.y4m -b /dev/null --preset 4 --crf 20.00 --tune 0 --film-grain 8 --enable-dlf 2 --cdef-scaling 1
+    - run: Bin/Release/SvtAv1EncApp.exe -i FoodMarket2/FoodMarket2.y4m -b /dev/null --preset 4 --crf 20.00 --tune 0 --film-grain 8 --enable-dlf 2
       if: ${{ steps.profile-avx512.outcome != 'failure' }}
     - run: cd Bin/Release && tar cJf Windows_x86-64_icelake-server+znver5.tar.xz SvtAv1EncApp.exe && cd ../..
       if: ${{ steps.profile-avx512.outcome != 'failure' }}
@@ -132,7 +132,7 @@ jobs:
     - run: ls FoodMarket2
     - run: cmake --fresh -B svt_build -G Ninja -DCMAKE_C_COMPILER="clang" -DCMAKE_CXX_COMPILER="clang++" -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_APPS=ON -DTHREADS_PREFER_PTHREAD_FLAG=OFF -DCMAKE_USE_WIN32_THREADS_INIT=ON -DSVT_AV1_LTO=OFF -DENABLE_AVX512=ON -DCMAKE_C_FLAGS_RELEASE="-DLIBDOVI_FOUND=1 -DLIBHDR10PLUS_RS_FOUND=1 $(pkg-config --cflags --static --dont-define-prefix rustlibs/lib/pkgconfig/dovi.pc) $(pkg-config --cflags --static --dont-define-prefix rustlibs/lib/pkgconfig/hdr10plus-rs.pc) -DNDEBUG -O3 -flto=full -fwhole-program-vtables -march=znver2 -mtune=znver2 -fno-exceptions -fno-rtti -fno-stack-protector -fno-sanitize=all -fno-dwarf2-cfi-asm -Wno-deprecated -fprofile-generate=FoodMarket2 -ftemporal-profile" -DCMAKE_CXX_FLAGS_RELEASE="-DLIBDOVI_FOUND=1 -DLIBHDR10PLUS_RS_FOUND=1 $(pkg-config --cflags --static --dont-define-prefix rustlibs/lib/pkgconfig/dovi.pc) $(pkg-config --cflags --static --dont-define-prefix rustlibs/lib/pkgconfig/hdr10plus-rs.pc) -DNDEBUG -O3 -flto=full -fwhole-program-vtables -march=znver2 -mtune=znver2 -fno-exceptions -fno-rtti -fno-stack-protector -fno-sanitize=all -fno-dwarf2-cfi-asm -Wno-deprecated -fprofile-generate=FoodMarket2 -ftemporal-profile" -DCMAKE_EXE_LINKER_FLAGS_RELEASE="-fuse-ld=lld $(pkg-config --libs --static --dont-define-prefix rustlibs/lib/pkgconfig/dovi.pc) $(pkg-config --libs --static --dont-define-prefix rustlibs/lib/pkgconfig/hdr10plus-rs.pc) -flto=full -fwhole-program-vtables" && ninja -v -C svt_build
     - id: profile-znver2
-      run: Bin/Release/SvtAv1EncApp.exe -i FoodMarket2/FoodMarket2.y4m -b /dev/null --preset 2 --crf 20.00 --tune 0 --film-grain 8 --enable-dlf 2 --cdef-scaling 1
+      run: Bin/Release/SvtAv1EncApp.exe -i FoodMarket2/FoodMarket2.y4m -b /dev/null --preset 2 --crf 20.00 --tune 0 --film-grain 8 --enable-dlf 2
       continue-on-error: true
     - run: llvm-profdata merge -o FoodMarket2/default.profdata FoodMarket2/*.profraw
       if: ${{ steps.profile-znver2.outcome != 'failure' }}
@@ -146,7 +146,7 @@ jobs:
       if: ${{ steps.profile-znver2.outcome != 'failure' }}
     - run: Bin/Release/SvtAv1EncApp.exe --help | grep hdr10plus
       if: ${{ steps.profile-znver2.outcome != 'failure' }}
-    - run: Bin/Release/SvtAv1EncApp.exe -i FoodMarket2/FoodMarket2.y4m -b /dev/null --preset 4 --crf 20.00 --tune 0 --film-grain 8 --enable-dlf 2 --cdef-scaling 1
+    - run: Bin/Release/SvtAv1EncApp.exe -i FoodMarket2/FoodMarket2.y4m -b /dev/null --preset 4 --crf 20.00 --tune 0 --film-grain 8 --enable-dlf 2
       if: ${{ steps.profile-znver2.outcome != 'failure' }}
     - run: cd Bin/Release && tar cJf Windows_x86-64_znver2.tar.xz SvtAv1EncApp.exe && cd ../..
       if: ${{ steps.profile-znver2.outcome != 'failure' }}
@@ -158,14 +158,14 @@ jobs:
     - run: rm -rf svt_build FoodMarket2/*.profraw FoodMarket2/*.profdata
     - run: ls FoodMarket2
     - run: cmake --fresh -B svt_build -G Ninja -DCMAKE_C_COMPILER="clang" -DCMAKE_CXX_COMPILER="clang++" -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_APPS=ON -DTHREADS_PREFER_PTHREAD_FLAG=OFF -DCMAKE_USE_WIN32_THREADS_INIT=ON -DSVT_AV1_LTO=OFF -DENABLE_AVX512=ON -DCMAKE_C_FLAGS_RELEASE="-DLIBDOVI_FOUND=1 -DLIBHDR10PLUS_RS_FOUND=1 $(pkg-config --cflags --static --dont-define-prefix rustlibs/lib/pkgconfig/dovi.pc) $(pkg-config --cflags --static --dont-define-prefix rustlibs/lib/pkgconfig/hdr10plus-rs.pc) -DNDEBUG -O3 -flto=full -fwhole-program-vtables -march=x86-64-v3 -mtune=znver2 -mno-gather -fno-exceptions -fno-rtti -fno-stack-protector -fno-sanitize=all -fno-dwarf2-cfi-asm -Wno-deprecated -fprofile-generate=FoodMarket2 -ftemporal-profile" -DCMAKE_CXX_FLAGS_RELEASE="-DLIBDOVI_FOUND=1 -DLIBHDR10PLUS_RS_FOUND=1 $(pkg-config --cflags --static --dont-define-prefix rustlibs/lib/pkgconfig/dovi.pc) $(pkg-config --cflags --static --dont-define-prefix rustlibs/lib/pkgconfig/hdr10plus-rs.pc) -DNDEBUG -O3 -flto=full -fwhole-program-vtables -march=x86-64-v3 -mtune=znver2 -mno-gather -fno-exceptions -fno-rtti -fno-stack-protector -fno-sanitize=all -fno-dwarf2-cfi-asm -Wno-deprecated -fprofile-generate=FoodMarket2 -ftemporal-profile" -DCMAKE_EXE_LINKER_FLAGS_RELEASE="-fuse-ld=lld $(pkg-config --libs --static --dont-define-prefix rustlibs/lib/pkgconfig/dovi.pc) $(pkg-config --libs --static --dont-define-prefix rustlibs/lib/pkgconfig/hdr10plus-rs.pc) -flto=full -fwhole-program-vtables" && ninja -v -C svt_build
-    - run: Bin/Release/SvtAv1EncApp.exe -i FoodMarket2/FoodMarket2.y4m -b /dev/null --preset 2 --crf 20.00 --tune 0 --film-grain 8 --enable-dlf 2 --cdef-scaling 1
+    - run: Bin/Release/SvtAv1EncApp.exe -i FoodMarket2/FoodMarket2.y4m -b /dev/null --preset 2 --crf 20.00 --tune 0 --film-grain 8 --enable-dlf 2
     - run: llvm-profdata merge -o FoodMarket2/default.profdata FoodMarket2/*.profraw
     - run: ls FoodMarket2
     - run: cmake --fresh -B svt_build -G Ninja -DCMAKE_C_COMPILER="clang" -DCMAKE_CXX_COMPILER="clang++" -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_APPS=ON -DTHREADS_PREFER_PTHREAD_FLAG=OFF -DCMAKE_USE_WIN32_THREADS_INIT=ON -DSVT_AV1_LTO=OFF -DENABLE_AVX512=ON -DCMAKE_C_FLAGS_RELEASE="-DLIBDOVI_FOUND=1 -DLIBHDR10PLUS_RS_FOUND=1 $(pkg-config --cflags --static --dont-define-prefix rustlibs/lib/pkgconfig/dovi.pc) $(pkg-config --cflags --static --dont-define-prefix rustlibs/lib/pkgconfig/hdr10plus-rs.pc) -DNDEBUG -O3 -flto=full -fwhole-program-vtables -fvisibility=hidden -fvisibility-inlines-hidden -march=x86-64-v3 -mtune=znver2 -mno-gather -fno-exceptions -fno-rtti -fno-stack-protector -fno-sanitize=all -fno-dwarf2-cfi-asm -Wno-deprecated -fprofile-use=\"$(cygpath -m -a FoodMarket2/default.profdata)\"" -DCMAKE_CXX_FLAGS_RELEASE="-DLIBDOVI_FOUND=1 -DLIBHDR10PLUS_RS_FOUND=1 $(pkg-config --cflags --static --dont-define-prefix rustlibs/lib/pkgconfig/dovi.pc) $(pkg-config --cflags --static --dont-define-prefix rustlibs/lib/pkgconfig/hdr10plus-rs.pc) -DNDEBUG -O3 -flto=full -fwhole-program-vtables -fvisibility=hidden -fvisibility-inlines-hidden -march=x86-64-v3 -mtune=znver2 -mno-gather -fno-exceptions -fno-rtti -fno-stack-protector -fno-sanitize=all -fno-dwarf2-cfi-asm -Wno-deprecated -fprofile-use=\"$(cygpath -m -a FoodMarket2/default.profdata)\"" -DCMAKE_EXE_LINKER_FLAGS_RELEASE="-fuse-ld=lld $(pkg-config --libs --static --dont-define-prefix rustlibs/lib/pkgconfig/dovi.pc) $(pkg-config --libs --static --dont-define-prefix rustlibs/lib/pkgconfig/hdr10plus-rs.pc) -flto=full -fwhole-program-vtables -fvisibility=hidden -fvisibility-inlines-hidden" && ninja -v -C svt_build
     - run: ldd Bin/Release/SvtAv1EncApp.exe
     - run: Bin/Release/SvtAv1EncApp.exe --help | grep dolby
     - run: Bin/Release/SvtAv1EncApp.exe --help | grep hdr10plus
-    - run: Bin/Release/SvtAv1EncApp.exe -i FoodMarket2/FoodMarket2.y4m -b /dev/null --preset 4 --crf 20.00 --tune 0 --film-grain 8 --enable-dlf 2 --cdef-scaling 1
+    - run: Bin/Release/SvtAv1EncApp.exe -i FoodMarket2/FoodMarket2.y4m -b /dev/null --preset 4 --crf 20.00 --tune 0 --film-grain 8 --enable-dlf 2
     - run: cd Bin/Release && tar cJf Windows_x86-64_x86-64-v3.tar.xz SvtAv1EncApp.exe && cd ../..
     - uses: softprops/action-gh-release@v3
       with:
@@ -275,14 +275,14 @@ jobs:
         repository: quietvoid/hdr10plus_tool
     - run: cd hdr10plus_tool/hdr10plus && RUSTFLAGS="-Ctarget-cpu=oryon-1 -Copt-level=3" cargo cinstall --verbose --release --library-type staticlib --prefix "$(cygpath -m -a ../../rustlibs)" && cd ../..
     - run: cmake --fresh -B svt_build -G Ninja -DCMAKE_C_COMPILER="clang" -DCMAKE_CXX_COMPILER="clang++" -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_APPS=ON -DTHREADS_PREFER_PTHREAD_FLAG=OFF -DCMAKE_USE_WIN32_THREADS_INIT=ON -DSVT_AV1_LTO=OFF -DCMAKE_C_FLAGS_RELEASE="-DLIBDOVI_FOUND=1 -DLIBHDR10PLUS_RS_FOUND=1 $(pkg-config --cflags --static --dont-define-prefix rustlibs/lib/pkgconfig/dovi.pc) $(pkg-config --cflags --static --dont-define-prefix rustlibs/lib/pkgconfig/hdr10plus-rs.pc) -DNDEBUG -O3 -flto=full -fwhole-program-vtables -march=armv8.7-a+crypto+sm4+sha3+fp16+sve+sve2 -mtune=oryon-1 -fno-exceptions -fno-rtti -fno-stack-protector -fno-sanitize=all -fno-dwarf2-cfi-asm -Wno-deprecated -fprofile-generate=FoodMarket2 -ftemporal-profile" -DCMAKE_CXX_FLAGS_RELEASE="-DLIBDOVI_FOUND=1 -DLIBHDR10PLUS_RS_FOUND=1 $(pkg-config --cflags --static --dont-define-prefix rustlibs/lib/pkgconfig/dovi.pc) $(pkg-config --cflags --static --dont-define-prefix rustlibs/lib/pkgconfig/hdr10plus-rs.pc) -DNDEBUG -O3 -flto=full -fwhole-program-vtables -march=armv8.7-a+crypto+sm4+sha3+fp16+sve+sve2 -mtune=oryon-1 -fno-exceptions -fno-rtti -fno-stack-protector -fno-sanitize=all -fno-dwarf2-cfi-asm -Wno-deprecated -fprofile-generate=FoodMarket2 -ftemporal-profile" -DCMAKE_EXE_LINKER_FLAGS_RELEASE="-fuse-ld=lld $(pkg-config --libs --static --dont-define-prefix rustlibs/lib/pkgconfig/dovi.pc) $(pkg-config --libs --static --dont-define-prefix rustlibs/lib/pkgconfig/hdr10plus-rs.pc) -flto=full -fwhole-program-vtables" && ninja -v -C svt_build
-    - run: Bin/Release/SvtAv1EncApp.exe -i FoodMarket2/FoodMarket2.y4m -b /dev/null --preset 2 --crf 20.00 --tune 0 --film-grain 8 --enable-dlf 2 --cdef-scaling 1
+    - run: Bin/Release/SvtAv1EncApp.exe -i FoodMarket2/FoodMarket2.y4m -b /dev/null --preset 2 --crf 20.00 --tune 0 --film-grain 8 --enable-dlf 2
     - run: llvm-profdata merge -o FoodMarket2/default.profdata FoodMarket2/*.profraw
     - run: ls FoodMarket2
     - run: cmake --fresh -B svt_build -G Ninja -DCMAKE_C_COMPILER="clang" -DCMAKE_CXX_COMPILER="clang++" -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_APPS=ON -DTHREADS_PREFER_PTHREAD_FLAG=OFF -DCMAKE_USE_WIN32_THREADS_INIT=ON -DSVT_AV1_LTO=OFF -DCMAKE_C_FLAGS_RELEASE="-DLIBDOVI_FOUND=1 -DLIBHDR10PLUS_RS_FOUND=1 $(pkg-config --cflags --static --dont-define-prefix rustlibs/lib/pkgconfig/dovi.pc) $(pkg-config --cflags --static --dont-define-prefix rustlibs/lib/pkgconfig/hdr10plus-rs.pc) -DNDEBUG -O3 -flto=full -fwhole-program-vtables -fvisibility=hidden -fvisibility-inlines-hidden -march=armv8.7-a+crypto+sm4+sha3+fp16+sve+sve2 -mtune=oryon-1 -fno-exceptions -fno-rtti -fno-stack-protector -fno-sanitize=all -fno-dwarf2-cfi-asm -Wno-deprecated -fprofile-use=\"$(cygpath -m -a FoodMarket2/default.profdata)\"" -DCMAKE_CXX_FLAGS_RELEASE="-DLIBDOVI_FOUND=1 -DLIBHDR10PLUS_RS_FOUND=1 $(pkg-config --cflags --static --dont-define-prefix rustlibs/lib/pkgconfig/dovi.pc) $(pkg-config --cflags --static --dont-define-prefix rustlibs/lib/pkgconfig/hdr10plus-rs.pc) -DNDEBUG -O3 -flto=full -fwhole-program-vtables -fvisibility=hidden -fvisibility-inlines-hidden -march=armv8.7-a+crypto+sm4+sha3+fp16+sve+sve2 -mtune=oryon-1 -fno-exceptions -fno-rtti -fno-stack-protector -fno-sanitize=all -fno-dwarf2-cfi-asm -Wno-deprecated -fprofile-use=\"$(cygpath -m -a FoodMarket2/default.profdata)\"" -DCMAKE_EXE_LINKER_FLAGS_RELEASE="-fuse-ld=lld $(pkg-config --libs --static --dont-define-prefix rustlibs/lib/pkgconfig/dovi.pc) $(pkg-config --libs --static --dont-define-prefix rustlibs/lib/pkgconfig/hdr10plus-rs.pc) -flto=full -fwhole-program-vtables -fvisibility=hidden -fvisibility-inlines-hidden" && ninja -v -C svt_build
     - run: ldd Bin/Release/SvtAv1EncApp.exe
     - run: Bin/Release/SvtAv1EncApp.exe --help | grep dolby
     - run: Bin/Release/SvtAv1EncApp.exe --help | grep hdr10plus
-    - run: Bin/Release/SvtAv1EncApp.exe -i FoodMarket2/FoodMarket2.y4m -b /dev/null --preset 4 --crf 20.00 --tune 0 --film-grain 8 --enable-dlf 2 --cdef-scaling 1
+    - run: Bin/Release/SvtAv1EncApp.exe -i FoodMarket2/FoodMarket2.y4m -b /dev/null --preset 4 --crf 20.00 --tune 0 --film-grain 8 --enable-dlf 2
     - run: cd Bin/Release && tar cJf Windows_arm64_armv8.7-a+crypto+sm4+sha3+fp16+sve+sve2+oryon-1.tar.xz SvtAv1EncApp.exe && cd ../..
     - uses: softprops/action-gh-release@v3
       with:
@@ -296,7 +296,7 @@ jobs:
   # 1. Add `-Wl,--emit-relocs,-znow` to `LDFLAGS`.
   # 2. Add these commands after `build.sh` PGO build:
   # ```sh
-  # perf record -e cycles:u -j any,u -o FoodMarket2/perf.data -- Bin/Release/SvtAv1EncApp -i FoodMarket2/FoodMarket2.y4m -b /dev/null --preset 2 --crf 20.00 --tune 0 --film-grain 8 --enable-dlf 2 --cdef-scaling 1
+  # perf record -e cycles:u -j any,u -o FoodMarket2/perf.data -- Bin/Release/SvtAv1EncApp -i FoodMarket2/FoodMarket2.y4m -b /dev/null --preset 2 --crf 20.00 --tune 0 --film-grain 8 --enable-dlf 2
   # perf2bolt -p FoodMarket2/perf.data -o FoodMarket2/perf.fdata Bin/Release/SvtAv1EncApp
   # llvm-bolt Bin/Release/SvtAv1EncApp -o Bin/Release/SvtAv1EncApp.bolt -data=FoodMarket2/perf.fdata --relocs --remove-symtab --eliminate-unreachable --hugify --align-blocks --reorder-blocks=ext-tsp --reorder-functions-use-hot-size --use-edge-counts --min-branch-clusters --split-functions --split-strategy=profile2 --split-eh --split-all-cold --frame-opt=all --frame-opt-rm-stores --reg-reassign --use-aggr-reg-reassign --inline-memcpy --inline-ap --shorten-instructions --infer-fall-throughs --infer-stale-profile --equalize-bb-counts --iterative-guess --indirect-call-promotion=all --indirect-call-promotion-use-mispredicts --icp-eliminate-loads --jump-tables=aggressive --simplify-rodata-loads --plt=all --icf=1 --peepholes=all --eliminate-unreachable --elim-link-veneers --group-stubs --fix-block-counts --fix-func-counts --match-profile-with-function-hash --match-with-call-graph --use-compact-aligner --preserve-blocks-alignment --x86-align-branch-boundary-hot-only --x86-strip-redundant-address-size --tail-duplication=cache --simplify-conditional-tail-calls --sctc-mode=heuristic --dyno-stats --icp-mp-threshold=1
   # ```
@@ -338,7 +338,7 @@ jobs:
       if: ${{ steps.build-avx512.outcome != 'failure' }}
     - run: Bin/Release/SvtAv1EncApp --help | grep hdr10plus
       if: ${{ steps.build-avx512.outcome != 'failure' }}
-    - run: Bin/Release/SvtAv1EncApp -i FoodMarket2/FoodMarket2.y4m -b /dev/null --preset 4 --crf 20.00 --tune 0 --film-grain 8 --enable-dlf 2 --cdef-scaling 1
+    - run: Bin/Release/SvtAv1EncApp -i FoodMarket2/FoodMarket2.y4m -b /dev/null --preset 4 --crf 20.00 --tune 0 --film-grain 8 --enable-dlf 2
       if: ${{ steps.build-avx512.outcome != 'failure' }}
     - run: cd Bin/Release && tar cJf Linux_x86-64_icelake-server+znver5.tar.xz SvtAv1EncApp && cd ../..
       if: ${{ steps.build-avx512.outcome != 'failure' }}
@@ -357,7 +357,7 @@ jobs:
       if: ${{ steps.build-znver2.outcome != 'failure' }}
     - run: Bin/Release/SvtAv1EncApp --help | grep hdr10plus
       if: ${{ steps.build-znver2.outcome != 'failure' }}
-    - run: Bin/Release/SvtAv1EncApp -i FoodMarket2/FoodMarket2.y4m -b /dev/null --preset 4 --crf 20.00 --tune 0 --film-grain 8 --enable-dlf 2 --cdef-scaling 1
+    - run: Bin/Release/SvtAv1EncApp -i FoodMarket2/FoodMarket2.y4m -b /dev/null --preset 4 --crf 20.00 --tune 0 --film-grain 8 --enable-dlf 2
       if: ${{ steps.build-znver2.outcome != 'failure' }}
     - run: cd Bin/Release && tar cJf Linux_x86-64_znver2.tar.xz SvtAv1EncApp && cd ../..
       if: ${{ steps.build-znver2.outcome != 'failure' }}
@@ -371,7 +371,7 @@ jobs:
     - run: ldd Bin/Release/SvtAv1EncApp
     - run: Bin/Release/SvtAv1EncApp --help | grep dolby
     - run: Bin/Release/SvtAv1EncApp --help | grep hdr10plus
-    - run: Bin/Release/SvtAv1EncApp -i FoodMarket2/FoodMarket2.y4m -b test.ivf --preset 4 --crf 20.00 --tune 0 --film-grain 8 --enable-dlf 2 --cdef-scaling 1
+    - run: Bin/Release/SvtAv1EncApp -i FoodMarket2/FoodMarket2.y4m -b test.ivf --preset 4 --crf 20.00 --tune 0 --film-grain 8 --enable-dlf 2
     - run: cd Bin/Release && tar cJf Linux_x86-64_x86-64-v3.tar.xz SvtAv1EncApp && cd ../..
     - uses: softprops/action-gh-release@v3
       with:
@@ -414,7 +414,7 @@ jobs:
     - run: otool -L Bin/Release/SvtAv1EncApp
     - run: Bin/Release/SvtAv1EncApp --help | grep dolby
     - run: Bin/Release/SvtAv1EncApp --help | grep hdr10plus
-    - run: Bin/Release/SvtAv1EncApp -i FoodMarket2/FoodMarket2.y4m -b /dev/null --preset 4 --crf 20.00 --tune 0 --film-grain 8 --enable-dlf 2 --cdef-scaling 1
+    - run: Bin/Release/SvtAv1EncApp -i FoodMarket2/FoodMarket2.y4m -b /dev/null --preset 4 --crf 20.00 --tune 0 --film-grain 8 --enable-dlf 2
     - run: cd Bin/Release && tar cJf macOS_arm64_armv8.5-a+simd+crypto+apple-m3.tar.xz SvtAv1EncApp && cd ../..
     - uses: softprops/action-gh-release@v3
       with:
@@ -457,7 +457,7 @@ jobs:
     - run: otool -L Bin/Release/SvtAv1EncApp
     - run: Bin/Release/SvtAv1EncApp --help | grep dolby
     - run: Bin/Release/SvtAv1EncApp --help | grep hdr10plus
-    - run: Bin/Release/SvtAv1EncApp -i FoodMarket2/FoodMarket2.y4m -b /dev/null --preset 4 --crf 20.00 --tune 0 --film-grain 8 --enable-dlf 2 --cdef-scaling 1
+    - run: Bin/Release/SvtAv1EncApp -i FoodMarket2/FoodMarket2.y4m -b /dev/null --preset 4 --crf 20.00 --tune 0 --film-grain 8 --enable-dlf 2
     - run: cd Bin/Release && tar cJf macOS_x86-64_skylake.tar.xz SvtAv1EncApp && cd ../..
     - uses: softprops/action-gh-release@v3
       with:
