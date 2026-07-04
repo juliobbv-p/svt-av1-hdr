@@ -194,6 +194,9 @@ jobs:
     - run: git fetch --tags --depth 250
     - run: mkdir FoodMarket2 && curl -L "https://media.xiph.org/video/derf/webm/Netflix_FoodMarket2_4096x2160_60fps_10bit_420.webm" -o FoodMarket2/FoodMarket2.webm
     - run: ffmpeg -y -i FoodMarket2/FoodMarket2.webm -vf "select=between(n\,78\,110)" -strict -1 -f yuv4mpegpipe -pix_fmt yuv420p10le FoodMarket2/FoodMarket2.y4m
+    # ZhongRuoyu/setup-llvm doesn't support Windows arm64 yet, and will try to download Windows x86-64 instead.
+    # This KyleMayes/install-llvm-action requires inputting a version, so we have to do this to get the latest version.
+    # This needs to be updated when we're approaching LLVM version 30.
     - id: install-llvm-30
       uses: KyleMayes/install-llvm-action@v2
       with:
