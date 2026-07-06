@@ -22,7 +22,6 @@ test/docs/
 !Build/linux/build.sh
 !Build/windows/build.bat
 !Build/obj1fastdownloader.cmake
-!Build/pgohelper.cmake
 .DS_Store
 third_party/aom/lib/*/aom.lib
 third_party/aom/lib/*/*/aom.lib
