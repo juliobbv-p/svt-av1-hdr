@@ -1,0 +1,216 @@
+name: pgo-build
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  tag:
+    runs-on: "ubuntu-latest"
+    outputs:
+      tag: ${{ steps.generate-tag.outputs.tag }}
+      name: ${{ steps.generate-name.outputs.name }}
+    steps:
+    - uses: actions/checkout@v7
+    - id: generate-tag
+      run: echo tag=pgo-build-$(git log -1 "--date=format:%F" "--format=%ad-%h") >> "$GITHUB_OUTPUT"
+    - id: generate-name
+      run: echo name=$(git log -1 "--date=format:%F" "--format=%ad %h") >> "$GITHUB_OUTPUT"
+
+
+  release:
+    needs: tag
+    runs-on: "ubuntu-latest"
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        ref: "refs/heads/pgo-build-tags"
+    - run: GH_TOKEN=${{ github.token }} gh release delete ${{ needs.tag.outputs.tag }} --cleanup-tag
+      continue-on-error: true
+    - run: git config user.email Akatsumekusa@protonmail.com && git config user.name "Akatsumekusa"
+    - run: git fetch --depth=1 origin ${{ github.ref }}
+    - run: git restore -s ${{ github.sha }} . && git add --all && git commit --allow-empty -m ${{ needs.tag.outputs.tag }} && git push origin pgo-build-tags
+    - uses: softprops/action-gh-release@v3
+      with:
+        tag_name: ${{ needs.tag.outputs.tag }}
+        target_commitish: pgo-build-tags
+        name: SVT-AV1-HDR ${{ needs.tag.outputs.name }}
+        body: |
+          Ref `${{ github.ref }}` | Commit `${{ github.sha }}` | Dolby Vision & HDR10+  
+          Windows | x86-64 | LLVM Project Clang LLD | winthread | `icelake-server` + `znver5` | LTO PGO  
+          Windows | x86-64 | LLVM Project Clang LLD | winthread | `znver2` | LTO PGO  
+          Windows | x86-64 | LLVM Project Clang LLD | winthread | `x86-64-v3` + `znver2` | LTO PGO  
+          Windows | arm64 | LLVM Project Clang LLD | winthread | `armv8.7-a+crypto+sm4+sha3+fp16+sve+sve2` + `oryon-1` | LTO PGO  
+          Linux | x86-64 | LLVM Project Clang LLD | `icelake-server` + `znver5` | LTO PGO  
+          Linux | x86-64 | LLVM Project Clang LLD | `znver2` | LTO PGO  
+          Linux | x86-64 | LLVM Project Clang LLD | `x86-64-v3` + `znver2` | LTO PGO  
+          macOS | arm64 | LLVM Project Clang LLD | `armv8.5-a+simd+crypto` + `apple-m3` | LTO PGO  
+          macOS | x86-64 | LLVM Project Clang LLD | `skylake` | LTO PGO  
+
+          On x86-64 systems, no matter if you're on an Intel or AMD system, you should try these builds in the order of `icelake-server` + `znver5` ⇒ `znver2` ⇒ `x86-64-v3` + `znver2`.  
+          If your CPU doesn't support the features required by the `icelake-server` + `znver5` version, often indicated by crashing outright when attempting to make any encodes, you can try the `znver2` version and see if that works. If not, then the `x86-64-v3` + `znver2` version, which should always work on any modern systems.  
+          Some versions might not be available if the GitHub Actions runners we get this time don't support the respective features.  
+
+          Thanks to studies and contributions from afed, Emre, Ironclad, Itachi Uchiha, Khaoklong, Miss Ashenlight, Soda, SwareJonge, Trix, Yiss, and other people in the community for discovering the method to build the fastest binary.  
+        prerelease: false
+        make_latest: "true"
+
+
+  build-windows-x86-64:
+    needs: [tag, release]
+    runs-on: "windows-latest"
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+        fetch-tags: true
+
+    - uses: Akatmks/build-svt-av1@v1
+      with:
+        pgo-video: "FoodMarket2"
+        pgo-parameters: "--crf 20.00 --tune 0 --film-grain 8 --enable-dlf 2"
+
+    - id: detect-icelake-server-znver5
+      run: ls BuildAction/icelake-server+znver5/static/SvtAv1EncApp.exe
+      continue-on-error: true
+    - run: cd BuildAction/icelake-server+znver5/static && tar cJf Windows_x86-64_icelake-server+znver5.tar.xz SvtAv1EncApp.exe
+      if: ${{ steps.detect-icelake-server-znver5.outcome != 'failure' }}
+    - uses: softprops/action-gh-release@v3
+      with:
+        tag_name: ${{ needs.tag.outputs.tag }}
+        files: BuildAction/icelake-server+znver5/static/Windows_x86-64_icelake-server+znver5.tar.xz
+      if: ${{ steps.detect-icelake-server-znver5.outcome != 'failure' }}
+
+    - id: detect-znver2
+      run: ls BuildAction/znver2/static/SvtAv1EncApp.exe
+      continue-on-error: true
+    - run: cd BuildAction/znver2/static && tar cJf Windows_x86-64_znver2.tar.xz SvtAv1EncApp.exe
+      if: ${{ steps.detect-znver2.outcome != 'failure' }}
+    - uses: softprops/action-gh-release@v3
+      with:
+        tag_name: ${{ needs.tag.outputs.tag }}
+        files: BuildAction/znver2/static/Windows_x86-64_znver2.tar.xz
+      if: ${{ steps.detect-znver2.outcome != 'failure' }}
+
+    - run: ls BuildAction/x86-64-v3+znver2/static/SvtAv1EncApp.exe
+    - run: cd BuildAction/x86-64-v3+znver2/static && tar cJf Windows_x86-64_x86-64-v3+znver2.tar.xz SvtAv1EncApp.exe
+    - uses: softprops/action-gh-release@v3
+      with:
+        tag_name: ${{ needs.tag.outputs.tag }}
+        files: BuildAction/x86-64-v3+znver2/static/Windows_x86-64_x86-64-v3+znver2.tar.xz
+
+
+  build-windows-arm64:
+    needs: [tag, release]
+    runs-on: "windows-11-arm"
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+        fetch-tags: true
+
+    - uses: Akatmks/build-svt-av1@v1
+      with:
+        pgo-video: "FoodMarket2"
+        pgo-parameters: "--crf 20.00 --tune 0 --film-grain 8 --enable-dlf 2"
+
+    - run: ls BuildAction/armv8.7-a+crypto+sm4+sha3+fp16+sve+sve2+oryon-1/static/SvtAv1EncApp.exe
+    - run: cd BuildAction/armv8.7-a+crypto+sm4+sha3+fp16+sve+sve2+oryon-1/static && tar cJf Windows_arm64_armv8.7-a+crypto+sm4+sha3+fp16+sve+sve2+oryon-1.tar.xz SvtAv1EncApp.exe
+    - uses: softprops/action-gh-release@v3
+      with:
+        tag_name: ${{ needs.tag.outputs.tag }}
+        files: BuildAction/armv8.7-a+crypto+sm4+sha3+fp16+sve+sve2+oryon-1/static/Windows_arm64_armv8.7-a+crypto+sm4+sha3+fp16+sve+sve2+oryon-1.tar.xz
+
+
+  build-linux-x86-64:
+    needs: [tag, release]
+    runs-on: "ubuntu-latest"
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+        fetch-tags: true
+
+    - uses: Akatmks/build-svt-av1@v1
+      with:
+        pgo-video: "FoodMarket2"
+        pgo-parameters: "--crf 20.00 --tune 0 --film-grain 8 --enable-dlf 2"
+
+    - id: detect-icelake-server-znver5
+      run: ls BuildAction/icelake-server+znver5/static/SvtAv1EncApp
+      continue-on-error: true
+    - run: cd BuildAction/icelake-server+znver5/static && tar cJf Linux_x86-64_icelake-server+znver5.tar.xz SvtAv1EncApp
+      if: ${{ steps.detect-icelake-server-znver5.outcome != 'failure' }}
+    - uses: softprops/action-gh-release@v3
+      with:
+        tag_name: ${{ needs.tag.outputs.tag }}
+        files: BuildAction/icelake-server+znver5/static/Linux_x86-64_icelake-server+znver5.tar.xz
+      if: ${{ steps.detect-icelake-server-znver5.outcome != 'failure' }}
+
+    - id: detect-znver2
+      run: ls BuildAction/znver2/static/SvtAv1EncApp
+      continue-on-error: true
+    - run: cd BuildAction/znver2/static && tar cJf Linux_x86-64_znver2.tar.xz SvtAv1EncApp
+      if: ${{ steps.detect-znver2.outcome != 'failure' }}
+    - uses: softprops/action-gh-release@v3
+      with:
+        tag_name: ${{ needs.tag.outputs.tag }}
+        files: BuildAction/znver2/static/Linux_x86-64_znver2.tar.xz
+      if: ${{ steps.detect-znver2.outcome != 'failure' }}
+
+    - run: ls BuildAction/x86-64-v3+znver2/static/SvtAv1EncApp
+    - run: cd BuildAction/x86-64-v3+znver2/static && tar cJf Linux_x86-64_x86-64-v3+znver2.tar.xz SvtAv1EncApp
+    - uses: softprops/action-gh-release@v3
+      with:
+        tag_name: ${{ needs.tag.outputs.tag }}
+        files: BuildAction/x86-64-v3+znver2/static/Linux_x86-64_x86-64-v3+znver2.tar.xz
+
+
+  build-macos-arm64:
+    needs: [tag, release]
+    runs-on: "macos-latest"
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+        fetch-tags: true
+
+    - uses: Akatmks/build-svt-av1@v1
+      with:
+        pgo-video: "FoodMarket2"
+        pgo-parameters: "--crf 20.00 --tune 0 --film-grain 8 --enable-dlf 2"
+
+    - run: ls BuildAction/armv8.5-a+simd+crypto+apple-m3/static/SvtAv1EncApp
+    - run: cd BuildAction/armv8.5-a+simd+crypto+apple-m3/static && tar cJf macOS_arm64_armv8.5-a+simd+crypto+apple-m3.tar.xz SvtAv1EncApp
+    - uses: softprops/action-gh-release@v3
+      with:
+        tag_name: ${{ needs.tag.outputs.tag }}
+        files: BuildAction/armv8.5-a+simd+crypto+apple-m3/static/macOS_arm64_armv8.5-a+simd+crypto+apple-m3.tar.xz
+
+
+  build-macos-x86-64:
+    needs: [tag, release]
+    runs-on: "macos-26-intel"
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+        fetch-tags: true
+
+    - uses: Akatmks/build-svt-av1@v1
+      with:
+        pgo-video: "FoodMarket2"
+        pgo-parameters: "--crf 20.00 --tune 0 --film-grain 8 --enable-dlf 2"
+
+    - run: ls BuildAction/skylake/static/SvtAv1EncApp
+    - run: cd BuildAction/skylake/static && tar cJf macOS_x86-64_skylake.tar.xz SvtAv1EncApp
+    - uses: softprops/action-gh-release@v3
+      with:
+        tag_name: ${{ needs.tag.outputs.tag }}
+        files: BuildAction/skylake/static/macOS_x86-64_skylake.tar.xz

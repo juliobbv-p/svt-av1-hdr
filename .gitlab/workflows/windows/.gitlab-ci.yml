@@ -1,0 +1,364 @@
+#
+# Windows CI jobs
+#
+
+#
+# Anchors
+#
+
+.windows-compiler-base:
+  extends: .common-ci-base
+  stage: compile
+  dependencies: []
+  image: registry.gitlab.com/aomediacodec/aom-testing/ltsc2025
+  tags:
+    - svt-windows-docker
+  script:
+    - cmake
+      -B Build
+      -DREPRODUCIBLE_BUILDS=ON
+      -DBUILD_SHARED_LIBS=ON
+      -DBUILD_TESTING=ON
+      -DSVT_AV1_LTO=ON
+      $env:EXTRA_CMAKE_FLAGS
+    - cmake --build Build --config $(if ($env:CMAKE_BUILD_TYPE) {$env:CMAKE_BUILD_TYPE} else {"Release"})
+
+.windows-test-base:
+  extends: .common-ci-base
+  stage: test
+  image: registry.gitlab.com/aomediacodec/aom-testing/ltsc2025
+  tags:
+    - svt-windows-docker
+  before_script:
+    - Move-Item C:/*.zst .
+    - zstd -d $(Get-ChildItem *.zst)
+
+.windows-unit-test-base:
+  extends: .windows-test-base
+  artifacts:
+    when: always
+    reports:
+      junit: reports/*.xml
+
+#
+# Compile jobs
+#
+
+Win64 (MSVC, Tests):
+  extends: .windows-compiler-base
+  variables:
+    CFLAGS: /WX /D_CRT_SECURE_NO_WARNINGS=1
+    CXXFLAGS: /WX /D_CRT_SECURE_NO_WARNINGS=1
+    CMAKE_GENERATOR: Visual Studio 16 2019
+  parallel:
+    matrix:
+      - CMAKE_BUILD_TYPE: [Release, Debug]
+  artifacts:
+    untracked: false
+    expire_in: 1 day
+    paths:
+      - "Bin/*/*.exe"
+      - "Bin/*/*.dll"
+      - "Bin/*/*.pdb"
+
+#
+# Test jobs
+#
+
+Win64 Unit Tests:
+  extends: .windows-unit-test-base
+  variables:
+    SVT_AV1_TEST_VECTOR_PATH: $CI_PROJECT_DIR/test/vectors
+  cache:
+    - key: testvectors
+      paths:
+        - test/vectors
+      policy: pull-push
+    - key: "$CI_JOB_NAME_SLUG-gtest-parallel-v1"
+      paths:
+        - .cache/gtest-parallel
+      policy: pull-push
+  before_script:
+    - if (-Not (Test-Path -LiteralPath "$env:CI_PROJECT_DIR/.cache")) { New-Item -ItemType Directory -Path "$env:CI_PROJECT_DIR/.cache" -Force | Out-Null }
+    - if (Test-Path -LiteralPath "$env:CI_PROJECT_DIR/.cache/gtest-parallel") { Copy-Item -LiteralPath "$env:CI_PROJECT_DIR/.cache/gtest-parallel" -Destination "$env:LOCALAPPDATA/gtest-parallel" -Force }
+    - Invoke-WebRequest -OutFile gtest_parallel.py -Uri https://raw.githubusercontent.com/1480c1/gtest-parallel/unique_id/gtest_parallel.py
+  script:
+    - cmake -B Build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+    - cmake --build Build --target TestVectors
+    - python gtest_parallel.py --print_test_times ./Bin/Release/SvtAv1UnitTests ./Bin/Release/SvtAv1E2ETests -- --gtest_output="xml:reports/{#}.xml"
+  after_script:
+    - Copy-Item -LiteralPath "$env:LOCALAPPDATA/gtest-parallel" -Destination "$env:CI_PROJECT_DIR/.cache/gtest-parallel" -Force
+  needs:
+    - Win64 (MSVC, Tests)
+
+Win64 Enc Test:
+  extends: .windows-test-base
+  script:
+    - ./Bin/Release/SvtAv1EncApp.exe --preset 2 -i "$env:SVT_ENCTEST_FILENAME" -n 17 -b "test-pr-Windows-Release-${env:SVT_ENCTEST_BITNESS}bit-m2.ivf"
+    - ./Bin/Release/SvtAv1EncApp.exe --preset 8 -i "$env:SVT_ENCTEST_FILENAME" -n 120 -b "test-pr-Windows-Release-${env:SVT_ENCTEST_BITNESS}bit-m8.ivf"
+    - ./Bin/Debug/SvtAv1EncApp.exe --preset 2 -i "$env:SVT_ENCTEST_FILENAME" -n 17 -b "test-pr-Windows-Debug-${env:SVT_ENCTEST_BITNESS}bit-m2.ivf"
+    - ./Bin/Debug/SvtAv1EncApp.exe --preset 8 -i "$env:SVT_ENCTEST_FILENAME" -n 120 -b "test-pr-Windows-Debug-${env:SVT_ENCTEST_BITNESS}bit-m8.ivf"
+  parallel: !reference [.enc-test-parallel]
+  artifacts: !reference [.enc-test-artifacts]
+  needs:
+    - Win64 (MSVC, Tests)
+
+.windows-ffmpeg-base:
+  extends: .common-ci-base
+  stage: ffmpeg
+  image: registry.gitlab.com/aomediacodec/aom-testing/ltsc2025
+  tags:
+    - svt-windows-docker
+  variables:
+    CC: ccache gcc
+    CXX: ccache g++
+    CFLAGS: -pipe
+    CXXFLAGS: -pipe
+    LDFLAGS: -pipe -static -static-libgcc -static-libstdc++
+    PREFIX_DIR: C:/msys64/mingw64
+    PKG_CONFIG_PATH: C:/msys64/mingw64/lib/pkgconfig
+  allow_failure: true
+
+Win64 FFmpeg (aom Static):
+  extends: .windows-ffmpeg-base
+  dependencies: []
+  variables:
+    DESTDIR: $CI_PROJECT_DIR/aom-prefix
+  script:
+    - git clone --depth 1 https://aomedia.googlesource.com/aom aom-src
+    - cmake
+      -S aom-src
+      -B aom-build
+      -DCMAKE_BUILD_TYPE=Release
+      -DBUILD_SHARED_LIBS=OFF
+      -DCMAKE_INSTALL_PREFIX="$env:PREFIX_DIR"
+      -DENABLE_TESTS=0
+      -DENABLE_EXAMPLES=0
+      -DENABLE_DOCS=0
+      -DENABLE_TESTDATA=0
+      -DENABLE_TOOLS=0
+    - cmake --build aom-build --config Release --target install
+    - ccache -s
+  artifacts:
+    untracked: false
+    expire_in: 1 day
+    paths:
+      - aom-prefix/
+
+Win64 FFmpeg (dav1d Static):
+  extends: .windows-ffmpeg-base
+  dependencies: []
+  variables:
+    DESTDIR: $CI_PROJECT_DIR/dav1d-prefix
+  script:
+    - git clone --depth 1 https://code.videolan.org/videolan/dav1d.git dav1d-src
+    - meson setup
+      --default-library static
+      --buildtype release
+      --libdir lib
+      --prefix "$env:PREFIX_DIR"
+      -Denable_tests=false
+      -Denable_examples=false
+      -Denable_tools=false
+      dav1d-build dav1d-src
+    - meson install -C dav1d-build
+    - ccache -s
+  artifacts:
+    untracked: false
+    expire_in: 1 day
+    paths:
+      - dav1d-prefix/
+
+Win64 FFmpeg (SVT-AV1 Static):
+  extends: .windows-ffmpeg-base
+  dependencies: []
+  variables:
+    DESTDIR: $CI_PROJECT_DIR/svtav1-prefix
+  script:
+    - cmake
+      -S .
+      -B svtav1-build
+      -DCMAKE_BUILD_TYPE=Release
+      -DBUILD_SHARED_LIBS=OFF
+      -DCMAKE_INSTALL_PREFIX="$env:PREFIX_DIR"
+      -DBUILD_APPS=OFF
+      -DREPRODUCIBLE_BUILDS=ON || $(
+      $ret = $LASTEXITCODE;
+      Get-Content svtav1-build/CMakeFiles/CMakeConfigureLog.yaml;
+      exit $ret
+      )
+    - cmake --build svtav1-build --config Release --target install
+    - ccache -s
+  artifacts:
+    untracked: false
+    expire_in: 1 day
+    paths:
+      - svtav1-prefix/
+
+Win64 FFmpeg (libvpx Static):
+  extends: .windows-ffmpeg-base
+  dependencies: []
+  variables:
+    # libvpx is a bit special in that it uses DIST_DIR as the variable instead of the semi-standard DESTDIR
+    DIST_DIR: $CI_PROJECT_DIR/libvpx-prefix
+  script:
+    - git clone --depth 1 https://chromium.googlesource.com/webm/libvpx libvpx-src
+    - mkdir vpx-build
+    - cd vpx-build
+    - dash ../libvpx-src/configure
+      --disable-dependency-tracking
+      --disable-docs
+      --disable-examples
+      --disable-libyuv
+      --disable-postproc
+      --disable-shared
+      --disable-tools
+      --disable-unit-tests
+      --disable-webm-io
+      --enable-postproc
+      --enable-runtime-cpu-detect
+      --enable-vp8 --enable-vp9
+      --enable-vp9-highbitdepth
+      --enable-vp9-postproc
+      --prefix="$env:PREFIX_DIR"
+    - make -j $((Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors + 2) install
+    - ccache -s
+  artifacts:
+    untracked: false
+    expire_in: 1 day
+    paths:
+      - libvpx-prefix/
+
+Win64 FFmpeg (vmaf Static):
+  extends: .windows-ffmpeg-base
+  dependencies: []
+  variables:
+    DESTDIR: $CI_PROJECT_DIR/vmaf-prefix
+  script:
+    - git clone --depth 1 https://github.com/Netflix/vmaf.git vmaf-src
+    - meson setup
+      --default-library static
+      --buildtype release
+      --libdir lib
+      --prefix "$env:PREFIX_DIR"
+      -Denable_tests=false
+      -Denable_docs=false
+      -Dbuilt_in_models=true
+      -Denable_float=true
+      vmaf-build vmaf-src/libvmaf
+    - meson install -C vmaf-build
+    - ccache -s
+  artifacts:
+    untracked: false
+    expire_in: 1 day
+    paths:
+      - vmaf-prefix/
+
+Win64 FFmpeg (Static):
+  extends: .windows-ffmpeg-base
+  stage: ffmpeg
+  cache:
+    key: "$CI_JOB_NAME_SLUG"
+    paths:
+      - .ccache
+      # We cache the build directory since, although ccache does help speed up compilation, the job can still take over an hour.
+      - ffmpeg-build/
+    policy: pull-push
+  before_script:
+    # Merge the artifacts from the dependency jobs into the expected locations for pkg-config
+    - Move-Item aom-prefix/msys64/mingw64/* $env:PREFIX_DIR -Force
+    - Move-Item dav1d-prefix/msys64/mingw64/* $env:PREFIX_DIR -Force
+    - Move-Item svtav1-prefix/msys64/mingw64/* $env:PREFIX_DIR -Force
+    # libvpx is a bit special again.
+    - Move-Item libvpx-prefix/* $env:PREFIX_DIR -Force
+    - Move-Item vmaf-prefix/msys64/mingw64/* $env:PREFIX_DIR -Force
+    - git clone --depth 1 https://github.com/FFmpeg/FFmpeg.git ffmpeg-src
+  script:
+    - pkg-config --modversion aom dav1d SvtAv1Enc libvmaf vpx
+    # Prep fingerprint for caching the build dir.
+    # This is composed of hashing the compiler + CFLAGS, CXXFLAGS, and LDFLAGS.
+    # If any of these change, the cache will be invalidated and a new build will be forced.
+    # The reason this isn't done in the key: is because we don't have a way to get the hash of the compilers themselves.
+    - |
+      $fingerprint = Invoke-Command -ScriptBlock {
+        $envHashes = 'CC', 'CXX', 'LD', 'CFLAGS', 'CXXFLAGS', 'LDFLAGS' |
+          ForEach-Object {
+            $val = Get-Content -LiteralPath env:$_ -ErrorAction SilentlyContinue
+            if ($null -eq $val) {
+              return
+            }
+            $ms = [IO.MemoryStream]::new([Text.Encoding]::UTF8.GetBytes($val))
+            $hash = [Security.Cryptography.SHA512]::HashData($ms)
+            $ms.Dispose()
+            '{0}:{1}' -f $_, ([BitConverter]::ToString($hash).Replace('-', ''))
+          }
+
+        $toolHashes = @($env:CC, $env:CXX, $env:LD) |
+          Where-Object { $_ -is [string] } |
+          ForEach-Object { $_ -split '\s+' } |
+          Where-Object { $_.Trim().Length -gt 0 } |
+          Sort-Object -Unique |
+          ForEach-Object {
+            if (($cmd = Get-Command -CommandType Application -Name $_ -ErrorAction SilentlyContinue)) {
+              $path = (Resolve-Path -LiteralPath $cmd.Source -ErrorAction SilentlyContinue).Path
+              $fileHash = Get-FileHash -Algorithm SHA512 -LiteralPath $path
+              '{0}:{1}' -f $path.ToLowerInvariant(), $fileHash.Hash
+            } else {
+              "${_}:[NotFound]"
+            }
+          }
+
+        $aggregateBytes = [Text.Encoding]::UTF8.GetBytes(($envHashes + $toolHashes -join "`n"))
+        $hashBytes = [Security.Cryptography.SHA512]::HashData($aggregateBytes)
+        [BitConverter]::ToString($hashBytes).Replace('-', '')
+      }
+    - $cachedPrint = (Get-Content -LiteralPath ffmpeg-build/.cacheid -ErrorAction SilentlyContinue) ?? ""
+    - |
+      if ($cachedPrint -ne $fingerprint) {
+        Write-Output "Cache miss: $cachedPrint != $fingerprint"
+        Remove-Item -LiteralPath ffmpeg-build -Recurse -Force -ErrorAction SilentlyContinue
+        New-Item -ItemType Directory -Path ffmpeg-build | Out-Null
+        Set-Content -LiteralPath ffmpeg-build/.cacheid -Value $fingerprint
+      } else {
+        Write-Output "Cache hit: $cachedPrint == $fingerprint"
+      }
+
+    - cd ffmpeg-build
+    - bash ../ffmpeg-src/configure
+      --arch=x86_64
+      --pkg-config-flags="--static"
+      --cc="${env:CC}"
+      --cxx="${env:CXX}"
+      --ld="${env:CXX}"
+      --disable-autodetect
+      --enable-gpl --enable-static
+      --prefix="$env:PREFIX_DIR"
+      --enable-libaom
+      --enable-libdav1d
+      --enable-libsvtav1
+      --enable-libvmaf
+      --enable-libvpx
+      --disable-shared || $(
+      $ret = $LASTEXITCODE;
+      Get-Content ffbuild/config.log;
+      exit $ret
+      )
+    - make -j $((Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors + 2) install
+    - cp ./ffmpeg.exe $env:CI_PROJECT_DIR
+    - ccache -s
+  artifacts:
+    untracked: false
+    expire_in: 30 day
+    paths:
+      - ffmpeg.exe
+  needs:
+    - job: Win64 FFmpeg (SVT-AV1 Static)
+      artifacts: true
+    - job: Win64 FFmpeg (aom Static)
+      artifacts: true
+    - job: Win64 FFmpeg (libvpx Static)
+      artifacts: true
+    - job: Win64 FFmpeg (dav1d Static)
+      artifacts: true
+    - job: Win64 FFmpeg (vmaf Static)
+      artifacts: true

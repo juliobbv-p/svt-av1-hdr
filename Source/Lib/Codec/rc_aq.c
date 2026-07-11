@@ -1,0 +1,726 @@
+/*
+* Copyright(c) 2026 Meta Platforms, Inc. and affiliates.
+*
+* This source code is subject to the terms of the BSD 2 Clause License and
+* the Alliance for Open Media Patent License 1.0. If the BSD 2 Clause License
+* was not distributed with this source code in the LICENSE file, you can
+* obtain it at https://www.aomedia.org/license/software-license. If the Alliance for Open
+* Media Patent License 1.0 was not distributed with this source code in the
+* PATENTS file, you can obtain it at https://www.aomedia.org/license/patent-license.
+*/
+
+#include "pcs.h"
+#include "sequence_control_set.h"
+#include "inv_transforms.h"
+#include "me_context.h"
+#include "utility.h"
+
+#include "rc_process.h"
+#include "resize.h"
+
+// These functions use formulaic calculations to make playing with the
+// quantizer tables easier. If necessary they can be replaced by lookup
+// tables if and when things settle down in the experimental Bitstream
+int32_t svt_av1_convert_qindex_to_q_fp8(int32_t qindex, EbBitDepth bit_depth) {
+    // Convert the index to a real Q value (scaled down to match old Q values)
+    switch (bit_depth) {
+    case EB_EIGHT_BIT:
+        return svt_aom_ac_quant_qtx(qindex, 0, bit_depth) << 6; // / 4.0;
+    case EB_TEN_BIT:
+        return svt_aom_ac_quant_qtx(qindex, 0, bit_depth) << 4; // / 16.0;
+    case EB_TWELVE_BIT:
+        return svt_aom_ac_quant_qtx(qindex, 0, bit_depth) << 3; // / 64.0;
+    default:
+        assert(0 && "bit_depth should be EB_EIGHT_BIT, EB_TEN_BIT or EB_TWELVE_BIT");
+        return -1;
+    }
+}
+
+int32_t svt_av1_compute_qdelta_fp(int32_t qstart_fp8, int32_t qtarget_fp8, EbBitDepth bit_depth) {
+    int32_t start_index  = MAXQ;
+    int32_t target_index = MAXQ;
+    int32_t i;
+
+    // Convert the average q value to an index.
+    for (i = MINQ; i < MAXQ; ++i) {
+        start_index = i;
+        if (svt_av1_convert_qindex_to_q_fp8(i, bit_depth) >= qstart_fp8) {
+            break;
+        }
+    }
+
+    // Convert the q target to an index
+    for (i = MINQ; i < MAXQ; ++i) {
+        target_index = i;
+        if (svt_av1_convert_qindex_to_q_fp8(i, bit_depth) >= qtarget_fp8) {
+            break;
+        }
+    }
+
+    return target_index - start_index;
+}
+
+int variance_comp_double(const void* a, const void* b) {
+    double aval = *(double*)a;
+    double bval = *(double*)b;
+
+    return aval > bval ? 1 : (aval < bval ? -1 : 0);
+}
+
+#define VAR_BOOST_MAX_PQ_DELTAQ_RANGE 120
+#define VAR_BOOST_MAX_PQ_QSTEP_RATIO_BOOST 14
+#define VAR_BOOST_MAX_DELTAQ_RANGE 80
+#define VAR_BOOST_MAX_QSTEP_RATIO_BOOST 8
+
+#define SUPERBLOCK_SIZE 64
+#define SUBBLOCK_SIZE 8
+#define SUBBLOCKS_IN_SB_DIM (SUPERBLOCK_SIZE / SUBBLOCK_SIZE)
+#define SUBBLOCKS_IN_SB (SUBBLOCKS_IN_SB_DIM * SUBBLOCKS_IN_SB_DIM)
+#define SUBBLOCKS_IN_OCTILE (SUBBLOCKS_IN_SB / 8)
+
+static int av1_get_deltaq_sb_variance_boost(uint8_t base_q_idx, uint64_t mean, double* variances, uint8_t strength,
+                                            EbBitDepth bit_depth, uint8_t octile, uint8_t curve) {
+    // boost q_index based on empirical visual testing, strength 2
+    // variance     qstep_ratio boost (@ base_q_idx 255)
+    // 256          1
+    // 64           1.330
+    // 16           1.769
+    // 4            2.354
+    // 1            3.132
+
+    // copy sb 8x8 variance values to an array for ordering
+    double ordered_variances[64];
+    memcpy(&ordered_variances, variances + ME_TIER_ZERO_PU_8x8_0, sizeof(double) * 64);
+    qsort(&ordered_variances, 64, sizeof(double), variance_comp_double);
+
+    assert(octile >= 1 && octile <= 8);
+
+    // Sample three 8x8 variance values:
+    // - at the specified octile
+    // - previous octile
+    // - next octile
+    // Make sure we use the last subblock in each octile as the
+    // representative of the octile.
+    int mid_idx = octile * SUBBLOCKS_IN_OCTILE - 1;
+    int low_idx = AOMMAX(SUBBLOCKS_IN_OCTILE - 1, mid_idx - SUBBLOCKS_IN_OCTILE);
+    int upp_idx = AOMMIN(SUBBLOCKS_IN_SB - 1, mid_idx + SUBBLOCKS_IN_OCTILE);
+
+    // Weigh the three variances in a 1:2:1 ratio.
+    // This allows for smoother delta-q transitions among superblocks with
+    // mixed-variance features.
+    double variance = (ordered_variances[low_idx] + 2 * ordered_variances[mid_idx] + ordered_variances[upp_idx]) / 4;
+
+#if DEBUG_VAR_BOOST
+    SVT_INFO("64x64 variance: %f\n", variances[ME_TIER_ZERO_PU_64x64]);
+    SVT_INFO("8x8 min %f, 1st oct %f, median %f, max %f\n",
+             ordered_variances[0],
+             ordered_variances[7],
+             ordered_variances[31],
+             ordered_variances[63]);
+    SVT_INFO("8x8 variances\n");
+    double* variances_row = variances + ME_TIER_ZERO_PU_8x8_0;
+
+    for (int row = 0; row < 8; row++) {
+        SVT_INFO("%5f %5f %5f %5f %5f %5f %5f %5f\n",
+                 variances_row[0],
+                 variances_row[1],
+                 variances_row[2],
+                 variances_row[3],
+                 variances_row[4],
+                 variances_row[5],
+                 variances_row[6],
+                 variances_row[7]);
+        variances_row += 8;
+    }
+#endif
+
+    // clip minimum variance to 1 or 0.25 (PQ transfer)
+    if (curve == 3) {
+        if (variance < 0.25) {
+            variance = 0.25;
+        }
+    } else {
+        if (variance < 1) {
+            variance = 1;
+        }
+    }
+
+    // compute a boost based on a fast-growing formula
+    // high and medium variance sbs essentially get no boost, while increasingly lower variance sbs get stronger boosts
+    assert(strength >= 1 && strength <= 4);
+    double       qstep_ratio    = 0;
+    const double strengths[]    = {0, 0.4, 0.8, 1.2, 1.8};
+    const double strengths_pq[] = {0, 0.65, 1.1, 1.6, 2.5};
+
+    switch (curve) {
+    case 1: /* 1: low-medium contrast boosting curve */
+        qstep_ratio = 0.25 * strength * (-log2(variance) + 8) + 1;
+        break;
+    case 2: /* 2: still picture curve, tuned for SSIMULACRA2 performance on CID22 */
+        qstep_ratio = 0.15 * strength * (-log2(variance) + 10) + 1;
+        break;
+    case 3: /* 3: PQ, HDR curve */
+        qstep_ratio = pow(1.018, strengths_pq[strength] * (-10 * log2(variance) + 80));
+        break;
+    default: /* 0: default q step ratio curve */
+        qstep_ratio = pow(1.018, strengths[strength] * (-10 * log2(variance) + 80));
+        break;
+    }
+
+    // PQ curve dark bias adjustment, reduce boost the darker the block
+    if (curve == 3 && mean <= 25000) {
+        // From 0.25 to 1.0
+        double dark_attenuation_ratio = 0.25 + 0.75 * ((mean * mean) / (25000.0 * 25000.0));
+        // Check if entire superblock is mixed variance, and don't apply adjustment otherwise
+        bool should_protect_block = variances[ME_TIER_ZERO_PU_64x64] > 256;
+
+        if (!should_protect_block) {
+            qstep_ratio = ((qstep_ratio - 1) * dark_attenuation_ratio + 1);
+        }
+    }
+
+    if (curve == 3) {
+        qstep_ratio = CLIP3(1, VAR_BOOST_MAX_PQ_QSTEP_RATIO_BOOST, qstep_ratio);
+    } else {
+        qstep_ratio = CLIP3(1, VAR_BOOST_MAX_QSTEP_RATIO_BOOST, qstep_ratio);
+    }
+
+    int32_t base_q   = svt_av1_convert_qindex_to_q_fp8(base_q_idx, bit_depth);
+    int32_t target_q = (int32_t)(base_q / qstep_ratio);
+    int32_t boost    = 0;
+
+    switch (curve) {
+    case 2: /* still picture boost, tuned for SSIMULACRA2 performance on CID22 */
+        boost = (int32_t)((base_q_idx + 544) * -svt_av1_compute_qdelta_fp(base_q, target_q, bit_depth) / (255 + 1024));
+        break;
+    case 3: /* HDR-optimized perceptual curve scaling */
+        boost = (int32_t)((base_q_idx + 2000) * -svt_av1_compute_qdelta_fp(base_q, target_q, bit_depth) / (255 + 2000));
+        break;
+    default: /* curve 0 & 1 boost (default) */
+        boost = (int32_t)((base_q_idx + 200) * -svt_av1_compute_qdelta_fp(base_q, target_q, bit_depth) / (255 + 200));
+        break;
+    }
+
+    int32_t max_range = (curve == 3) ? VAR_BOOST_MAX_PQ_DELTAQ_RANGE : VAR_BOOST_MAX_DELTAQ_RANGE;
+    boost             = AOMMIN(max_range, boost);
+
+#if DEBUG_VAR_BOOST
+    SVT_INFO("Variance: %f, Strength: %d, Q-step ratio: %f, Boost: %d, Base q: %d, Target q: %d\n",
+             variance,
+             strength,
+             qstep_ratio,
+             boost,
+             base_q,
+             target_q);
+#endif
+
+    return boost;
+}
+
+void svt_av1_variance_adjust_qp(PictureControlSet* pcs, bool readjust_base_q_idx) {
+    PictureParentControlSet* ppcs = pcs->ppcs;
+    SequenceControlSet*      scs  = ppcs->scs;
+
+    ppcs->frm_hdr.delta_q_params.delta_q_present = 1;
+
+    // super res pictures scaled with different sb count, should use sb_total_count for each picture
+    uint16_t sb_cnt = scs->sb_total_count;
+    if (ppcs->frame_superres_enabled || ppcs->frame_resize_enabled) {
+        sb_cnt = ppcs->b64_total_count;
+    }
+
+    uint8_t min_qindex = MAXQ;
+    uint8_t max_qindex = MINQ;
+    int32_t max_range  = (scs->static_config.variance_boost_curve == 3) ? VAR_BOOST_MAX_PQ_DELTAQ_RANGE
+                                                                        : VAR_BOOST_MAX_DELTAQ_RANGE;
+
+#if DEBUG_VAR_BOOST_STATS
+    SVT_DEBUG("TPL/CQP SB qindex, frame %llu, temp. level %i\n", pcs->picture_number, pcs->temporal_layer_index);
+
+    for (uint32_t sb_addr = 0; sb_addr < sb_cnt; ++sb_addr) {
+        SuperBlock* sb_ptr = pcs->sb_ptr_array[sb_addr];
+
+        SVT_DEBUG("%4d ", sb_ptr->qindex);
+
+        if (pcs->frame_width <= (sb_ptr->org_x + 64)) {
+            SVT_DEBUG("\n");
+        }
+    }
+    SVT_DEBUG("VAQ qindex boost, frame %llu, temp. level %i\n", pcs->picture_number, pcs->temporal_layer_index);
+#endif
+    for (uint32_t sb_addr = 0; sb_addr < sb_cnt; ++sb_addr) {
+        SuperBlock* sb_ptr = pcs->sb_ptr_array[sb_addr];
+
+        // adjust deltaq based on sb variance, with lower variance resulting in a lower qindex
+        int boost = av1_get_deltaq_sb_variance_boost(ppcs->frm_hdr.quantization_params.base_q_idx,
+                                                     ppcs->mean[sb_addr],
+                                                     ppcs->variance[sb_addr],
+                                                     scs->static_config.variance_boost_strength,
+                                                     scs->static_config.encoder_bit_depth,
+                                                     scs->static_config.variance_octile,
+                                                     scs->static_config.variance_boost_curve);
+#if DEBUG_VAR_BOOST_STATS
+        SVT_DEBUG("%4d ", boost);
+
+        if (pcs->frame_width <= (sb_ptr->org_x + 64)) {
+            SVT_DEBUG("\n");
+        }
+#endif
+        // don't clamp qindex on valid deltaq range yet
+        // we'll do it after adjusting frame qp to maximize deltaq frame range
+        // q_index 0 is lossless, and is currently not supported in SVT-AV1
+        sb_ptr->qindex = CLIP3(1, MAXQ, sb_ptr->qindex - boost);
+
+        // record last seen min and max qindexes for frame qp readjusting
+        min_qindex = AOMMIN(min_qindex, sb_ptr->qindex);
+        max_qindex = AOMMAX(max_qindex, sb_ptr->qindex);
+    }
+
+    // normalize and clamp frame qindex value to maximize deltaq range
+    int range                 = max_qindex - min_qindex;
+    range                     = AOMMIN(range, max_range);
+    int normalized_base_q_idx = (int)min_qindex + (range >> 1);
+
+#if DEBUG_VAR_BOOST_QP
+    SVT_INFO("previous qidx %d, min_qidx %d, max_qidx %d, delta_q_res %d, normalized qidx %d, range %d\n",
+             ppcs->frm_hdr.quantization_params.base_q_idx,
+             min_qindex,
+             max_qindex,
+             ppcs->frm_hdr.delta_q_params.delta_q_res,
+             normalized_base_q_idx,
+             range);
+#endif
+    if (readjust_base_q_idx) {
+        ppcs->frm_hdr.quantization_params.base_q_idx = normalized_base_q_idx;
+
+        ppcs->picture_qp = (uint8_t)CLIP3((int32_t)scs->static_config.min_qp_allowed,
+                                          (int32_t)scs->static_config.max_qp_allowed,
+                                          (ppcs->frm_hdr.quantization_params.base_q_idx + 2) >> 2);
+    }
+#if DEBUG_VAR_BOOST_STATS
+    SVT_DEBUG(
+        "Total CQP/CRF + VAQ qindex, frame %llu, temp. level %i\n", pcs->picture_number, pcs->temporal_layer_index);
+#endif
+
+    // normalize sb qindex values
+    for (uint32_t sb_addr = 0; sb_addr < sb_cnt; ++sb_addr) {
+        SuperBlock* sb_ptr = pcs->sb_ptr_array[sb_addr];
+
+        int offset = (int)sb_ptr->qindex - normalized_base_q_idx;
+        offset     = AOMMIN(offset, max_range >> 1);
+        offset     = AOMMAX(offset, -max_range >> 1);
+
+        // q_index 0 is lossless, and is currently not supported in SVT-AV1
+        uint8_t normalized_qindex = CLIP3(1, MAXQ, normalized_base_q_idx + offset);
+#if DEBUG_VAR_BOOST_STATS
+        SVT_DEBUG("%4d ", normalized_qindex);
+
+        if (pcs->frame_width <= (sb_ptr->org_x + 64)) {
+            SVT_DEBUG("\n");
+        }
+#endif
+
+#if DEBUG_VAR_BOOST_QP
+        SVT_INFO("  sb %d qindex: previous %d, normalized %d\n", sb_addr, sb_ptr->qindex, normalized_qindex);
+#endif
+        sb_ptr->qindex = normalized_qindex;
+    }
+}
+
+/******************************************************
+ * cyclic_sb_qp_derivation
+ * Calculates the QP per SB based on the ME statistics
+ * used in one pass encoding
+ * only works for sb size  = 64
+ ******************************************************/
+static const int BOOST_MAX = 10;
+// Maximum rate target ratio for setting segment delta-qp.
+#define CR_MAX_RATE_TARGET_RATIO 4.0
+
+static void cyclic_sb_qp_derivation(PictureControlSet* pcs) {
+    PictureParentControlSet* ppcs = pcs->ppcs;
+    CyclicRefresh*           cr   = &ppcs->cyclic_refresh;
+
+    ppcs->frm_hdr.delta_q_params.delta_q_present = 1;
+
+    uint64_t avg_me_dist = ppcs->norm_me_dist;
+
+    cr->actual_num_seg1_sbs = 0;
+    cr->actual_num_seg2_sbs = 0;
+    uint64_t seg2_dist      = 0;
+    for (uint32_t b64_idx = 0; b64_idx < ppcs->b64_total_count; ++b64_idx) {
+        int diff_dist = (int)(ppcs->me_8x8_distortion[b64_idx] - avg_me_dist);
+        if (b64_idx >= cr->sb_start && b64_idx < cr->sb_end && diff_dist < 0) {
+            seg2_dist += ppcs->me_8x8_distortion[b64_idx];
+            cr->actual_num_seg2_sbs++;
+        } else if (b64_idx >= cr->sb_start && b64_idx < cr->sb_end) {
+            cr->actual_num_seg1_sbs++;
+        }
+    }
+    if (!ppcs->sc_class1 && cr->actual_num_seg2_sbs) {
+        seg2_dist    = seg2_dist / cr->actual_num_seg2_sbs;
+        uint64_t dev = (avg_me_dist - seg2_dist) * 100 / avg_me_dist;
+        // Quadratic Scaling; boost = BOOST_MAX * (dev/100)^2
+        int boost = (int)(BOOST_MAX * dev * dev / (100 * 100)); // = /10000
+        cr->rate_boost_fac += boost;
+    }
+    int delta1 = svt_av1_compute_deltaq(ppcs, ppcs->frm_hdr.quantization_params.base_q_idx, cr->rate_ratio_qdelta);
+    int delta2 = svt_av1_compute_deltaq(
+        ppcs,
+        ppcs->frm_hdr.quantization_params.base_q_idx,
+        AOMMIN(CR_MAX_RATE_TARGET_RATIO, 0.1 * cr->rate_boost_fac * cr->rate_ratio_qdelta));
+    cr->qindex_delta[CR_SEGMENT_ID_BASE]   = 0;
+    cr->qindex_delta[CR_SEGMENT_ID_BOOST1] = delta1;
+    cr->qindex_delta[CR_SEGMENT_ID_BOOST2] = delta2;
+
+    for (uint32_t b64_idx = 0; b64_idx < ppcs->b64_total_count; ++b64_idx) {
+        int         diff_dist = (int)(ppcs->me_8x8_distortion[b64_idx] - avg_me_dist);
+        SuperBlock* sb        = pcs->sb_ptr_array[b64_idx];
+        int         offset    = 0;
+        if (b64_idx >= cr->sb_start && b64_idx < cr->sb_end && diff_dist < 0) {
+            offset = cr->qindex_delta[CR_SEGMENT_ID_BOOST2];
+
+        } else if (b64_idx >= cr->sb_start && b64_idx < cr->sb_end) {
+            offset = cr->qindex_delta[CR_SEGMENT_ID_BOOST1];
+        }
+        sb->qindex = CLIP3(1, MAXQ, ((int16_t)ppcs->frm_hdr.quantization_params.base_q_idx + (int16_t)offset));
+    }
+}
+
+/*
+* Derives a qindex per 64x64 using ME distortions (to be used for lambda modulation only; not at Q/Q-1)
+*/
+static void generate_b64_me_qindex_map(PictureControlSet* pcs) {
+    PictureParentControlSet* ppcs                            = pcs->ppcs;
+    static const int         min_offset[MAX_TEMPORAL_LAYERS] = {-8, -8, -8, -8, -8, -8};
+    static const int         max_offset[MAX_TEMPORAL_LAYERS] = {8, 8, 8, 8, 8, 8};
+    if (pcs->slice_type != I_SLICE &&
+        (min_offset[ppcs->temporal_layer_index] != 0 || max_offset[ppcs->temporal_layer_index] != 0)) {
+        uint64_t avg_me_dist = 0;
+        uint64_t min_dist    = (uint64_t)~0;
+        uint64_t max_dist    = 0;
+
+        for (uint32_t b64_idx = 0; b64_idx < ppcs->b64_total_count; ++b64_idx) {
+            avg_me_dist += ppcs->me_8x8_cost_variance[b64_idx];
+            min_dist = MIN(ppcs->me_8x8_cost_variance[b64_idx], min_dist);
+            max_dist = MAX(ppcs->me_8x8_cost_variance[b64_idx], max_dist);
+        }
+        avg_me_dist /= ppcs->b64_total_count;
+
+        for (uint32_t b64_idx = 0; b64_idx < ppcs->b64_total_count; ++b64_idx) {
+            int diff_dist = (int)(ppcs->me_8x8_cost_variance[b64_idx] - avg_me_dist);
+            int offset    = 0;
+            if (diff_dist <= 0) {
+                offset = (min_dist != avg_me_dist)
+                    ? min_offset[ppcs->temporal_layer_index] * diff_dist / (int)(min_dist - avg_me_dist)
+                    : 0;
+            } else {
+                offset = (max_dist != avg_me_dist)
+                    ? max_offset[ppcs->temporal_layer_index] * diff_dist / (int)(max_dist - avg_me_dist)
+                    : 0;
+            }
+
+            offset                      = AOMMIN(offset, 9 * 4 - 1);
+            offset                      = AOMMAX(offset, -9 * 4 + 1);
+            pcs->b64_me_qindex[b64_idx] = (uint8_t)CLIP3(
+                1, MAXQ, ppcs->frm_hdr.quantization_params.base_q_idx + offset);
+        }
+    } else {
+        for (uint32_t b64_idx = 0; b64_idx < ppcs->b64_total_count; ++b64_idx) {
+            pcs->b64_me_qindex[b64_idx] = ppcs->frm_hdr.quantization_params.base_q_idx;
+        }
+    }
+}
+
+static int svt_av1_get_deltaq_offset(EbBitDepth bit_depth, int qindex, double beta, bool is_intra) {
+    assert(beta > 0.0);
+    int q = svt_aom_dc_quant_qtx(qindex, 0, bit_depth);
+    int newq;
+    // use a less aggressive action when lowering the q for non I_slice
+    if (!is_intra && beta > 1) {
+        newq = (int)rint(q / sqrt(sqrt(beta)));
+    } else {
+        newq = (int)rint(q / sqrt(beta));
+    }
+    int orig_qindex = qindex;
+    if (newq == q) {
+        return 0;
+    }
+    if (newq < q) {
+        while (qindex > MINQ) {
+            qindex--;
+            q = svt_aom_dc_quant_qtx(qindex, 0, bit_depth);
+            if (newq >= q) {
+                break;
+            }
+        }
+    } else {
+        while (qindex < MAXQ) {
+            qindex++;
+            q = svt_aom_dc_quant_qtx(qindex, 0, bit_depth);
+            if (newq <= q) {
+                break;
+            }
+        }
+    }
+    return qindex - orig_qindex;
+}
+
+static void sb_setup_lambda(PictureControlSet* pcs, SuperBlock* sb_ptr) {
+    PictureParentControlSet* ppcs = pcs->ppcs;
+    SequenceControlSet*      scs  = ppcs->scs;
+
+    int mi_col = sb_ptr->org_x / 4;
+    int mi_row = sb_ptr->org_y / 4;
+
+    int mi_col_sr = coded_to_superres_mi(mi_col, ppcs->superres_denom);
+    assert(ppcs->enhanced_unscaled_pic);
+    // ALIGN_POWER_OF_TWO(pixels, 3) >> 2 ??
+    int mi_cols_sr     = ((ppcs->enhanced_unscaled_pic->width + 15) / 16) << 2;
+    int sb_mi_width_sr = coded_to_superres_mi(mi_size_wide[scs->seq_header.sb_size], ppcs->superres_denom);
+    int bsize_base     = ppcs->tpl_ctrls.synth_blk_size == 32 ? BLOCK_32X32 : BLOCK_16X16;
+    int num_mi_w       = mi_size_wide[bsize_base];
+    int num_mi_h       = mi_size_high[bsize_base];
+    int num_cols       = (mi_cols_sr + num_mi_w - 1) / num_mi_w;
+    int num_rows       = (ppcs->av1_cm->mi_rows + num_mi_h - 1) / num_mi_h;
+    int num_bcols      = (sb_mi_width_sr + num_mi_w - 1) / num_mi_w;
+    int num_brows      = (mi_size_high[scs->seq_header.sb_size] + num_mi_h - 1) / num_mi_h;
+
+    int row, col;
+
+    int32_t base_block_count = 0;
+    double  log_sum          = 0.0;
+
+    for (row = mi_row / num_mi_w; row < num_rows && row < mi_row / num_mi_w + num_brows; ++row) {
+        for (col = mi_col_sr / num_mi_h; col < num_cols && col < mi_col_sr / num_mi_h + num_bcols; ++col) {
+            int index = row * num_cols + col;
+            log_sum += log(ppcs->pa_me_data->tpl_rdmult_scaling_factors[index]);
+            ++base_block_count;
+        }
+    }
+    assert(base_block_count > 0);
+
+    EbBitDepth bit_depth   = pcs->hbd_md ? EB_TEN_BIT : EB_EIGHT_BIT;
+    double     orig_rdmult = svt_aom_compute_rd_mult(
+        pcs, ppcs->frm_hdr.quantization_params.base_q_idx, ppcs->frm_hdr.quantization_params.base_q_idx, bit_depth);
+    double new_rdmult = svt_aom_compute_rd_mult(
+        pcs, sb_ptr->qindex, svt_aom_get_me_qindex(pcs, sb_ptr, scs->seq_header.sb_size == BLOCK_128X128), bit_depth);
+    double scaling_factor = new_rdmult / orig_rdmult;
+    //double scale_adj = exp(log(scaling_factor) - log_sum / base_block_count);
+    double scale_adj = scaling_factor / exp(log_sum / base_block_count);
+
+    for (row = mi_row / num_mi_w; row < num_rows && row < mi_row / num_mi_w + num_brows; ++row) {
+        for (col = mi_col_sr / num_mi_h; col < num_cols && col < mi_col_sr / num_mi_h + num_bcols; ++col) {
+            int index                                              = row * num_cols + col;
+            ppcs->pa_me_data->tpl_sb_rdmult_scaling_factors[index] = scale_adj *
+                ppcs->pa_me_data->tpl_rdmult_scaling_factors[index];
+        }
+    }
+    ppcs->blk_lambda_tuning = true;
+}
+
+/******************************************************
+ * svt_aom_sb_qp_derivation_tpl_la
+ * Calculates the QP per SB based on the tpl statistics
+ * used in one pass and second pass of two pass encoding
+ ******************************************************/
+void svt_aom_sb_qp_derivation_tpl_la(PictureControlSet* pcs) {
+    PictureParentControlSet* ppcs = pcs->ppcs;
+    SequenceControlSet*      scs  = ppcs->scs;
+    if (ppcs->r0_delta_qp_quant) {
+        ppcs->frm_hdr.delta_q_params.delta_q_present = 1;
+    }
+
+    // super res pictures scaled with different sb count, should use sb_total_count for each picture
+    uint16_t sb_cnt = scs->sb_total_count;
+    if (ppcs->frame_superres_enabled || ppcs->frame_resize_enabled) {
+        sb_cnt = pcs->sb_total_count;
+    }
+    if (ppcs->r0_delta_qp_md && ppcs->tpl_is_valid == 1) {
+#if DEBUG_VAR_BOOST_STATS
+        SVT_DEBUG("TPL qindex boost, frame %llu, temp. level %i\n", pcs->picture_number, pcs->temporal_layer_index);
+#endif
+        for (uint32_t sb_addr = 0; sb_addr < sb_cnt; ++sb_addr) {
+            SuperBlock* sb_ptr = pcs->sb_ptr_array[sb_addr];
+            double      beta   = ppcs->pa_me_data->tpl_beta[sb_addr];
+            int         offset = svt_av1_get_deltaq_offset(
+                scs->static_config.encoder_bit_depth, sb_ptr->qindex, beta, ppcs->slice_type == I_SLICE);
+            offset = AOMMIN(offset, 9 * 4 - 1);
+            offset = AOMMAX(offset, -9 * 4 + 1);
+
+#if DEBUG_VAR_BOOST_STATS
+            SVT_DEBUG("%4d ", -offset);
+            if (pcs->frame_width <= (sb_ptr->org_x + 64)) {
+                SVT_DEBUG("\n");
+            }
+#endif
+            // read back SB qindex value, and add TPL boost on top
+            // q_index 0 is lossless, and is currently not supported in SVT-AV1
+            sb_ptr->qindex = CLIP3(1, MAXQ, (int16_t)sb_ptr->qindex + (int16_t)offset);
+
+            sb_setup_lambda(pcs, sb_ptr);
+        }
+    }
+}
+
+/******************************************************
+ * svt_av1_normalize_sb_delta_q
+ * Adjusts superblock delta q to the most optimal res
+ ******************************************************/
+void svt_av1_normalize_sb_delta_q(PictureControlSet* pcs) {
+    PictureParentControlSet* ppcs        = pcs->ppcs;
+    SequenceControlSet*      scs         = ppcs->scs;
+    uint8_t                  delta_q_res = ppcs->frm_hdr.delta_q_params.delta_q_res;
+
+    assert(delta_q_res == 2 || delta_q_res == 4 || delta_q_res == 8);
+
+    uint8_t mask              = ~(delta_q_res - 1);
+    uint8_t delta_q_remainder = (ppcs->frm_hdr.quantization_params.base_q_idx) & ~mask;
+    // Adjustment to push sb qindex toward the nearest multiple of delta_q_res, relative to base_q_idx
+    int8_t delta_q_adjustment = (delta_q_res - delta_q_remainder) - (delta_q_res / 2);
+
+    // super res pictures scaled with different sb count, should use sb_total_count for each picture
+    uint16_t sb_cnt = scs->sb_total_count;
+    if (ppcs->frame_superres_enabled || ppcs->frame_resize_enabled) {
+        sb_cnt = ppcs->b64_total_count;
+    }
+#if DEBUG_VAR_BOOST_STATS
+    SVT_LOG("Normalized delta q boost, frame %llu, temp. level %i, new delta_q_res %i\n",
+            pcs->picture_number,
+            pcs->temporal_layer_index,
+            delta_q_res);
+#endif
+    for (uint32_t sb_addr = 0; sb_addr < sb_cnt; ++sb_addr) {
+        SuperBlock* sb_ptr = pcs->sb_ptr_array[sb_addr];
+        // Adjust sb_qindex to minimize the difference between its pre- and post-normalization value
+        uint8_t adjusted_q_index   = CLIP3(1, MAXQ, sb_ptr->qindex + delta_q_adjustment);
+        uint8_t normalized_q_index = (adjusted_q_index & mask) + delta_q_remainder;
+
+        // q_index 0 is lossless, so do not use it when encoding in lossy mode
+        sb_ptr->qindex = normalized_q_index == 0 ? delta_q_res : normalized_q_index;
+#if DEBUG_VAR_BOOST_STATS
+        SVT_LOG("%4d ", sb_ptr->qindex);
+        if (pcs->frame_width <= (sb_ptr->org_x + 64)) {
+            SVT_LOG("\n");
+        }
+#endif
+    }
+}
+
+// Initialize SB qindex values and apply per-SB adjustments (variance boost, TPL, cyclic refresh).
+void svt_av1_rc_init_sb_qindex(PictureControlSet* pcs, SequenceControlSet* scs) {
+    PictureParentControlSet* ppcs    = pcs->ppcs;
+    FrameHeader*             frm_hdr = &ppcs->frm_hdr;
+
+    // set initial SB base_q_idx values
+    frm_hdr->delta_q_params.delta_q_present = 0;
+    for (int sb_addr = 0; sb_addr < pcs->sb_total_count; ++sb_addr) {
+        pcs->sb_ptr_array[sb_addr]->qindex = frm_hdr->quantization_params.base_q_idx;
+    }
+
+    // adjust SB qindex based on variance
+    // note: do not enable Variance Boost for CBR rate control mode
+    if (scs->static_config.enable_variance_boost && scs->enc_ctx->rc_cfg.mode != AOM_CBR) {
+        svt_av1_variance_adjust_qp(pcs, true);
+    }
+    // QPM with tpl_la
+    if (scs->static_config.aq_mode == 2 && ppcs->tpl_ctrls.enable && ppcs->r0 != 0) {
+        svt_aom_sb_qp_derivation_tpl_la(pcs);
+    }
+    if (ppcs->cyclic_refresh.apply_cyclic_refresh) {
+        cyclic_sb_qp_derivation(pcs);
+    }
+
+    if (frm_hdr->delta_q_params.delta_q_present && frm_hdr->delta_q_params.delta_q_res != 1) {
+        // adjust delta q res and normalize superblock delta q values to reduce signaling overhead
+        svt_av1_normalize_sb_delta_q(pcs);
+    }
+
+    // Derive a QP per 64x64 using ME distortions (to be used for lambda modulation only; not at Q/Q-1)
+    if (scs->stats_based_sb_lambda_modulation) {
+        generate_b64_me_qindex_map(pcs);
+    }
+}
+
+/******************************************************
+ *  svt_aom_cyclic_refresh_init
+ * Initial cyclic refresh parameters
+ ******************************************************/
+void svt_aom_cyclic_refresh_init(PictureParentControlSet* ppcs) {
+    SequenceControlSet* scs = ppcs->scs;
+    CyclicRefresh*      cr  = &ppcs->cyclic_refresh;
+
+    EncodeContext* enc_ctx = scs->enc_ctx;
+    RATE_CONTROL*  rc      = &enc_ctx->rc;
+
+    // Cases to reset the cyclic refresh adjustment parameters.
+    if (ppcs->slice_type == I_SLICE) {
+        // Reset adaptive elements for intra only frames and scene changes.
+        rc->percent_refresh_adjustment   = 5;
+        rc->rate_ratio_qdelta_adjustment = 0.25;
+    }
+
+    cr->percent_refresh = 20 + rc->percent_refresh_adjustment;
+
+    if (ppcs->sc_class1) {
+        cr->percent_refresh += 5;
+    }
+
+    cr->apply_cyclic_refresh = (ppcs->slice_type != I_SLICE &&
+                                (ppcs->scs->use_flat_ipp || ppcs->temporal_layer_index == 0));
+
+    int qp_thresh     = AOMMAX(16, rc->best_quality + 4);
+    int qp_max_thresh = 118 * MAXQ >> 7;
+
+    if (rc->avg_frame_qindex[INTER_FRAME] > qp_max_thresh) {
+        cr->apply_cyclic_refresh = 0;
+    }
+
+    if (rc->avg_frame_qindex[INTER_FRAME] < qp_thresh) {
+        cr->apply_cyclic_refresh = 0;
+    }
+
+    if (rc->avg_frame_low_motion && rc->avg_frame_low_motion < 50) {
+        cr->apply_cyclic_refresh = 0;
+    }
+
+    if (!cr->apply_cyclic_refresh) {
+        return;
+    }
+
+    uint16_t sb_cnt = scs->sb_total_count;
+
+    cr->sb_start            = scs->enc_ctx->cr_sb_end;
+    cr->sb_end              = cr->sb_start + sb_cnt * cr->percent_refresh / 100;
+    scs->enc_ctx->cr_sb_end = cr->sb_end >= sb_cnt ? 0 : cr->sb_end;
+
+    // Use larger delta - qp(increase rate_ratio_qdelta) for first few(~4)
+    // periods of the refresh cycle, after a key frame.
+    cr->max_qdelta_perc = 60;
+
+    // Use larger delta-qp (increase rate_ratio_qdelta) for first few
+    // refresh cycles after a key frame (svc) or scene change (non svc).
+    // For non svc screen content, after a scene change gradually reduce
+    // this boost and suppress it further if either of the previous two
+    // frames overshot.
+    if (cr->percent_refresh > 0) {
+        if (!ppcs->sc_class1) {
+            cr->rate_ratio_qdelta = ((uint64_t)rc->frames_since_key <
+                                     (uint64_t)(4 * (1 << scs->static_config.hierarchical_levels) * 100 /
+                                                cr->percent_refresh))
+                ? 1.50
+                : 1.15;
+            cr->rate_ratio_qdelta += rc->rate_ratio_qdelta_adjustment;
+            cr->rate_boost_fac = 15;
+        } else {
+            double distance_from_sc_factor = AOMMIN(0.75, (rc->frames_since_key / 10) * 0.1);
+            cr->rate_ratio_qdelta          = 2.25 + rc->rate_ratio_qdelta_adjustment - distance_from_sc_factor;
+            if (rc->rc_1_frame < 0 || rc->rc_2_frame < 0) {
+                cr->rate_ratio_qdelta -= 0.25;
+            }
+            cr->rate_boost_fac = 10;
+        }
+    } else {
+        cr->rate_ratio_qdelta = 1.50 + rc->rate_ratio_qdelta_adjustment;
+    }
+}
