@@ -113,13 +113,13 @@ Win64 Enc Test:
   extends: .windows-test-base
   script:
     - ./Bin/Release/SvtAv1EncApp.exe --preset 2 -i "$env:SVT_ENCTEST_FILENAME" -n 17 -b "test-pr-Windows-Release-${env:SVT_ENCTEST_BITNESS}bit-m2.ivf"
-    - ./Bin/Release/SvtAv1EncApp.exe --preset 2 --tune 5 -i "$env:SVT_ENCTEST_FILENAME" -n 17 -b "test-pr-Windows-Release-${env:SVT_ENCTEST_BITNESS}bit-m2-tune5.ivf"
+    - ./Bin/Release/SvtAv1EncApp.exe --preset 2 --tune 6 -i "$env:SVT_ENCTEST_FILENAME" -n 17 -b "test-pr-Windows-Release-${env:SVT_ENCTEST_BITNESS}bit-m2-tune5.ivf"
     - ./Bin/Release/SvtAv1EncApp.exe --preset 8 -i "$env:SVT_ENCTEST_FILENAME" -n 120 -b "test-pr-Windows-Release-${env:SVT_ENCTEST_BITNESS}bit-m8.ivf"
-    - ./Bin/Release/SvtAv1EncApp.exe --preset 8 --tune 5 -i "$env:SVT_ENCTEST_FILENAME" -n 120 -b "test-pr-Windows-Release-${env:SVT_ENCTEST_BITNESS}bit-m8-tune5.ivf"
+    - ./Bin/Release/SvtAv1EncApp.exe --preset 8 --tune 6 -i "$env:SVT_ENCTEST_FILENAME" -n 120 -b "test-pr-Windows-Release-${env:SVT_ENCTEST_BITNESS}bit-m8-tune5.ivf"
     - ./Bin/Debug/SvtAv1EncApp.exe --preset 2 -i "$env:SVT_ENCTEST_FILENAME" -n 17 -b "test-pr-Windows-Debug-${env:SVT_ENCTEST_BITNESS}bit-m2.ivf"
-    - ./Bin/Debug/SvtAv1EncApp.exe --preset 2 --tune 5 -i "$env:SVT_ENCTEST_FILENAME" -n 17 -b "test-pr-Windows-Debug-${env:SVT_ENCTEST_BITNESS}bit-m2-tune5.ivf"
+    - ./Bin/Debug/SvtAv1EncApp.exe --preset 2 --tune 6 -i "$env:SVT_ENCTEST_FILENAME" -n 17 -b "test-pr-Windows-Debug-${env:SVT_ENCTEST_BITNESS}bit-m2-tune5.ivf"
     - ./Bin/Debug/SvtAv1EncApp.exe --preset 8 -i "$env:SVT_ENCTEST_FILENAME" -n 120 -b "test-pr-Windows-Debug-${env:SVT_ENCTEST_BITNESS}bit-m8.ivf"
-    - ./Bin/Debug/SvtAv1EncApp.exe --preset 8 --tune 5 -i "$env:SVT_ENCTEST_FILENAME" -n 120 -b "test-pr-Windows-Debug-${env:SVT_ENCTEST_BITNESS}bit-m8-tune5.ivf"
+    - ./Bin/Debug/SvtAv1EncApp.exe --preset 8 --tune 6 -i "$env:SVT_ENCTEST_FILENAME" -n 120 -b "test-pr-Windows-Debug-${env:SVT_ENCTEST_BITNESS}bit-m8-tune5.ivf"
   parallel: !reference [.enc-test-parallel]
   artifacts: !reference [.enc-test-artifacts]
   needs:

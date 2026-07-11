@@ -21,7 +21,8 @@ set -- \
     ':!*.png' \
     ':!*.PNG' \
     ':!*.pdf' \
-    ':!*.avif'
+    ':!*.avif' \
+    ':!.github/workflows/pgo-build.yml'
 
 git config --global --add safe.directory "$REPO_DIR" || true
 
