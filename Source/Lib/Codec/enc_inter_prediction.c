@@ -2771,10 +2771,12 @@ static void av1_inter_prediction_pd0(SequenceControlSet* scs, ModeDecisionContex
     const uint8_t    is_compound     = has_second_ref(block_mi);
     uint16_t*        tmp_dstY        = ctx->tmp_conv_buf;
     const int32_t    conv_buf_stride = scs->super_block_size == 128 ? 128 : 64;
-    uint8_t*         dst_ptr         = pred->y_buffer + ((dst_origin_x + (dst_origin_y)*pred->y_stride));
+    const int32_t    bit_depth       = ctx->hbd_md ? EB_TEN_BIT : EB_EIGHT_BIT;
+    const uint8_t    is_16bit        = ctx->hbd_md ? 1 : 0;
+    uint8_t*         dst_ptr         = pred->y_buffer + ((dst_origin_x + (dst_origin_y)*pred->y_stride) << is_16bit);
     int32_t          dst_stride      = pred->y_stride;
 
-    ConvolveParams conv_params = get_conv_params_no_round(0, tmp_dstY, conv_buf_stride, is_compound, EB_EIGHT_BIT);
+    ConvolveParams conv_params = get_conv_params_no_round(0, tmp_dstY, conv_buf_stride, is_compound, bit_depth);
     for (int ref_itr = 0; ref_itr < 1 + is_compound; ref_itr++) {
         SubpelParams subpel_params = {SCALE_SUBPEL_SHIFTS, SCALE_SUBPEL_SHIFTS, 0, 0};
         int32_t      pos_x         = ref_origin_x + (block_mi->mv[ref_itr].x >> 3);
@@ -2809,8 +2811,24 @@ static void av1_inter_prediction_pd0(SequenceControlSet* scs, ModeDecisionContex
         }
 
         assert(IMPLIES(conv_params.do_average, is_compound));
-        enc_make_inter_predictor_pd0(
-            src_ptr, dst_ptr, &subpel_params, &conv_params, bwidth, bheight, ref_pic->y_stride, dst_stride);
+        if (is_16bit) {
+            uint8_t* src_ptr_2b = ADD_OFFSET_OR_NULL(ref_pic->y_buffer_bit_inc,
+                                                     pos_x + (pos_y)*ref_pic->y_stride_bit_inc);
+            svt_inter_predictor_light_pd1(src_ptr,
+                                          src_ptr_2b,
+                                          ref_pic->y_stride,
+                                          dst_ptr,
+                                          dst_stride,
+                                          bwidth,
+                                          bheight,
+                                          block_mi->interp_filters,
+                                          &subpel_params,
+                                          &conv_params,
+                                          bit_depth);
+        } else {
+            enc_make_inter_predictor_pd0(
+                src_ptr, dst_ptr, &subpel_params, &conv_params, bwidth, bheight, ref_pic->y_stride, dst_stride);
+        }
     }
 }
 

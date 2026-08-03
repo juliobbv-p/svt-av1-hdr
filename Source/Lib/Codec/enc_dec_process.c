@@ -1412,13 +1412,23 @@ static void copy_neighbour_arrays_pd0(PictureControlSet* pcs, ModeDecisionContex
                                       uint32_t dst_idx, uint32_t sb_org_x, uint32_t sb_org_y) {
     const uint16_t tile_idx = ctx->tile_index;
 
-    svt_aom_copy_neigh_arr(pcs->md_luma_recon_na[src_idx][tile_idx],
-                           pcs->md_luma_recon_na[dst_idx][tile_idx],
-                           sb_org_x, // blk org is always the top left of the SB
-                           sb_org_y,
-                           pcs->scs->super_block_size,
-                           pcs->scs->super_block_size,
-                           NEIGHBOR_ARRAY_UNIT_FULL_MASK);
+    if (ctx->hbd_md) {
+        svt_aom_copy_neigh_arr(pcs->md_luma_recon_na_16bit[src_idx][tile_idx],
+                               pcs->md_luma_recon_na_16bit[dst_idx][tile_idx],
+                               sb_org_x,
+                               sb_org_y,
+                               pcs->scs->super_block_size,
+                               pcs->scs->super_block_size,
+                               NEIGHBOR_ARRAY_UNIT_FULL_MASK);
+    } else {
+        svt_aom_copy_neigh_arr(pcs->md_luma_recon_na[src_idx][tile_idx],
+                               pcs->md_luma_recon_na[dst_idx][tile_idx],
+                               sb_org_x,
+                               sb_org_y,
+                               pcs->scs->super_block_size,
+                               pcs->scs->super_block_size,
+                               NEIGHBOR_ARRAY_UNIT_FULL_MASK);
+    }
 }
 
 void svt_aom_copy_neighbour_arrays(PictureControlSet* pcs, ModeDecisionContext* ctx, uint32_t src_idx, uint32_t dst_idx,
@@ -2991,8 +3001,6 @@ EbErrorType svt_aom_mode_decision_kernel_iter(void* context) {
                         md_ctx->pred_depth_only = 1;
                     }
 
-                    const uint8_t saved_hbd_md = SVT_EFFECTIVE_HBD_MD(md_ctx->hbd_md);
-                    md_ctx->hbd_md             = 0;
                     // Multi-Pass PD
                     if (!skip_pd_pass_0 && pcs->ppcs->multi_pass_pd_level == MULTI_PASS_PD_ON) {
                         // [PD_PASS_0]
@@ -3050,7 +3058,6 @@ EbErrorType svt_aom_mode_decision_kernel_iter(void* context) {
                                                       md_ctx->sb_origin_y >> 2,
                                                       md_ctx->sb_origin_x >> 2);
                     }
-                    md_ctx->hbd_md = saved_hbd_md;
                     // [PD_PASS_1] Signal(s) derivation
                     ed_ctx->md_ctx->pd_pass = PD_PASS_1;
                     // This classifier is used for the case PD0 is bypassed and for pd0_level 2
