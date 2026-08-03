@@ -1176,25 +1176,40 @@ uint32_t hadamard_path(ModeDecisionCandidateBuffer* cand_bf, ModeDecisionContext
                                     txbw,
                                     txbh);
 
-            switch (tx_size) {
-            case TX_4X4:
-                svt_aom_hadamard_4x4(res_ptr, cand_bf->residual->y_stride, &(coeff_ptr[0]));
-                break;
-
-            case TX_8X8:
-                svt_aom_hadamard_8x8(res_ptr, cand_bf->residual->y_stride, &(coeff_ptr[0]));
-                break;
-
-            case TX_16X16:
-                svt_aom_hadamard_16x16(res_ptr, cand_bf->residual->y_stride, &(coeff_ptr[0]));
-                break;
-
-            case TX_32X32:
-                svt_aom_hadamard_32x32(res_ptr, cand_bf->residual->y_stride, &(coeff_ptr[0]));
-                break;
-
-            default:
-                assert(0);
+            if (SVT_EFFECTIVE_HBD_MD(ctx->hbd_md)) {
+                switch (tx_size) {
+                case TX_4X4:
+                    svt_aom_hadamard_4x4(res_ptr, cand_bf->residual->y_stride, &(coeff_ptr[0]));
+                    break;
+                case TX_8X8:
+                    svt_aom_highbd_hadamard_8x8(res_ptr, cand_bf->residual->y_stride, &(coeff_ptr[0]));
+                    break;
+                case TX_16X16:
+                    svt_aom_highbd_hadamard_16x16(res_ptr, cand_bf->residual->y_stride, &(coeff_ptr[0]));
+                    break;
+                case TX_32X32:
+                    svt_aom_highbd_hadamard_32x32(res_ptr, cand_bf->residual->y_stride, &(coeff_ptr[0]));
+                    break;
+                default:
+                    assert(0);
+                }
+            } else {
+                switch (tx_size) {
+                case TX_4X4:
+                    svt_aom_hadamard_4x4(res_ptr, cand_bf->residual->y_stride, &(coeff_ptr[0]));
+                    break;
+                case TX_8X8:
+                    svt_aom_hadamard_8x8(res_ptr, cand_bf->residual->y_stride, &(coeff_ptr[0]));
+                    break;
+                case TX_16X16:
+                    svt_aom_hadamard_16x16(res_ptr, cand_bf->residual->y_stride, &(coeff_ptr[0]));
+                    break;
+                case TX_32X32:
+                    svt_aom_hadamard_32x32(res_ptr, cand_bf->residual->y_stride, &(coeff_ptr[0]));
+                    break;
+                default:
+                    assert(0);
+                }
             }
             satd_cost += svt_aom_satd(&(coeff_ptr[0]), tx_size_2d[tx_size]);
         }

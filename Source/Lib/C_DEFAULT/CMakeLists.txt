@@ -25,6 +25,7 @@ set(all_files
     encode_txb_ref_c.c
     encode_txb_ref_c.h
     filterintra_c.c
+    highbd_picture_operators_c.c
     inter_prediction_c.c
     intra_prediction_c.c
     pack_unpack_c.c
