@@ -55,29 +55,7 @@ class HadamardTestBase
 
     virtual int16_t Rand() = 0;
 
-    void CompareReferenceRandom() {
-        const int kMaxBlockSize = 32 * 32;
-        DECLARE_ALIGNED(16, int16_t, a[kMaxBlockSize]);
-        DECLARE_ALIGNED(16, OutputType, b[kMaxBlockSize]);
-        memset(a, 0, sizeof(a));
-        memset(b, 0, sizeof(b));
-
-        OutputType b_ref[kMaxBlockSize];
-        memset(b_ref, 0, sizeof(b_ref));
-
-        for (int i = 0; i < block_size_; ++i)
-            a[i] = Rand();
-
-        h_ref_func_(a, bwh_, b_ref);
-        h_func_(a, bwh_, b);
-
-        // The order of the output is not important. Sort before checking.
-        std::sort(b, b + block_size_);
-        std::sort(b_ref, b_ref + block_size_);
-        EXPECT_EQ(0, memcmp(b, b_ref, sizeof(b)));
-    }
-
-    void VaryStride() {
+    void CompareReferenceVaryStride() {
         const int kMaxBlockSize = 32 * 32;
         DECLARE_ALIGNED(16, int16_t, a[kMaxBlockSize * 8]);
         DECLARE_ALIGNED(16, OutputType, b[kMaxBlockSize]);
@@ -86,12 +64,16 @@ class HadamardTestBase
             a[i] = Rand();
 
         OutputType b_ref[kMaxBlockSize];
-        for (int i = bwh_; i < 64; i += 4) {
+        const int kStrides[] = {4, 8, 16, 24, 32, 40, 48, 56};
+        for (const int stride : kStrides) {
+            if (stride == 4 && bwh_ != 4)
+                continue;
+
             memset(b, 0, sizeof(b));
             memset(b_ref, 0, sizeof(b_ref));
 
-            h_ref_func_(a, i, b_ref);
-            h_func_(a, i, b);
+            h_ref_func_(a, stride, b_ref);
+            h_func_(a, stride, b);
 
             // The order of the output is not important. Sort before checking.
             std::sort(b, b + block_size_);
@@ -131,12 +113,8 @@ class HadamardLowbdTest : public HadamardTestBase<int32_t, HadamardFunc> {
     }
 };
 
-TEST_P(HadamardLowbdTest, CompareReferenceRandom) {
-    CompareReferenceRandom();
-}
-
-TEST_P(HadamardLowbdTest, VaryStride) {
-    VaryStride();
+TEST_P(HadamardLowbdTest, CompareReferenceVaryStride) {
+    CompareReferenceVaryStride();
 }
 
 #ifdef ARCH_X86_64
@@ -171,12 +149,8 @@ class HadamardHighbdTest : public HadamardTestBase<int32_t, HadamardFunc> {
     }
 };
 
-TEST_P(HadamardHighbdTest, CompareReferenceRandom) {
-    CompareReferenceRandom();
-}
-
-TEST_P(HadamardHighbdTest, VaryStride) {
-    VaryStride();
+TEST_P(HadamardHighbdTest, CompareReferenceVaryStride) {
+    CompareReferenceVaryStride();
 }
 
 #if ARCH_X86_64
