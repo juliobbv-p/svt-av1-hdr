@@ -97,17 +97,17 @@ static int32_t av1_transform_type_rate_estimation(ModeDecisionContext* ctx, uint
     // const MbModeInfo *mbmi = &xd->mi[0]->mbmi;
     // const int32_t is_inter = is_inter_block(mbmi);
 
-    if (get_ext_tx_types(transform_size, is_inter, reduced_tx_set_used) >
-        1 /*&&    !xd->lossless[xd->mi[0]->mbmi.segment_id]  WE ARE NOT LOSSLESS*/) {
+    // get_ext_tx_types() and get_ext_tx_set() each re-derive the set type from
+    // the same inputs; derive it once and index the tables directly.
+    const TxSetType tx_set_type = get_ext_tx_set_type(transform_size, is_inter, reduced_tx_set_used);
+    if (av1_num_ext_tx_set[tx_set_type] > 1 /*&&    !xd->lossless[xd->mi[0]->mbmi.segment_id]  WE ARE NOT LOSSLESS*/) {
         const TxSize square_tx_size = txsize_sqr_map[transform_size];
         assert(square_tx_size < EXT_TX_SIZES);
 
-        const int32_t ext_tx_set = get_ext_tx_set(transform_size, is_inter, reduced_tx_set_used);
+        const int32_t ext_tx_set = ext_tx_set_index[is_inter][tx_set_type];
         if (is_inter) {
             if (ext_tx_set > 0) {
                 if (allow_update_cdf) {
-                    const TxSetType tx_set_type = get_ext_tx_set_type(transform_size, is_inter, reduced_tx_set_used);
-
                     update_cdf(fc->inter_ext_tx_cdf[ext_tx_set][square_tx_size],
                                av1_ext_tx_ind[tx_set_type][transform_type],
                                av1_num_ext_tx_set[tx_set_type]);
@@ -123,8 +123,6 @@ static int32_t av1_transform_type_rate_estimation(ModeDecisionContext* ctx, uint
                     intra_dir = cand_bf->cand->block_mi.mode;
                 }
                 assert(intra_dir < INTRA_MODES);
-                const TxSetType tx_set_type = get_ext_tx_set_type(transform_size, is_inter, reduced_tx_set_used);
-
                 if (allow_update_cdf) {
                     update_cdf(fc->intra_ext_tx_cdf[ext_tx_set][square_tx_size][intra_dir],
                                av1_ext_tx_ind[tx_set_type][transform_type],
@@ -238,11 +236,13 @@ static INLINE int32_t av1_cost_coeffs_txb_loop_cost_one_eob(const TranLow* const
     return cost;
 }
 
-static INLINE int32_t av1_cost_coeffs_txb_loop_cost_eob(ModeDecisionContext* md_ctx, uint16_t eob,
-                                                        const int16_t* const scan, const TranLow* const qcoeff,
-                                                        int8_t* const coeff_contexts, const LvMapCoeffCost* coeff_costs,
-                                                        int16_t dc_sign_ctx, uint8_t* const levels, const int32_t bwl,
-                                                        TxType transform_type) {
+// Takes TxClass rather than TxType and is force-inlined, so the switch at the
+// call site instantiates one copy per class with tx_class a compile-time
+// constant, letting get_br_ctx() fold its class dispatch away in the loop.
+static AOM_FORCE_INLINE int32_t av1_cost_coeffs_txb_loop_cost_eob(
+    ModeDecisionContext* md_ctx, uint16_t eob, const int16_t* const scan, const TranLow* const qcoeff,
+    int8_t* const coeff_contexts, const LvMapCoeffCost* coeff_costs, int16_t dc_sign_ctx, uint8_t* const levels,
+    const int32_t bwl, TxClass tx_class) {
     const uint32_t cost_literal = av1_cost_literal(1);
     int32_t        cost         = 0;
 
@@ -264,7 +264,7 @@ static INLINE int32_t av1_cost_coeffs_txb_loop_cost_eob(ModeDecisionContext* md_
         if (v != 0) {
             cost += cost_literal;
             if (level > NUM_BASE_LEVELS) {
-                int32_t       ctx        = get_br_ctx(levels, pos, bwl, tx_type_to_class[transform_type]);
+                int32_t       ctx        = get_br_ctx(levels, pos, bwl, tx_class);
                 const int32_t base_range = level - 1 - NUM_BASE_LEVELS;
 
                 if (base_range < COEFF_BASE_RANGE) {
@@ -294,7 +294,7 @@ static INLINE int32_t av1_cost_coeffs_txb_loop_cost_eob(ModeDecisionContext* md_
             cost += coeff_costs->dc_sign_cost[dc_sign_ctx][sign];
 
             if (level > NUM_BASE_LEVELS) {
-                int32_t       ctx        = get_br_ctx(levels, 0, bwl, tx_type_to_class[transform_type]);
+                int32_t       ctx        = get_br_ctx(levels, 0, bwl, tx_class);
                 const int32_t base_range = level - 1 - NUM_BASE_LEVELS;
 
                 if (base_range < COEFF_BASE_RANGE) {
@@ -319,7 +319,7 @@ static INLINE int32_t av1_cost_coeffs_txb_loop_cost_eob(ModeDecisionContext* md_
         cost_literal_cnt += !!(qcoeff[pos]);
         const int32_t level = abs(qcoeff[pos]);
         if (level > NUM_BASE_LEVELS) {
-            int32_t       ctx        = get_br_ctx(levels, pos, bwl, tx_type_to_class[transform_type]);
+            int32_t       ctx        = get_br_ctx(levels, pos, bwl, tx_class);
             const int32_t base_range = level - 1 - NUM_BASE_LEVELS;
 
             cost += coeff_costs->base_cost[coeff_contexts[pos]][3];
@@ -454,8 +454,20 @@ uint64_t svt_av1_cost_coeffs_txb(ModeDecisionContext* ctx, uint8_t allow_update_
         return 0;
     }
 
-    cost += av1_cost_coeffs_txb_loop_cost_eob(
-        ctx, eob, scan, qcoeff, coeff_contexts, coeff_costs, dc_sign_ctx, levels, bwl, transform_type);
+#define COST_TXB_EOB_CASE(tx_class_literal)                                                                   \
+    case tx_class_literal:                                                                                    \
+        cost += av1_cost_coeffs_txb_loop_cost_eob(                                                            \
+            ctx, eob, scan, qcoeff, coeff_contexts, coeff_costs, dc_sign_ctx, levels, bwl, tx_class_literal); \
+        break;
+    switch (tx_class) {
+        COST_TXB_EOB_CASE(TX_CLASS_2D);
+        COST_TXB_EOB_CASE(TX_CLASS_HORIZ);
+        COST_TXB_EOB_CASE(TX_CLASS_VERT);
+#undef COST_TXB_EOB_CASE
+    default:
+        assert(false);
+        break;
+    }
     return cost;
 }
 
