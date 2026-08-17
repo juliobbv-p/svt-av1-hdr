@@ -67,6 +67,7 @@ target_sources(
   PUBLIC pic_analysis_neon.c
   PUBLIC pickrst_neon.c
   PUBLIC picture_operators_intrinsic_neon.c
+  PUBLIC resize_neon.c
   PUBLIC restoration_pick_neon.c
   PUBLIC sad_neon.c
   PUBLIC selfguided_neon.c

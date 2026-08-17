@@ -1467,6 +1467,8 @@ void svt_av1_apply_zz_based_temporal_filter_planewise_medium_hbd_neon(
     unsigned int block_height, int ss_x, int ss_y, uint32_t *y_accum, uint16_t *y_count, uint32_t *u_accum,
     uint16_t *u_count, uint32_t *v_accum, uint16_t *v_count, uint32_t encoder_bit_depth);
 
+void svt_av1_down2_symeven_neon(const uint8_t *const input, int length, uint8_t *output);
+
 void svt_ext_sad_calculation_32x32_64x64_neon(uint32_t *p_sad16x16, uint32_t *p_best_sad_32x32,
                                                 uint32_t *p_best_sad_64x64, uint32_t *p_best_mv32x32,
                                                 uint32_t *p_best_mv64x64, uint32_t mv, uint32_t *p_sad32x32);

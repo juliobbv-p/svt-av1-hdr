@@ -378,7 +378,7 @@ static PicSizeParam pic_size_vector[] = {
 INSTANTIATE_TEST_SUITE_P(
     Resize, ResizePlaneLbdTest,
     ::testing::Combine(::testing::ValuesIn(pic_size_vector),
-                       ::testing::Range(8, 16), ::testing::Values(8)));
+                       ::testing::Range(8, 17), ::testing::Values(8)));
 
 #if CONFIG_ENABLE_HIGH_BIT_DEPTH
 class ResizePlaneHbdTest : public ResizePlaneTest<uint16_t> {
@@ -532,4 +532,114 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::Combine(::testing::ValuesIn(pic_size_vector),
                        ::testing::Range(8, 16), ::testing::Values(10, 12)));
 #endif  // CONFIG_ENABLE_HIGH_BIT_DEPTH
+
+/**
+ * @brief Unit test for svt_av1_down2_symeven: compares the RTCD-dispatched
+ * implementation (Neon, via setup_test_env) against the plain C reference
+ * (via reset_test_env) for a range of lengths chosen to exercise all four
+ * branches of the C reference: short-input fallback, initial (left-clamped),
+ * middle (unclamped), and end (right-clamped) parts.
+ */
+typedef void (*Down2SymevenFunc)(const uint8_t *const input, int length,
+                                 uint8_t *output);
+
+// Compares the requested SIMD variant directly against the C reference,
+// rather than through the reset_test_env()/setup_test_env() RTCD toggle:
+// this kernel is only ever dispatched to a NEON or an AVX2 implementation,
+// and the two variants support different minimum input lengths, so picking
+// "the fastest available" per architecture would run the small lengths
+// below against whichever variant happens to be built for the host.
+class Down2SymevenTest
+    : public ::testing::TestWithParam<std::tuple<int, Down2SymevenFunc>> {
+  public:
+    Down2SymevenTest()
+        : length_(std::get<0>(GetParam())),
+          test_func_(std::get<1>(GetParam())),
+          rnd_(0, 255) {
+    }
+
+    void SetUp() override {
+        input_ = (uint8_t *)svt_aom_memalign(32, length_);
+        ASSERT_NE(input_, nullptr);
+        // output has (length_+1)/2 valid samples; allocate length_ and verify
+        // the untouched tail keeps its sentinel value in run_case() below, to
+        // catch a kernel writing past the true output size.
+        ref_output_ = (uint8_t *)svt_aom_memalign(32, length_);
+        ASSERT_NE(ref_output_, nullptr);
+        tst_output_ = (uint8_t *)svt_aom_memalign(32, length_);
+        ASSERT_NE(tst_output_, nullptr);
+    }
+
+    void TearDown() override {
+        svt_aom_free(input_);
+        svt_aom_free(ref_output_);
+        svt_aom_free(tst_output_);
+    }
+
+  protected:
+    void run_case() {
+        const int out_len = (length_ + 1) / 2;
+        memset(ref_output_, 0xAA, length_);
+        memset(tst_output_, 0xBB, length_);
+
+        svt_av1_down2_symeven_c(input_, length_, ref_output_);
+        test_func_(input_, length_, tst_output_);
+
+        for (int i = 0; i < out_len; i++) {
+            ASSERT_EQ(ref_output_[i], tst_output_[i])
+                << "mismatch at output index " << i << " for length "
+                << length_;
+        }
+        for (int i = out_len; i < length_; i++) {
+            ASSERT_EQ(ref_output_[i], 0xAA)
+                << "overrun past output index " << out_len << " for length "
+                << length_;
+            ASSERT_EQ(tst_output_[i], 0xBB)
+                << "overrun past output index " << out_len << " for length "
+                << length_;
+        }
+    }
+
+    int length_;
+    Down2SymevenFunc test_func_;
+    SVTRandom rnd_;
+    uint8_t *input_;
+    uint8_t *ref_output_;
+    uint8_t *tst_output_;
+};
+
+TEST_P(Down2SymevenTest, MatchTestWithRandomValue) {
+    for (int t = 0; t < min_test_times; t++) {
+        for (int i = 0; i < length_; i++) {
+            input_[i] = (uint8_t)rnd_.random();
+        }
+        run_case();
+    }
+}
+
+TEST_P(Down2SymevenTest, MatchTestWithZeroValue) {
+    memset(input_, 0, length_);
+    run_case();
+}
+
+TEST_P(Down2SymevenTest, MatchTestWithMaxValue) {
+    memset(input_, 255, length_);
+    run_case();
+}
+
+TEST_P(Down2SymevenTest, MatchTestWithAlternatingValue) {
+    for (int i = 0; i < length_; i++) {
+        input_[i] = (i & 1) ? 255 : 0;
+    }
+    run_case();
+}
+
+#ifdef ARCH_AARCH64
+INSTANTIATE_TEST_SUITE_P(
+    NEON, Down2SymevenTest,
+    ::testing::Combine(::testing::Values(2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22,
+                                         24, 30, 40, 64, 128, 255, 256, 257,
+                                         511, 512, 640, 1024, 1920, 3840),
+                       ::testing::Values(svt_av1_down2_symeven_neon)));
+#endif  // ARCH_AARCH64
 }  // namespace
