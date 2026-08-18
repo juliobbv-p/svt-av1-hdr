@@ -534,11 +534,10 @@ INSTANTIATE_TEST_SUITE_P(
 #endif  // CONFIG_ENABLE_HIGH_BIT_DEPTH
 
 /**
- * @brief Unit test for svt_av1_down2_symeven: compares the RTCD-dispatched
- * implementation (Neon, via setup_test_env) against the plain C reference
- * (via reset_test_env) for a range of lengths chosen to exercise all four
- * branches of the C reference: short-input fallback, initial (left-clamped),
- * middle (unclamped), and end (right-clamped) parts.
+ * @brief Unit test for svt_av1_down2_symeven: compares a SIMD variant
+ * against the plain C reference for a range of lengths chosen to exercise
+ * all four branches of the C reference: short-input fallback, initial
+ * (left-clamped), middle (unclamped), and end (right-clamped) parts.
  */
 typedef void (*Down2SymevenFunc)(const uint8_t *const input, int length,
                                  uint8_t *output);
@@ -607,6 +606,7 @@ class Down2SymevenTest
     uint8_t *ref_output_;
     uint8_t *tst_output_;
 };
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(Down2SymevenTest);
 
 TEST_P(Down2SymevenTest, MatchTestWithRandomValue) {
     for (int t = 0; t < min_test_times; t++) {
@@ -635,11 +635,59 @@ TEST_P(Down2SymevenTest, MatchTestWithAlternatingValue) {
 }
 
 #ifdef ARCH_AARCH64
+// The 8-wide Neon batch computes each output as two int16 partial sums
+// (filter[0]*p0 + filter[2]*p2, and filter[1]*p1 + filter[3]*p3) that are
+// combined with a saturating int16 add. Each partial sum's true worst case,
+// reachable because the 8 input bytes behind p0..p3 are independently
+// controllable, is designed to fit int16, but grouping the taps
+// differently would not: the MatchTestWithRandomValue/MaxValue/
+// AlternatingValue cases above don't happen to hit that worst case (their
+// per-tap pair values are correlated - e.g. all-max gives every pJ=510,
+// not the independent extremes below), so this test targets it directly.
+TEST(Down2SymevenAdversarialTest, MatchTestWithAdversarialTapPattern) {
+    const int length = 128;
+    uint8_t *input = (uint8_t *)svt_aom_memalign(32, length);
+    ASSERT_NE(input, nullptr);
+    uint8_t *ref_output = (uint8_t *)svt_aom_memalign(32, length);
+    ASSERT_NE(ref_output, nullptr);
+    uint8_t *tst_output = (uint8_t *)svt_aom_memalign(32, length);
+    ASSERT_NE(tst_output, nullptr);
+
+    // For center c, p0=input[c]+input[c+1], p1=input[c-1]+input[c+2],
+    // p2=input[c-2]+input[c+3], p3=input[c-3]+input[c+4]. Setting
+    // input[c-3..c+4] = {0,0,255,255,255,255,0,0} makes p0=p1=510, p2=p3=0
+    // - filter[0]*p0+filter[1]*p1 = 56*510+12*510 = 34680, which overflows
+    // int16 if taps 0 and 1 (rather than 0 and 2) were grouped together.
+    // The inverse pattern similarly maximizes the negative-coefficient
+    // taps (p2, p3) while zeroing p0, p1. Only even centers are ever
+    // evaluated, so the window must start at an odd offset (c-3, with c
+    // even) - starting at offset 21 lands on center 24, and 61 on 64.
+    memset(input, 128, length);
+    const uint8_t max_window[8] = {0, 0, 255, 255, 255, 255, 0, 0};
+    const uint8_t min_window[8] = {255, 255, 0, 0, 0, 0, 255, 255};
+    memcpy(input + 21, max_window, sizeof(max_window));
+    memcpy(input + 61, min_window, sizeof(min_window));
+
+    svt_av1_down2_symeven_c(input, length, ref_output);
+    svt_av1_down2_symeven_neon(input, length, tst_output);
+
+    const int out_len = (length + 1) / 2;
+    for (int i = 0; i < out_len; i++) {
+        ASSERT_EQ(ref_output[i], tst_output[i])
+            << "mismatch at output index " << i;
+    }
+
+    svt_aom_free(input);
+    svt_aom_free(ref_output);
+    svt_aom_free(tst_output);
+}
+
 INSTANTIATE_TEST_SUITE_P(
     NEON, Down2SymevenTest,
-    ::testing::Combine(::testing::Values(2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22,
-                                         24, 30, 40, 64, 128, 255, 256, 257,
-                                         511, 512, 640, 1024, 1920, 3840),
+    ::testing::Combine(::testing::Values(1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16,
+                                         18, 20, 22, 23, 24, 25, 30, 40, 64,
+                                         128, 255, 256, 257, 511, 512, 640,
+                                         1024, 1920, 3840),
                        ::testing::Values(svt_av1_down2_symeven_neon)));
 #endif  // ARCH_AARCH64
 }  // namespace
