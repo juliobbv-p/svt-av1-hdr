@@ -22,12 +22,8 @@ extern "C" {
 typedef enum EdgeDir { VERT_EDGE = 0, HORZ_EDGE = 1, NUM_EDGE_DIRS } EdgeDir;
 
 typedef struct Av1DeblockingParameters {
-    // length of the filter applied to the outer edge
     uint32_t filter_length;
-    // deblocking limits
-    const uint8_t* lim;
-    const uint8_t* mblim;
-    const uint8_t* hev_thr;
+    uint32_t level;
 } Av1DeblockingParameters;
 
 static const int32_t mode_lf_lut[] = {
