@@ -1005,73 +1005,27 @@ void svt_av1_fwd_txfm2d_8x8_avx2(int16_t* input, int32_t* coeff, uint32_t stride
     (void)bd;
 }
 
-static INLINE void convert_8x8_to_16x16(const __m256i* in, __m256i* out) {
-    int32_t row_index = 0;
-    int32_t dst_index = 0;
-    int32_t src_index = 0;
-
-    // row 0, 1, .., 7
-    do {
-        out[dst_index]     = in[src_index];
-        out[dst_index + 1] = in[src_index + 8];
-        dst_index += 2;
-        src_index += 1;
-        row_index += 1;
-    } while (row_index < 8);
-
-    // row 8, 9, ..., 15
-    src_index += 8;
-    do {
-        out[dst_index]     = in[src_index];
-        out[dst_index + 1] = in[src_index + 8];
-        dst_index += 2;
-        src_index += 1;
-        row_index += 1;
-    } while (row_index < 16);
-}
-
 static INLINE void load_buffer_16x16(const int16_t* input, __m256i* out, int32_t stride, int32_t flipud, int32_t fliplr,
                                      int32_t shift) {
-    __m256i in[32];
-    // Load 4 8x8 blocks
-    const int16_t* top_l = input;
-    const int16_t* top_r = input + 8;
-    const int16_t* bot_l = input + 8 * stride;
-    const int16_t* bot_r = input + 8 * stride + 8;
-
-    const int16_t* tmp;
-
-    if (flipud) {
-        // Swap left columns
-        tmp   = top_l;
-        top_l = bot_l;
-        bot_l = tmp;
-        // Swap right columns
-        tmp   = top_r;
-        top_r = bot_r;
-        bot_r = tmp;
+    // Direct row-major load (out[r*2+g] = row r, col-group g), avoiding a
+    // per-tile reshuffle.
+    for (int32_t r = 0; r < 16; ++r) {
+        const int32_t  sr = flipud ? (15 - r) : r;
+        const int16_t* p  = input + sr * stride;
+        const __m128i  lo = _mm_loadu_si128((const __m128i*)(p + 0)); // cols 0-7
+        const __m128i  hi = _mm_loadu_si128((const __m128i*)(p + 8)); // cols 8-15
+        __m256i        v0, v1;
+        if (fliplr) {
+            // full 16-col reverse: new cols 0-7 = reverse(old cols 8-15), etc.
+            v0 = _mm256_cvtepi16_epi32(mm_reverse_epi16(hi));
+            v1 = _mm256_cvtepi16_epi32(mm_reverse_epi16(lo));
+        } else {
+            v0 = _mm256_cvtepi16_epi32(lo);
+            v1 = _mm256_cvtepi16_epi32(hi);
+        }
+        out[r * 2 + 0] = _mm256_slli_epi32(v0, shift);
+        out[r * 2 + 1] = _mm256_slli_epi32(v1, shift);
     }
-
-    if (fliplr) {
-        // Swap top rows
-        tmp   = top_l;
-        top_l = top_r;
-        top_r = tmp;
-        // Swap bottom rows
-        tmp   = bot_l;
-        bot_l = bot_r;
-        bot_r = tmp;
-    }
-
-    // load first 8 columns
-    load_buffer_8x8(top_l, &in[0], stride, flipud, fliplr, shift);
-    load_buffer_8x8(bot_l, &in[16], stride, flipud, fliplr, shift);
-
-    // load second 8 columns
-    load_buffer_8x8(top_r, &in[8], stride, flipud, fliplr, shift);
-    load_buffer_8x8(bot_r, &in[24], stride, flipud, fliplr, shift);
-
-    convert_8x8_to_16x16(in, out);
 }
 
 static AOM_FORCE_INLINE void load_buffer_16x16_N2(const int16_t* input, __m256i* out, int32_t stride, int32_t flipud,
@@ -10225,6 +10179,225 @@ static AOM_FORCE_INLINE void write_buffer_8x8_N4(const __m256i* res, int32_t* ou
     _mm256_storeu_si256((__m256i*)(output + 7 * 8), zero256);
 }
 
+static INLINE void transpose_4rows_in_16x16_avx2(const __m256i* in, __m256i* out) {
+    // N4 column pass writes only in[0,2,4,6] (4 kept freqs); in[8,10,12,14] are never
+    // written. transpose_8x8_in_16x16 transposed those uninitialized rows into the high
+    // lanes of the result, which the row pass discards. Do only the real 4-row transpose;
+    // lanes 4-7 (filled from the same real vectors) flow solely into discarded high lanes.
+    __m256i out1[8];
+    TRANSPOSE_4X4_AVX2(in[0], in[2], in[4], in[6], out1[0], out1[1], out1[4], out1[5]);
+    out[0]  = yy_unpacklo_epi128(out1[0], out1[0]);
+    out[2]  = yy_unpacklo_epi128(out1[1], out1[1]);
+    out[4]  = yy_unpacklo_epi128(out1[4], out1[4]);
+    out[6]  = yy_unpacklo_epi128(out1[5], out1[5]);
+    out[8]  = yy_unpackhi_epi128(out1[0], out1[0]);
+    out[10] = yy_unpackhi_epi128(out1[1], out1[1]);
+    out[12] = yy_unpackhi_epi128(out1[4], out1[4]);
+    out[14] = yy_unpackhi_epi128(out1[5], out1[5]);
+}
+
+// 128-bit (4-lane) length-16 fdct, N4: keeps 4 outputs. Exact port of fdct16x16_N4_avx2's
+// per-column butterfly. Used for the N4 16x16 row pass where only 4 lanes are live.
+static INLINE void transpose_4x4_128_avx2(const __m128i* in, __m256i* out) {
+    const __m128i a0 = _mm_unpacklo_epi32(in[0], in[1]);
+    const __m128i a1 = _mm_unpackhi_epi32(in[0], in[1]);
+    const __m128i a2 = _mm_unpacklo_epi32(in[2], in[3]);
+    const __m128i a3 = _mm_unpackhi_epi32(in[2], in[3]);
+    out[0]           = _mm256_castsi128_si256(_mm_unpacklo_epi64(a0, a2));
+    out[2]           = _mm256_castsi128_si256(_mm_unpackhi_epi64(a0, a2));
+    out[4]           = _mm256_castsi128_si256(_mm_unpacklo_epi64(a1, a3));
+    out[6]           = _mm256_castsi128_si256(_mm_unpackhi_epi64(a1, a3));
+}
+
+static INLINE void fdct16_N4_128(const __m256i* in256, __m128i* out, int8_t bit) {
+    // Row pass: only the 4 live column-transform freqs (low 128 bits) of each column vector.
+    __m128i in[16];
+    for (int32_t k = 0; k < 8; ++k) {
+        in[k] = _mm256_castsi256_si128(in256[2 * k]);
+    }
+    for (int32_t k = 0; k < 8; ++k) {
+        in[k + 8] = _mm256_castsi256_si128(in256[16 + 2 * k]);
+    }
+    const int32_t* cospi    = cospi_arr(bit);
+    const __m128i  cospi32  = _mm_set1_epi32(cospi[32]);
+    const __m128i  cospim32 = _mm_set1_epi32(-cospi[32]);
+    const __m128i  cospi48  = _mm_set1_epi32(cospi[48]);
+    const __m128i  cospim48 = _mm_set1_epi32(-cospi[48]);
+    const __m128i  cospim16 = _mm_set1_epi32(-cospi[16]);
+    const __m128i  cospi56  = _mm_set1_epi32(cospi[56]);
+    const __m128i  cospi8   = _mm_set1_epi32(cospi[8]);
+    const __m128i  cospi60  = _mm_set1_epi32(cospi[60]);
+    const __m128i  cospi4   = _mm_set1_epi32(cospi[4]);
+    const __m128i  cospi12  = _mm_set1_epi32(cospi[12]);
+    const __m128i  cospi52  = _mm_set1_epi32(cospi[52]);
+    const __m128i  rnding   = _mm_set1_epi32(1 << (bit - 1));
+    (void)cospim48;
+    __m128i u[16], v[16], x;
+
+    // stage 1
+    u[0]  = _mm_add_epi32(in[0], in[15]);
+    u[15] = _mm_sub_epi32(in[0], in[15]);
+    u[1]  = _mm_add_epi32(in[1], in[14]);
+    u[14] = _mm_sub_epi32(in[1], in[14]);
+    u[2]  = _mm_add_epi32(in[2], in[13]);
+    u[13] = _mm_sub_epi32(in[2], in[13]);
+    u[3]  = _mm_add_epi32(in[3], in[12]);
+    u[12] = _mm_sub_epi32(in[3], in[12]);
+    u[4]  = _mm_add_epi32(in[4], in[11]);
+    u[11] = _mm_sub_epi32(in[4], in[11]);
+    u[5]  = _mm_add_epi32(in[5], in[10]);
+    u[10] = _mm_sub_epi32(in[5], in[10]);
+    u[6]  = _mm_add_epi32(in[6], in[9]);
+    u[9]  = _mm_sub_epi32(in[6], in[9]);
+    u[7]  = _mm_add_epi32(in[7], in[8]);
+    u[8]  = _mm_sub_epi32(in[7], in[8]);
+
+    // stage 2
+    v[0] = _mm_add_epi32(u[0], u[7]);
+    v[7] = _mm_sub_epi32(u[0], u[7]);
+    v[1] = _mm_add_epi32(u[1], u[6]);
+    v[6] = _mm_sub_epi32(u[1], u[6]);
+    v[2] = _mm_add_epi32(u[2], u[5]);
+    v[5] = _mm_sub_epi32(u[2], u[5]);
+    v[3] = _mm_add_epi32(u[3], u[4]);
+    v[4] = _mm_sub_epi32(u[3], u[4]);
+    v[8] = u[8];
+    v[9] = u[9];
+
+    v[10] = _mm_mullo_epi32(u[10], cospim32);
+    x     = _mm_mullo_epi32(u[13], cospi32);
+    v[10] = _mm_add_epi32(v[10], x);
+    v[10] = _mm_add_epi32(v[10], rnding);
+    v[10] = _mm_srai_epi32(v[10], bit);
+
+    v[13] = _mm_mullo_epi32(u[10], cospi32);
+    x     = _mm_mullo_epi32(u[13], cospim32);
+    v[13] = _mm_sub_epi32(v[13], x);
+    v[13] = _mm_add_epi32(v[13], rnding);
+    v[13] = _mm_srai_epi32(v[13], bit);
+
+    v[11] = _mm_mullo_epi32(u[11], cospim32);
+    x     = _mm_mullo_epi32(u[12], cospi32);
+    v[11] = _mm_add_epi32(v[11], x);
+    v[11] = _mm_add_epi32(v[11], rnding);
+    v[11] = _mm_srai_epi32(v[11], bit);
+
+    v[12] = _mm_mullo_epi32(u[11], cospi32);
+    x     = _mm_mullo_epi32(u[12], cospim32);
+    v[12] = _mm_sub_epi32(v[12], x);
+    v[12] = _mm_add_epi32(v[12], rnding);
+    v[12] = _mm_srai_epi32(v[12], bit);
+    v[14] = u[14];
+    v[15] = u[15];
+
+    // stage 3
+    u[0] = _mm_add_epi32(v[0], v[3]);
+    u[1] = _mm_add_epi32(v[1], v[2]);
+    u[4] = v[4];
+
+    u[5] = _mm_mullo_epi32(v[5], cospim32);
+    x    = _mm_mullo_epi32(v[6], cospi32);
+    u[5] = _mm_add_epi32(u[5], x);
+    u[5] = _mm_add_epi32(u[5], rnding);
+    u[5] = _mm_srai_epi32(u[5], bit);
+
+    u[6] = _mm_mullo_epi32(v[5], cospi32);
+    x    = _mm_mullo_epi32(v[6], cospim32);
+    u[6] = _mm_sub_epi32(u[6], x);
+    u[6] = _mm_add_epi32(u[6], rnding);
+    u[6] = _mm_srai_epi32(u[6], bit);
+
+    u[7]  = v[7];
+    u[8]  = _mm_add_epi32(v[8], v[11]);
+    u[11] = _mm_sub_epi32(v[8], v[11]);
+    u[9]  = _mm_add_epi32(v[9], v[10]);
+    u[10] = _mm_sub_epi32(v[9], v[10]);
+    u[12] = _mm_sub_epi32(v[15], v[12]);
+    u[15] = _mm_add_epi32(v[15], v[12]);
+    u[13] = _mm_sub_epi32(v[14], v[13]);
+    u[14] = _mm_add_epi32(v[14], v[13]);
+
+    // stage 4
+    u[0] = _mm_mullo_epi32(u[0], cospi32);
+    u[1] = _mm_mullo_epi32(u[1], cospi32);
+    v[0] = _mm_add_epi32(u[0], u[1]);
+    v[0] = _mm_add_epi32(v[0], rnding);
+    v[0] = _mm_srai_epi32(v[0], bit);
+
+    v[4] = _mm_add_epi32(u[4], u[5]);
+    v[7] = _mm_add_epi32(u[7], u[6]);
+    v[8] = u[8];
+
+    v[9] = _mm_mullo_epi32(u[9], cospim16);
+    x    = _mm_mullo_epi32(u[14], cospi48);
+    v[9] = _mm_add_epi32(v[9], x);
+    v[9] = _mm_add_epi32(v[9], rnding);
+    v[9] = _mm_srai_epi32(v[9], bit);
+
+    v[14] = _mm_mullo_epi32(u[9], cospi48);
+    x     = _mm_mullo_epi32(u[14], cospim16);
+    v[14] = _mm_sub_epi32(v[14], x);
+    v[14] = _mm_add_epi32(v[14], rnding);
+    v[14] = _mm_srai_epi32(v[14], bit);
+
+    v[10] = _mm_mullo_epi32(u[10], cospim48);
+    x     = _mm_mullo_epi32(u[13], cospim16);
+    v[10] = _mm_add_epi32(v[10], x);
+    v[10] = _mm_add_epi32(v[10], rnding);
+    v[10] = _mm_srai_epi32(v[10], bit);
+
+    v[13] = _mm_mullo_epi32(u[10], cospim16);
+    x     = _mm_mullo_epi32(u[13], cospim48);
+    v[13] = _mm_sub_epi32(v[13], x);
+    v[13] = _mm_add_epi32(v[13], rnding);
+    v[13] = _mm_srai_epi32(v[13], bit);
+
+    v[11] = u[11];
+    v[12] = u[12];
+    v[15] = u[15];
+
+    // stage 5
+    u[0] = v[0];
+
+    u[4] = _mm_mullo_epi32(v[4], cospi56);
+    x    = _mm_mullo_epi32(v[7], cospi8);
+    u[4] = _mm_add_epi32(u[4], x);
+    u[4] = _mm_add_epi32(u[4], rnding);
+    u[4] = _mm_srai_epi32(u[4], bit);
+
+    u[8]  = _mm_add_epi32(v[8], v[9]);
+    u[11] = _mm_add_epi32(v[11], v[10]);
+    u[12] = _mm_add_epi32(v[12], v[13]);
+    u[15] = _mm_add_epi32(v[15], v[14]);
+
+    // stage 6
+    v[0] = u[0];
+    v[4] = u[4];
+
+    v[8] = _mm_mullo_epi32(u[8], cospi60);
+    x    = _mm_mullo_epi32(u[15], cospi4);
+    v[8] = _mm_add_epi32(v[8], x);
+    v[8] = _mm_add_epi32(v[8], rnding);
+    v[8] = _mm_srai_epi32(v[8], bit);
+
+    v[12] = _mm_mullo_epi32(u[11], cospi52);
+    x     = _mm_mullo_epi32(u[12], cospi12);
+    v[12] = _mm_sub_epi32(x, v[12]);
+    v[12] = _mm_add_epi32(v[12], rnding);
+    v[12] = _mm_srai_epi32(v[12], bit);
+
+    out[0] = v[0];
+    out[1] = v[8];
+    out[2] = v[4];
+    out[3] = v[12];
+}
+
+static INLINE void fdct16x16_N4_row_128(const __m256i* in, __m256i* out, int8_t bit) {
+    __m128i rowo[4];
+    fdct16_N4_128(in, rowo, bit);
+    transpose_4x4_128_avx2(rowo, out);
+}
+
 static INLINE void write_buffer_16x16_N4(const __m256i* res, int32_t* output) {
     int32_t       fact = -1, index = -1;
     const __m256i zero    = _mm256_setzero_si256();
@@ -10294,6 +10467,16 @@ static AOM_FORCE_INLINE void col_txfm_32x8_N4_rounding(__m256i* in, int32_t shif
 
 static AOM_FORCE_INLINE void col_txfm_16x16_N4_rounding(__m256i* in, int32_t shift) {
     col_txfm_8x8_rounding(&in[0], shift);
+}
+
+// IDTX N4 keeps only the 4 even lanes (rows 0-3, low col-group); the identity col
+// pass writes only those, so round just them and never touch the untouched odd lanes.
+static AOM_FORCE_INLINE void col_txfm_16x16_N4_rounding_idtx(__m256i* in, int32_t shift) {
+    const __m256i rounding = _mm256_set1_epi32(1 << (shift - 1));
+    in[0]                  = _mm256_srai_epi32(_mm256_add_epi32(in[0], rounding), shift);
+    in[2]                  = _mm256_srai_epi32(_mm256_add_epi32(in[2], rounding), shift);
+    in[4]                  = _mm256_srai_epi32(_mm256_add_epi32(in[4], rounding), shift);
+    in[6]                  = _mm256_srai_epi32(_mm256_add_epi32(in[6], rounding), shift);
 }
 
 static INLINE void av1_round_shift_array_32_N4_avx2(__m256i* input, __m256i* output, const int32_t size,
@@ -12809,8 +12992,104 @@ void svt_av1_fwd_txfm2d_8x8_N4_avx2(int16_t* input, int32_t* coeff, uint32_t str
     (void)bd;
 }
 
+// out = round_shift(in0*w0 + in1*w1, bit), int16 lanes, full int16 cospi weights.
+static INLINE __m256i btf16_madd_avx2(int16_t w0, int16_t w1, __m256i in0, __m256i in1, __m256i rnd, int bit) {
+    const __m256i wp = _mm256_set1_epi32((int32_t)(((uint32_t)(uint16_t)w1 << 16) | (uint16_t)w0));
+    const __m256i lo = _mm256_unpacklo_epi16(in0, in1);
+    const __m256i hi = _mm256_unpackhi_epi16(in0, in1);
+    return _mm256_packs_epi32(_mm256_srai_epi32(_mm256_add_epi32(_mm256_madd_epi16(lo, wp), rnd), bit),
+                              _mm256_srai_epi32(_mm256_add_epi32(_mm256_madd_epi16(hi, wp), rnd), bit));
+}
+
+// cospi32 rotation via doubling multiply: add=(a+b)*c32, sub=(a-b)*c32 (round-shifted).
+static INLINE void btf16_c32_avx2(__m256i w32, __m256i a, __m256i b, __m256i* add, __m256i* sub) {
+    *add = _mm256_mulhrs_epi16(_mm256_adds_epi16(a, b), w32);
+    *sub = _mm256_mulhrs_epi16(_mm256_subs_epi16(a, b), w32);
+}
+
+// int16 pruned N4 column pass for the 8-bit 16x16 DCT. Loads 16 rows (<<shift[0]=2),
+// runs a pruned length-16 fdct computing ONLY the 4 kept low frequencies (full-cospi
+// madd + mulhrs for cospi32), rounds (>>shift[1]=2) and writes them as int32 in the
+// int32 N4 column layout out[k*2+g] (k=freq 0..3, g=0/1 -> cols 0-7 / 8-15). Column
+// values fit int16 (16-pt DC <= 16320), so this is bit-exact with the int32 column.
+static INLINE void fdct16_N4_col16_avx2(const int16_t* input, uint32_t stride, __m256i* out) {
+    const int32_t* cs  = cospi_arr(13); // fwd_cos_bit_col[TX_16X16] = 13
+    const __m256i  rnd = _mm256_set1_epi32(1 << 12);
+    const __m256i  w32 = _mm256_set1_epi16((short)(cs[32] << 2));
+    const __m256i  r2  = _mm256_set1_epi16(2);
+    const int16_t  c16 = (int16_t)cs[16], c48 = (int16_t)cs[48], c8 = (int16_t)cs[8], c56 = (int16_t)cs[56];
+    const int16_t  c4 = (int16_t)cs[4], c60 = (int16_t)cs[60], c12 = (int16_t)cs[12], c52 = (int16_t)cs[52];
+    __m256i        in[16], u[16], v[16], cout[4];
+    for (int r = 0; r < 16; r++) {
+        in[r] = _mm256_slli_epi16(_mm256_loadu_si256((const __m256i*)(input + r * stride)), 2);
+    }
+    // stage 1
+    for (int i = 0; i < 8; i++) {
+        u[i]      = _mm256_adds_epi16(in[i], in[15 - i]);
+        u[15 - i] = _mm256_subs_epi16(in[i], in[15 - i]);
+    }
+    // stage 2
+    for (int i = 0; i < 4; i++) {
+        v[i]     = _mm256_adds_epi16(u[i], u[7 - i]);
+        v[7 - i] = _mm256_subs_epi16(u[i], u[7 - i]);
+    }
+    v[8]  = u[8];
+    v[9]  = u[9];
+    v[14] = u[14];
+    v[15] = u[15];
+    btf16_c32_avx2(w32, u[13], u[10], &v[13], &v[10]);
+    btf16_c32_avx2(w32, u[12], u[11], &v[12], &v[11]);
+    // stage 3
+    u[0] = _mm256_adds_epi16(v[0], v[3]);
+    u[1] = _mm256_adds_epi16(v[1], v[2]);
+    u[4] = v[4];
+    btf16_c32_avx2(w32, v[6], v[5], &u[6], &u[5]);
+    u[7]  = v[7];
+    u[8]  = _mm256_adds_epi16(v[8], v[11]);
+    u[11] = _mm256_subs_epi16(v[8], v[11]);
+    u[9]  = _mm256_adds_epi16(v[9], v[10]);
+    u[10] = _mm256_subs_epi16(v[9], v[10]);
+    u[12] = _mm256_subs_epi16(v[15], v[12]);
+    u[15] = _mm256_adds_epi16(v[15], v[12]);
+    u[13] = _mm256_subs_epi16(v[14], v[13]);
+    u[14] = _mm256_adds_epi16(v[14], v[13]);
+    // stage 4
+    v[0]  = _mm256_mulhrs_epi16(_mm256_adds_epi16(u[0], u[1]), w32);
+    v[4]  = _mm256_adds_epi16(u[4], u[5]);
+    v[7]  = _mm256_adds_epi16(u[7], u[6]);
+    v[8]  = u[8];
+    v[9]  = btf16_madd_avx2((int16_t)-c16, c48, u[9], u[14], rnd, 13);
+    v[14] = btf16_madd_avx2(c48, c16, u[9], u[14], rnd, 13);
+    v[10] = btf16_madd_avx2((int16_t)-c48, (int16_t)-c16, u[10], u[13], rnd, 13);
+    v[13] = btf16_madd_avx2((int16_t)-c16, c48, u[10], u[13], rnd, 13);
+    v[11] = u[11];
+    v[12] = u[12];
+    v[15] = u[15];
+    // stage 5
+    u[4]  = btf16_madd_avx2(c56, c8, v[4], v[7], rnd, 13);
+    u[8]  = _mm256_adds_epi16(v[8], v[9]);
+    u[11] = _mm256_adds_epi16(v[11], v[10]);
+    u[12] = _mm256_adds_epi16(v[12], v[13]);
+    u[15] = _mm256_adds_epi16(v[15], v[14]);
+    // stage 6 (only the 4 kept frequencies)
+    cout[0] = v[0]; // freq0
+    cout[2] = u[4]; // freq2
+    cout[1] = btf16_madd_avx2(c60, c4, u[8], u[15], rnd, 13); // freq1
+    cout[3] = btf16_madd_avx2(c12, (int16_t)-c52, u[12], u[11], rnd, 13); // freq3
+    // round (>>shift[1]=2) and widen to the int32 N4 column layout
+    for (int k = 0; k < 4; k++) {
+        const __m256i x = _mm256_srai_epi16(_mm256_adds_epi16(cout[k], r2), 2);
+        out[k * 2 + 0]  = _mm256_cvtepi16_epi32(_mm256_castsi256_si128(x));
+        out[k * 2 + 1]  = _mm256_cvtepi16_epi32(_mm256_extracti128_si256(x, 1));
+    }
+}
+
 void svt_av1_fwd_txfm2d_16x16_N4_avx2(int16_t* input, int32_t* coeff, uint32_t stride, TxType tx_type, uint8_t bd) {
-    __m256i       in[32] = {_mm256_setzero_si256()}, out[32] = {_mm256_setzero_si256()};
+    // No zero-init needed: the N4 transform only computes the top-left quarter and
+    // every untouched scratch lane flows exclusively into discarded high lanes
+    // (the final transpose_4x4 zeroes them via unpacklo(.,zero) and write_buffer
+    // keeps only the low 128 bits). Avoids two 1024-byte memsets per call.
+    __m256i       in[32], out[32];
     const int8_t* shift   = fwd_txfm_shift_ls[TX_16X16];
     const int32_t txw_idx = get_txw_idx(TX_16X16);
     const int32_t txh_idx = get_txh_idx(TX_16X16);
@@ -12819,26 +13098,29 @@ void svt_av1_fwd_txfm2d_16x16_N4_avx2(int16_t* input, int32_t* coeff, uint32_t s
     case IDTX:
         load_buffer_4x16_in_16x16(input, in, stride, 0, 0, shift[0]);
         fidtx16x16_N4_avx2(in, out, fwd_cos_bit_col[txw_idx][txh_idx], col_num, 2);
-        col_txfm_16x16_N4_rounding(out, -shift[1]);
+        col_txfm_16x16_N4_rounding_idtx(out, -shift[1]);
         fidtx16x16_N4_avx2(out, out, fwd_cos_bit_row[txw_idx][txh_idx], col_num, 2);
         write_buffer_16x16_N4(out, coeff);
         break;
     case DCT_DCT:
-        load_buffer_16x16(input, in, stride, 0, 0, shift[0]);
-        fdct16x16_N4_avx2(in, out, fwd_cos_bit_col[txw_idx][txh_idx], col_num, col_num);
-        col_txfm_16x16_N4_rounding(out, -shift[1]);
-        transpose_8x8_in_16x16_avx2(out, in); //top-left -> top-left
-        transpose_8x8_in_16x16_avx2(out + 1, in + 16); //top-right ->bottom-left
-        fdct16x16_N4_avx2(in, out, fwd_cos_bit_row[txw_idx][txh_idx], col_num, 1);
-        transpose_4x4_in_16x16_avx2(out, in);
-        write_buffer_16x16_N4(in, coeff);
+        if (bd == EB_EIGHT_BIT) {
+            fdct16_N4_col16_avx2(input, stride, out);
+        } else {
+            load_buffer_16x16(input, in, stride, 0, 0, shift[0]);
+            fdct16x16_N4_avx2(in, out, fwd_cos_bit_col[txw_idx][txh_idx], col_num, col_num);
+            col_txfm_16x16_N4_rounding(out, -shift[1]);
+        }
+        transpose_4rows_in_16x16_avx2(out, in); //top-left -> top-left
+        transpose_4rows_in_16x16_avx2(out + 1, in + 16); //top-right ->bottom-left
+        fdct16x16_N4_row_128(in, out, fwd_cos_bit_row[txw_idx][txh_idx]);
+        write_buffer_16x16_N4(out, coeff);
         break;
     case ADST_DCT:
         load_buffer_16x16(input, in, stride, 0, 0, shift[0]);
         fadst16x16_N4_avx2(in, out, fwd_cos_bit_col[txw_idx][txh_idx], col_num, col_num);
         col_txfm_16x16_N4_rounding(out, -shift[1]);
-        transpose_8x8_in_16x16_avx2(out, in); //top-left -> top-left
-        transpose_8x8_in_16x16_avx2(out + 1, in + 16); //top-right ->bottom-left
+        transpose_4rows_in_16x16_avx2(out, in); //top-left -> top-left
+        transpose_4rows_in_16x16_avx2(out + 1, in + 16); //top-right ->bottom-left
         fdct16x16_N4_avx2(in, out, fwd_cos_bit_row[txw_idx][txh_idx], col_num, 1);
         transpose_4x4_in_16x16_avx2(out, in);
         write_buffer_16x16_N4(in, coeff);
@@ -12847,8 +13129,8 @@ void svt_av1_fwd_txfm2d_16x16_N4_avx2(int16_t* input, int32_t* coeff, uint32_t s
         load_buffer_16x16(input, in, stride, 0, 0, shift[0]);
         fdct16x16_N4_avx2(in, out, fwd_cos_bit_col[txw_idx][txh_idx], col_num, col_num);
         col_txfm_16x16_N4_rounding(out, -shift[1]);
-        transpose_8x8_in_16x16_avx2(out, in); //top-left -> top-left
-        transpose_8x8_in_16x16_avx2(out + 1, in + 16); //top-right ->bottom-left
+        transpose_4rows_in_16x16_avx2(out, in); //top-left -> top-left
+        transpose_4rows_in_16x16_avx2(out + 1, in + 16); //top-right ->bottom-left
         fadst16x16_N4_avx2(in, out, fwd_cos_bit_row[txw_idx][txh_idx], col_num, 1);
         transpose_4x4_in_16x16_avx2(out, in);
         write_buffer_16x16_N4(in, coeff);
@@ -12857,8 +13139,8 @@ void svt_av1_fwd_txfm2d_16x16_N4_avx2(int16_t* input, int32_t* coeff, uint32_t s
         load_buffer_16x16(input, in, stride, 0, 0, shift[0]);
         fadst16x16_N4_avx2(in, out, fwd_cos_bit_col[txw_idx][txh_idx], col_num, col_num);
         col_txfm_16x16_N4_rounding(out, -shift[1]);
-        transpose_8x8_in_16x16_avx2(out, in); //top-left -> top-left
-        transpose_8x8_in_16x16_avx2(out + 1, in + 16); //top-right ->bottom-left
+        transpose_4rows_in_16x16_avx2(out, in); //top-left -> top-left
+        transpose_4rows_in_16x16_avx2(out + 1, in + 16); //top-right ->bottom-left
         fadst16x16_N4_avx2(in, out, fwd_cos_bit_row[txw_idx][txh_idx], col_num, 1);
         transpose_4x4_in_16x16_avx2(out, in);
         write_buffer_16x16_N4(in, coeff);
@@ -12867,8 +13149,8 @@ void svt_av1_fwd_txfm2d_16x16_N4_avx2(int16_t* input, int32_t* coeff, uint32_t s
         load_buffer_16x16(input, in, stride, 0, 1, shift[0]);
         fdct16x16_N4_avx2(in, out, fwd_cos_bit_col[txw_idx][txh_idx], col_num, col_num);
         col_txfm_16x16_N4_rounding(out, -shift[1]);
-        transpose_8x8_in_16x16_avx2(out, in); //top-left -> top-left
-        transpose_8x8_in_16x16_avx2(out + 1, in + 16); //top-right ->bottom-left
+        transpose_4rows_in_16x16_avx2(out, in); //top-left -> top-left
+        transpose_4rows_in_16x16_avx2(out + 1, in + 16); //top-right ->bottom-left
         fadst16x16_N4_avx2(in, out, fwd_cos_bit_row[txw_idx][txh_idx], col_num, 1);
         transpose_4x4_in_16x16_avx2(out, in);
         write_buffer_16x16_N4(in, coeff);
@@ -12877,8 +13159,8 @@ void svt_av1_fwd_txfm2d_16x16_N4_avx2(int16_t* input, int32_t* coeff, uint32_t s
         load_buffer_16x16(input, in, stride, 1, 0, shift[0]);
         fadst16x16_N4_avx2(in, out, fwd_cos_bit_col[txw_idx][txh_idx], col_num, col_num);
         col_txfm_16x16_N4_rounding(out, -shift[1]);
-        transpose_8x8_in_16x16_avx2(out, in); //top-left -> top-left
-        transpose_8x8_in_16x16_avx2(out + 1, in + 16); //top-right ->bottom-left
+        transpose_4rows_in_16x16_avx2(out, in); //top-left -> top-left
+        transpose_4rows_in_16x16_avx2(out + 1, in + 16); //top-right ->bottom-left
         fdct16x16_N4_avx2(in, out, fwd_cos_bit_row[txw_idx][txh_idx], col_num, 1);
         transpose_4x4_in_16x16_avx2(out, in);
         write_buffer_16x16_N4(in, coeff);
@@ -12887,8 +13169,8 @@ void svt_av1_fwd_txfm2d_16x16_N4_avx2(int16_t* input, int32_t* coeff, uint32_t s
         load_buffer_16x16(input, in, stride, 1, 1, shift[0]);
         fadst16x16_N4_avx2(in, out, fwd_cos_bit_col[txw_idx][txh_idx], col_num, col_num);
         col_txfm_16x16_N4_rounding(out, -shift[1]);
-        transpose_8x8_in_16x16_avx2(out, in); //top-left -> top-left
-        transpose_8x8_in_16x16_avx2(out + 1, in + 16); //top-right ->bottom-left
+        transpose_4rows_in_16x16_avx2(out, in); //top-left -> top-left
+        transpose_4rows_in_16x16_avx2(out + 1, in + 16); //top-right ->bottom-left
         fadst16x16_N4_avx2(in, out, fwd_cos_bit_row[txw_idx][txh_idx], col_num, 1);
         transpose_4x4_in_16x16_avx2(out, in);
         write_buffer_16x16_N4(in, coeff);
@@ -12897,8 +13179,8 @@ void svt_av1_fwd_txfm2d_16x16_N4_avx2(int16_t* input, int32_t* coeff, uint32_t s
         load_buffer_16x16(input, in, stride, 0, 1, shift[0]);
         fadst16x16_N4_avx2(in, out, fwd_cos_bit_col[txw_idx][txh_idx], col_num, col_num);
         col_txfm_16x16_N4_rounding(out, -shift[1]);
-        transpose_8x8_in_16x16_avx2(out, in); //top-left -> top-left
-        transpose_8x8_in_16x16_avx2(out + 1, in + 16); //top-right ->bottom-left
+        transpose_4rows_in_16x16_avx2(out, in); //top-left -> top-left
+        transpose_4rows_in_16x16_avx2(out + 1, in + 16); //top-right ->bottom-left
         fadst16x16_N4_avx2(in, out, fwd_cos_bit_row[txw_idx][txh_idx], col_num, 1);
         transpose_4x4_in_16x16_avx2(out, in);
         write_buffer_16x16_N4(in, coeff);
@@ -12907,8 +13189,8 @@ void svt_av1_fwd_txfm2d_16x16_N4_avx2(int16_t* input, int32_t* coeff, uint32_t s
         load_buffer_16x16(input, in, stride, 1, 0, shift[0]);
         fadst16x16_N4_avx2(in, out, fwd_cos_bit_col[txw_idx][txh_idx], col_num, col_num);
         col_txfm_16x16_N4_rounding(out, -shift[1]);
-        transpose_8x8_in_16x16_avx2(out, in); //top-left -> top-left
-        transpose_8x8_in_16x16_avx2(out + 1, in + 16); //top-right ->bottom-left
+        transpose_4rows_in_16x16_avx2(out, in); //top-left -> top-left
+        transpose_4rows_in_16x16_avx2(out + 1, in + 16); //top-right ->bottom-left
         fadst16x16_N4_avx2(in, out, fwd_cos_bit_row[txw_idx][txh_idx], col_num, 1);
         transpose_4x4_in_16x16_avx2(out, in);
         write_buffer_16x16_N4(in, coeff);
@@ -12924,8 +13206,8 @@ void svt_av1_fwd_txfm2d_16x16_N4_avx2(int16_t* input, int32_t* coeff, uint32_t s
         load_buffer_4x16_in_16x16(input, in, stride, 0, 0, shift[0]);
         fidtx16x16_N4_avx2(in, in, fwd_cos_bit_col[txw_idx][txh_idx], col_num, 1);
         col_txfm_16x16_N4_rounding(in, -shift[1]);
-        transpose_8x8_in_16x16_avx2(in, out); //top-left -> top-left
-        transpose_8x8_in_16x16_avx2(in + 1, out + 16); //top-right ->bottom-left
+        transpose_4rows_in_16x16_avx2(in, out); //top-left -> top-left
+        transpose_4rows_in_16x16_avx2(in + 1, out + 16); //top-right ->bottom-left
         fdct16x16_N4_avx2(out, in, fwd_cos_bit_row[txw_idx][txh_idx], col_num, 1);
         transpose_4x4_in_16x16_avx2(in, out);
         write_buffer_16x16_N4(out, coeff);
@@ -12941,8 +13223,8 @@ void svt_av1_fwd_txfm2d_16x16_N4_avx2(int16_t* input, int32_t* coeff, uint32_t s
         load_buffer_4x16_in_16x16(input, in, stride, 0, 0, shift[0]);
         fidtx16x16_N4_avx2(in, in, fwd_cos_bit_col[txw_idx][txh_idx], col_num, 1);
         col_txfm_16x16_N4_rounding(in, -shift[1]);
-        transpose_8x8_in_16x16_avx2(in, out); //top-left -> top-left
-        transpose_8x8_in_16x16_avx2(in + 1, out + 16); //top-right ->bottom-left
+        transpose_4rows_in_16x16_avx2(in, out); //top-left -> top-left
+        transpose_4rows_in_16x16_avx2(in + 1, out + 16); //top-right ->bottom-left
         fadst16x16_N4_avx2(out, in, fwd_cos_bit_row[txw_idx][txh_idx], col_num, 1);
         transpose_4x4_in_16x16_avx2(in, out);
         write_buffer_16x16_N4(out, coeff);
@@ -12958,8 +13240,8 @@ void svt_av1_fwd_txfm2d_16x16_N4_avx2(int16_t* input, int32_t* coeff, uint32_t s
         load_buffer_4x16_in_16x16(input, in, stride, 0, 1, shift[0]);
         fidtx16x16_N4_avx2(in, in, fwd_cos_bit_col[txw_idx][txh_idx], col_num, 1);
         col_txfm_16x16_N4_rounding(in, -shift[1]);
-        transpose_8x8_in_16x16_avx2(in, out); //top-left -> top-left
-        transpose_8x8_in_16x16_avx2(in + 1, out + 16); //top-right ->bottom-left
+        transpose_4rows_in_16x16_avx2(in, out); //top-left -> top-left
+        transpose_4rows_in_16x16_avx2(in + 1, out + 16); //top-right ->bottom-left
         fadst16x16_N4_avx2(out, in, fwd_cos_bit_row[txw_idx][txh_idx], col_num, 1);
         transpose_4x4_in_16x16_avx2(in, out);
         write_buffer_16x16_N4(out, coeff);
