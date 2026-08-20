@@ -243,8 +243,8 @@ static INLINE int is_neighbor_overlappable(const MbModeInfo* mbmi) {
     return mbmi->block_mi.ref_frame[0] > INTRA_FRAME;
 }
 
-static INLINE int32_t is_mv_valid(const Mv* mv) {
-    return mv->y > MV_LOW && mv->y < MV_UPP && mv->x > MV_LOW && mv->x < MV_UPP;
+static INLINE int32_t is_mv_valid(const Mv mv) {
+    return mv.y > MV_LOW && mv.y < MV_UPP && mv.x > MV_LOW && mv.x < MV_UPP;
 }
 
 #define CHECK_BACKWARD_REFS(ref_frame) (((ref_frame) >= BWDREF_FRAME) && ((ref_frame) <= ALTREF_FRAME))

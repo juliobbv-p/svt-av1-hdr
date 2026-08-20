@@ -1768,7 +1768,7 @@ class PmeSadLoopTest
 
         PmeSadLoopKernel func_c_ = svt_pme_sad_loop_kernel_c;
 
-        mv_cost_params.ref_mv = &ref_mv;
+        mv_cost_params.ref_mv = ref_mv;
         mv_cost_params.full_ref_mv = {
             {(int16_t)GET_MV_RAWPEL(76), (int16_t)GET_MV_RAWPEL(23)}};
         mv_cost_params.mv_cost_type = MV_COST_ENTROPY;
@@ -1849,7 +1849,7 @@ class PmeSadLoopTest
 
         prepare_data();
 
-        mv_cost_params.ref_mv = &ref_mv;
+        mv_cost_params.ref_mv = ref_mv;
         mv_cost_params.full_ref_mv = {
             {(int16_t)GET_MV_RAWPEL(76), (int16_t)GET_MV_RAWPEL(23)}};
         mv_cost_params.mv_cost_type = MV_COST_ENTROPY;

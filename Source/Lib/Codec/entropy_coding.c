@@ -1492,10 +1492,10 @@ static MvJointType av1_get_mv_joint_diff(const int32_t diff[const 2]) {
     return diff[1] == 0 ? MV_JOINT_HZVNZ : MV_JOINT_HNZVNZ;
 }
 
-void svt_av1_encode_mv(PictureParentControlSet* pcs, AomWriter* ec_writer, const Mv* mv, const Mv* ref,
+void svt_av1_encode_mv(PictureParentControlSet* pcs, AomWriter* ec_writer, const Mv mv, const Mv ref,
                        NmvContext* mvctx, int32_t usehp) {
     // The y-component (row component) of the MV is coded first
-    int32_t           diff[2] = {mv->y - ref->y, mv->x - ref->x};
+    int32_t           diff[2] = {mv.y - ref.y, mv.x - ref.x};
     const MvJointType j       = av1_get_mv_joint_diff(diff);
 
     if (pcs->frm_hdr.force_integer_mv) {
@@ -4374,15 +4374,15 @@ static void write_palette_mode_info(PictureParentControlSet* ppcs, FRAME_CONTEXT
     }
 }
 
-void svt_av1_encode_dv(AomWriter* w, const Mv* mv, const Mv* ref, NmvContext* mvctx) {
+void svt_av1_encode_dv(AomWriter* w, const Mv mv, const Mv ref, NmvContext* mvctx) {
     // DV and ref DV should not have sub-pel.
-    assert((mv->x & 7) == 0);
-    assert((mv->y & 7) == 0);
-    assert((ref->x & 7) == 0);
-    assert((ref->y & 7) == 0);
+    assert((mv.x & 7) == 0);
+    assert((mv.y & 7) == 0);
+    assert((ref.x & 7) == 0);
+    assert((ref.y & 7) == 0);
     // The y-component (row component) of the MV is coded first
-    const Mv          diff = {{mv->x - ref->x, mv->y - ref->y}};
-    const MvJointType j    = svt_av1_get_mv_joint(&diff);
+    const Mv          diff = {{mv.x - ref.x, mv.y - ref.y}};
+    const MvJointType j    = svt_av1_get_mv_joint(diff);
 
     aom_write_symbol(w, j, mvctx->joints_cdf, MV_JOINTS);
     if (mv_joint_vertical(j)) {
@@ -4407,7 +4407,7 @@ static void write_intrabc_info(FRAME_CONTEXT* ec_ctx, MbModeInfo* mbmi, EcBlkStr
         //assert(mbmi->motion_mode == SIMPLE_TRANSLATION);
         Mv dv_ref = blk_ptr->predmv[0];
         Mv mv     = mbmi->block_mi.mv[INTRA_FRAME];
-        svt_av1_encode_dv(w, &mv, &dv_ref, &ec_ctx->ndvc);
+        svt_av1_encode_dv(w, mv, dv_ref, &ec_ctx->ndvc);
     }
 }
 
@@ -5221,7 +5221,7 @@ static EbErrorType write_modes_b(PictureControlSet* pcs, EntropyCodingContext* e
 
                         Mv mv = mbmi->block_mi.mv[ref];
 
-                        svt_av1_encode_mv(pcs->ppcs, ec_writer, &mv, &ref_mv, nmvc, frm_hdr->allow_high_precision_mv);
+                        svt_av1_encode_mv(pcs->ppcs, ec_writer, mv, ref_mv, nmvc, frm_hdr->allow_high_precision_mv);
                     }
                 } else if (inter_mode == NEAREST_NEWMV || inter_mode == NEAR_NEWMV) {
                     NmvContext* nmvc   = &frame_context->nmvc;
@@ -5229,14 +5229,14 @@ static EbErrorType write_modes_b(PictureControlSet* pcs, EntropyCodingContext* e
 
                     Mv mv = mbmi->block_mi.mv[1];
 
-                    svt_av1_encode_mv(pcs->ppcs, ec_writer, &mv, &ref_mv, nmvc, frm_hdr->allow_high_precision_mv);
+                    svt_av1_encode_mv(pcs->ppcs, ec_writer, mv, ref_mv, nmvc, frm_hdr->allow_high_precision_mv);
                 } else if (inter_mode == NEW_NEARESTMV || inter_mode == NEW_NEARMV) {
                     NmvContext* nmvc   = &frame_context->nmvc;
                     Mv          ref_mv = blk_ptr->predmv[0];
 
                     Mv mv = mbmi->block_mi.mv[0];
 
-                    svt_av1_encode_mv(pcs->ppcs, ec_writer, &mv, &ref_mv, nmvc, frm_hdr->allow_high_precision_mv);
+                    svt_av1_encode_mv(pcs->ppcs, ec_writer, mv, ref_mv, nmvc, frm_hdr->allow_high_precision_mv);
                 }
                 if (scs->seq_header.enable_interintra_compound && svt_aom_is_interintra_allowed(mbmi)) {
                     if (mbmi->block_mi.is_interintra_used) {

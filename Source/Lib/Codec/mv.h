@@ -57,13 +57,13 @@ typedef struct CandidateMv {
 #define GET_MV_RAWPEL(x) (((x) + 3 + ((x) >= 0)) >> 3)
 #define GET_MV_SUBPEL(x) ((x) * 8)
 
-static AOM_INLINE Mv get_fullmv_from_mv(const Mv* subpel_mv) {
-    const Mv full_mv = {{(int16_t)GET_MV_RAWPEL(subpel_mv->x), (int16_t)GET_MV_RAWPEL(subpel_mv->y)}};
+static AOM_INLINE Mv get_fullmv_from_mv(const Mv subpel_mv) {
+    const Mv full_mv = {{(int16_t)GET_MV_RAWPEL(subpel_mv.x), (int16_t)GET_MV_RAWPEL(subpel_mv.y)}};
     return full_mv;
 }
 
-static AOM_INLINE Mv get_mv_from_fullmv(const Mv* full_mv) {
-    const Mv subpel_mv = {{(int16_t)GET_MV_SUBPEL(full_mv->x), (int16_t)GET_MV_SUBPEL(full_mv->y)}};
+static AOM_INLINE Mv get_mv_from_fullmv(const Mv full_mv) {
+    const Mv subpel_mv = {{(int16_t)GET_MV_SUBPEL(full_mv.x), (int16_t)GET_MV_SUBPEL(full_mv.y)}};
     return subpel_mv;
 }
 

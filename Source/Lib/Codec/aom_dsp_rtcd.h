@@ -398,8 +398,8 @@ uint32_t svt_aom_sad8x8_c(const uint8_t *src_ptr, int src_stride, const uint8_t 
 RTCD_EXTERN uint32_t(*svt_aom_sad8x8)(const uint8_t *src_ptr, int src_stride, const uint8_t *ref_ptr, int ref_stride);
 void svt_aom_sad8x8x4d_c(const uint8_t *src_ptr, int src_stride, const uint8_t * const ref_ptr[], int ref_stride, uint32_t *sad_array);
 RTCD_EXTERN void(*svt_aom_sad8x8x4d)(const uint8_t *src_ptr, int src_stride, const uint8_t * const ref_ptr[], int ref_stride, uint32_t *sad_array);
-void svt_aom_upsampled_pred_c(MacroBlockD* xd, const struct AV1Common* const cm, int mi_row, int mi_col, const Mv* const mv, uint8_t* comp_pred, int width, int height, int subpel_x_q3, int subpel_y_q3, const uint8_t* ref, int ref_stride, int subpel_search);
-RTCD_EXTERN void(*svt_aom_upsampled_pred) (MacroBlockD* xd, const struct AV1Common* const cm, int mi_row, int mi_col, const Mv* const mv, uint8_t* comp_pred, int width, int height, int subpel_x_q3, int subpel_y_q3, const uint8_t* ref, int ref_stride, int subpel_search);
+void svt_aom_upsampled_pred_c(MacroBlockD* xd, const struct AV1Common* const cm, int mi_row, int mi_col, uint8_t* comp_pred, int width, int height, int subpel_x_q3, int subpel_y_q3, const uint8_t* ref, int ref_stride, int subpel_search);
+RTCD_EXTERN void(*svt_aom_upsampled_pred) (MacroBlockD* xd, const struct AV1Common* const cm, int mi_row, int mi_col, uint8_t* comp_pred, int width, int height, int subpel_x_q3, int subpel_y_q3, const uint8_t* ref, int ref_stride, int subpel_search);
 #if CONFIG_ENABLE_OBMC
 unsigned int svt_aom_obmc_sad128x128_c(const uint8_t *pre, int pre_stride, const int32_t *wsrc, const int32_t *mask);
 RTCD_EXTERN unsigned int(*svt_aom_obmc_sad128x128)(const uint8_t *pre, int pre_stride, const int32_t *wsrc, const int32_t *mask);
@@ -1024,7 +1024,7 @@ void svt_ext_all_sad_calculation_8x8_16x16_sve(uint8_t *src, uint32_t src_stride
     uint32_t p_eight_sad16x16[16][8],
     uint32_t p_eight_sad8x8[64][8], bool sub_sad);
 
-void svt_aom_upsampled_pred_neon(MacroBlockD* xd, const struct AV1Common* const cm, int mi_row, int mi_col, const Mv* const mv, uint8_t* comp_pred, int width, int height, int subpel_x_q3, int subpel_y_q3, const uint8_t* ref, int ref_stride, int subpel_search);
+void svt_aom_upsampled_pred_neon(MacroBlockD* xd, const struct AV1Common* const cm, int mi_row, int mi_col, uint8_t* comp_pred, int width, int height, int subpel_x_q3, int subpel_y_q3, const uint8_t* ref, int ref_stride, int subpel_search);
 
 void svt_sad_loop_kernel_neon(uint8_t *src, uint32_t src_stride, uint8_t *ref, uint32_t ref_stride,
                             uint32_t block_height, uint32_t block_width, uint64_t *best_sad,
@@ -1872,7 +1872,7 @@ uint32_t svt_aom_sad8x8_avx2(const uint8_t *src_ptr, int src_stride, const uint8
 
 void svt_aom_sad8x8x4d_avx2(const uint8_t *src_ptr, int src_stride, const uint8_t * const ref_ptr[4], int ref_stride, uint32_t sad_array[4]);
 
-void svt_aom_upsampled_pred_sse2(MacroBlockD* xd, const struct AV1Common* const cm, int mi_row, int mi_col, const Mv* const mv, uint8_t* comp_pred, int width, int height, int subpel_x_q3, int subpel_y_q3, const uint8_t* ref, int ref_stride, int subpel_search);
+void svt_aom_upsampled_pred_sse2(MacroBlockD* xd, const struct AV1Common* const cm, int mi_row, int mi_col, uint8_t* comp_pred, int width, int height, int subpel_x_q3, int subpel_y_q3, const uint8_t* ref, int ref_stride, int subpel_search);
 
 #if CONFIG_ENABLE_OBMC
 unsigned int svt_aom_obmc_sad128x128_avx2(const uint8_t *pre, int pre_stride, const int32_t *wsrc, const int32_t *mask);

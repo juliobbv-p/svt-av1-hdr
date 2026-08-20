@@ -93,7 +93,7 @@ static bool check_mv_validity(int16_t x_mv, int16_t y_mv, uint8_t need_shift) {
       which means in full pel:
       -2048 < MV_x_in_full_pel or MV_y_in_full_pel < 2048
     */
-    if (!is_mv_valid(&mv)) {
+    if (!is_mv_valid(mv)) {
         return false;
     }
     return true;
@@ -600,20 +600,20 @@ void svt_aom_choose_best_av1_mv_pred(ModeDecisionContext* ctx, MvReferenceFrame 
             mv.x             = mv0x;
             uint32_t mv_rate = 0;
             if (ctx->approx_inter_rate) {
-                mv_rate = (uint32_t)svt_av1_mv_bit_cost_light(&mv, &(ref_mv[0]));
+                mv_rate = (uint32_t)svt_av1_mv_bit_cost_light(mv, ref_mv[0]);
             } else {
                 mv_rate = (uint32_t)svt_av1_mv_bit_cost(
-                    &mv, &(ref_mv[0]), md_rate_est_ctx->nmv_vec_cost, md_rate_est_ctx->nmvcoststack, MV_COST_WEIGHT);
+                    mv, ref_mv[0], md_rate_est_ctx->nmv_vec_cost, md_rate_est_ctx->nmvcoststack, MV_COST_WEIGHT);
             }
 
             if (is_compound) {
                 mv.y = mv1y;
                 mv.x = mv1x;
                 if (ctx->approx_inter_rate) {
-                    mv_rate += (uint32_t)svt_av1_mv_bit_cost_light(&mv, &(ref_mv[1]));
+                    mv_rate += (uint32_t)svt_av1_mv_bit_cost_light(mv, ref_mv[1]);
                 } else {
-                    mv_rate += (uint32_t)svt_av1_mv_bit_cost(&mv,
-                                                             &(ref_mv[1]),
+                    mv_rate += (uint32_t)svt_av1_mv_bit_cost(mv,
+                                                             ref_mv[1],
                                                              md_rate_est_ctx->nmv_vec_cost,
                                                              md_rate_est_ctx->nmvcoststack,
                                                              MV_COST_WEIGHT);
@@ -2011,9 +2011,9 @@ uint8_t svt_aom_wm_motion_refinement(PictureControlSet* pcs, ModeDecisionContext
                                  input_pic->y_stride,
                                  &sse);
             if (ctx->approx_inter_rate) {
-                var += svt_aom_mv_err_cost_light(&test_mv, &ref_mv);
+                var += svt_aom_mv_err_cost_light(test_mv, ref_mv);
             } else {
-                var += svt_aom_mv_err_cost(&test_mv, &ref_mv, mvjcost, mvcost, error_per_bit);
+                var += svt_aom_mv_err_cost(test_mv, ref_mv, mvjcost, mvcost, error_per_bit);
             }
 
             if (var < best_cost) {
@@ -2153,7 +2153,7 @@ static void single_motion_search(PictureControlSet* pcs, ModeDecisionContext* ct
 
         // Note: MV limits are modified here. Always restore the original values
         // after full-pixel motion search.
-        svt_av1_set_mv_search_range(&x->mv_limits, ref_mv);
+        svt_av1_set_mv_search_range(&x->mv_limits, *ref_mv);
 
         Mv mvp_full = best_pred_mv; // mbmi->mv[0].as_mv;
 
@@ -2166,7 +2166,7 @@ static void single_motion_search(PictureControlSet* pcs, ModeDecisionContext* ct
         switch (cand->block_mi.motion_mode) {
         case OBMC_CAUSAL:
             svt_av1_obmc_full_pixel_search(
-                ctx, x, &mvp_full, sadpb, &svt_aom_mefn_ptr[bsize], ref_mv, &(x->best_mv), 0);
+                ctx, x, mvp_full, sadpb, &svt_aom_mefn_ptr[bsize], *ref_mv, &(x->best_mv), 0);
             break;
         default:
             assert(0 && "Invalid motion mode!\n");
@@ -2189,7 +2189,7 @@ static void single_motion_search(PictureControlSet* pcs, ModeDecisionContext* ct
                                                      mi_row,
                                                      mi_col,
                                                      &x->best_mv,
-                                                     ref_mv,
+                                                     *ref_mv,
                                                      frm_hdr->allow_high_precision_mv,
                                                      x->errorperbit,
                                                      &svt_aom_mefn_ptr[bsize],
@@ -2211,9 +2211,9 @@ static void single_motion_search(PictureControlSet* pcs, ModeDecisionContext* ct
         x->best_mv.y *= 8;
     }
     if (ctx->approx_inter_rate) {
-        *rate_mv = svt_av1_mv_bit_cost_light(&x->best_mv, ref_mv);
+        *rate_mv = svt_av1_mv_bit_cost_light(x->best_mv, *ref_mv);
     } else {
-        *rate_mv = svt_av1_mv_bit_cost(&x->best_mv, ref_mv, x->nmv_vec_cost, x->mv_cost_stack, MV_COST_WEIGHT);
+        *rate_mv = svt_av1_mv_bit_cost(x->best_mv, *ref_mv, x->nmv_vec_cost, x->mv_cost_stack, MV_COST_WEIGHT);
     }
 }
 
@@ -2997,9 +2997,9 @@ TxType svt_aom_get_intra_uv_tx_type(UvPredictionMode pred_mode_uv, TxSize tx_siz
 }
 
 // Values are now correlated to quantizer.
-static INLINE int mv_check_bounds(const MvLimits* mv_limits, const Mv* mv) {
-    return (mv->y >> 3) < mv_limits->row_min || (mv->y >> 3) > mv_limits->row_max ||
-        (mv->x >> 3) < mv_limits->col_min || (mv->x >> 3) > mv_limits->col_max;
+static INLINE int mv_check_bounds(const MvLimits* mv_limits, const Mv mv) {
+    return (mv.y >> 3) < mv_limits->row_min || (mv.y >> 3) > mv_limits->row_max ||
+        (mv.x >> 3) < mv_limits->col_min || (mv.x >> 3) > mv_limits->col_max;
 }
 
 static void assert_release(int statement) {
@@ -3108,7 +3108,7 @@ static void intra_bc_search(PictureControlSet* pcs, ModeDecisionContext* ctx, co
         assert_release(x->mv_limits.row_min >= tmp_mv_limits.row_min);
         assert_release(x->mv_limits.row_max <= tmp_mv_limits.row_max);
 
-        svt_av1_set_mv_search_range(&x->mv_limits, &dv_ref);
+        svt_av1_set_mv_search_range(&x->mv_limits, dv_ref);
 
         if (x->mv_limits.col_max < x->mv_limits.col_min || x->mv_limits.row_max < x->mv_limits.row_min) {
             x->mv_limits = tmp_mv_limits;
@@ -3126,7 +3126,7 @@ static void intra_bc_search(PictureControlSet* pcs, ModeDecisionContext* ctx, co
         Mv  best_hash_mv   = {{0, 0}};
 
         svt_av1_intrabc_hash_search(
-            pcs, x, bsize, mi_col * MI_SIZE, mi_row * MI_SIZE, &dv_ref, 1, fn_ptr, &best_hash_cost, &best_hash_mv);
+            pcs, x, bsize, mi_col * MI_SIZE, mi_row * MI_SIZE, dv_ref, 1, fn_ptr, &best_hash_cost, &best_hash_mv);
 
         // Hash produced a candidate
         if (best_hash_cost < INT_MAX) {
@@ -3141,11 +3141,11 @@ static void intra_bc_search(PictureControlSet* pcs, ModeDecisionContext* ctx, co
         }
         // Full-pixel fallback if hash didn't produce a candidate
         else {
-            svt_av1_full_pixel_search(pcs, x, bsize, &mvp_full, 0, x->sadperbit16, NULL, &dv_ref);
+            svt_av1_full_pixel_search(pcs, x, bsize, &mvp_full, 0, x->sadperbit16, NULL, dv_ref);
 
             Mv dv = {{x->best_mv.x * 8, x->best_mv.y * 8}};
 
-            if (!mv_check_bounds(&x->mv_limits, &dv) &&
+            if (!mv_check_bounds(&x->mv_limits, dv) &&
                 svt_aom_is_dv_valid(dv, xd, mi_row, mi_col, bsize, scs->seq_header.sb_size_log2)) {
                 dv_cand[*num_dv_cand] = dv;
                 (*num_dv_cand)++;

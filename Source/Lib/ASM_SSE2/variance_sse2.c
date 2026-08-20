@@ -332,13 +332,12 @@ static INLINE const InterpFilterParams* av1_get_filter(int subpel_search) {
 }
 
 void svt_aom_upsampled_pred_sse2(MacroBlockD* xd, const struct AV1Common* const cm, int mi_row, int mi_col,
-                                 const Mv* const mv, uint8_t* comp_pred, int width, int height, int subpel_x_q3,
-                                 int subpel_y_q3, const uint8_t* ref, int ref_stride, int subpel_search) {
+                                 uint8_t* comp_pred, int width, int height, int subpel_x_q3, int subpel_y_q3,
+                                 const uint8_t* ref, int ref_stride, int subpel_search) {
     (void)xd;
     (void)cm;
     (void)mi_row;
     (void)mi_col;
-    (void)mv;
     const InterpFilterParams* filter = av1_get_filter(subpel_search);
     assert(filter != NULL);
     int filter_taps = (subpel_search <= USE_4_TAPS) ? 4 : SUBPEL_TAPS;

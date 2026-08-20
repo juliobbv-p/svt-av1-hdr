@@ -28,16 +28,13 @@ extern "C" {
 
 enum {
     MV_COST_ENTROPY, // Use the entropy rate of the mv as the cost
-    MV_COST_L1_LOWRES, // Use the l1 norm of the mv as the cost (<480p)
-    MV_COST_L1_MIDRES, // Use the l1 norm of the mv as the cost (>=480p)
-    MV_COST_L1_HDRES, // Use the l1 norm of the mv as the cost (>=720p)
     MV_COST_OPT,
     MV_COST_NONE // Use 0 as as cost irrespective of the current mv
 } UENUM1BYTE(MV_COST_TYPE);
 
 typedef struct svt_mv_cost_param {
     // The reference mv used to compute the mv cost
-    const Mv*    ref_mv;
+    Mv           ref_mv;
     Mv           full_ref_mv;
     MV_COST_TYPE mv_cost_type;
     const int*   mvjcost;
@@ -105,20 +102,17 @@ typedef struct {
 } SUBPEL_MOTION_SEARCH_PARAMS;
 
 typedef int(fractional_mv_step_fp)(void* ictx, MacroBlockD* xd, const struct AV1Common* const cm,
-                                   SUBPEL_MOTION_SEARCH_PARAMS* ms_params, Mv start_mv, Mv* bestmv, int* distortion,
-                                   unsigned int* sse1, BlockSize bsize);
+                                   SUBPEL_MOTION_SEARCH_PARAMS* ms_params, Mv start_mv, Mv* bestmv, BlockSize bsize);
 extern fractional_mv_step_fp svt_av1_find_best_sub_pixel_tree;
 extern fractional_mv_step_fp svt_av1_find_best_sub_pixel_tree_pruned;
 
-int svt_aom_fp_mv_err_cost(const Mv* mv, const svt_mv_cost_param* mv_cost_params);
-
 static INLINE void svt_av1_set_subpel_mv_search_range(SubpelMvLimits* subpel_limits, const FullMvLimits* mv_limits,
-                                                      const Mv* ref_mv) {
+                                                      const Mv ref_mv) {
     const int max_mv = GET_MV_SUBPEL(MAX_FULL_PEL_VAL);
-    const int minc   = AOMMAX(GET_MV_SUBPEL(mv_limits->col_min), ref_mv->x - max_mv);
-    const int maxc   = AOMMIN(GET_MV_SUBPEL(mv_limits->col_max), ref_mv->x + max_mv);
-    const int minr   = AOMMAX(GET_MV_SUBPEL(mv_limits->row_min), ref_mv->y - max_mv);
-    const int maxr   = AOMMIN(GET_MV_SUBPEL(mv_limits->row_max), ref_mv->y + max_mv);
+    const int minc   = AOMMAX(GET_MV_SUBPEL(mv_limits->col_min), ref_mv.x - max_mv);
+    const int maxc   = AOMMIN(GET_MV_SUBPEL(mv_limits->col_max), ref_mv.x + max_mv);
+    const int minr   = AOMMAX(GET_MV_SUBPEL(mv_limits->row_min), ref_mv.y - max_mv);
+    const int maxr   = AOMMIN(GET_MV_SUBPEL(mv_limits->row_max), ref_mv.y + max_mv);
 
     subpel_limits->col_min = AOMMAX(MV_LOW + 1, minc);
     subpel_limits->col_max = AOMMIN(MV_UPP - 1, maxc);
@@ -135,10 +129,47 @@ static INLINE int svt_av1_is_subpelmv_in_range(const SubpelMvLimits* mv_limits, 
 // joint_cost and comp_cost. joint_costs covers the cost of transmitting
 // JOINT_MV, and comp_cost covers the cost of transmitting the actual motion
 // vector.
-static INLINE int svt_mv_cost(const Mv* mv, const int* joint_cost, const int* const comp_cost[2]) {
+static INLINE int svt_mv_cost(const Mv mv, const int* joint_cost, const int* const comp_cost[2]) {
     // The y-component (row component) of the MV is coded first, so the cost is in the 0th idx
-    return joint_cost[svt_av1_get_mv_joint(mv)] + comp_cost[0][CLIP3(MV_LOW, MV_UPP, mv->y)] +
-        comp_cost[1][CLIP3(MV_LOW, MV_UPP, mv->x)];
+    return joint_cost[svt_av1_get_mv_joint(mv)] + comp_cost[0][CLIP3(MV_LOW, MV_UPP, mv.y)] +
+        comp_cost[1][CLIP3(MV_LOW, MV_UPP, mv.x)];
+}
+
+#define PIXEL_TRANSFORM_ERROR_SCALE 4
+
+// Returns the cost of using the current mv during the motion search. This is
+// used when var is used as the error metric.
+static INLINE int svt_mv_err_cost(Mv mv, Mv ref_mv, const int* mvjcost, const int* const mvcost[2], int error_per_bit,
+                                  MV_COST_TYPE mv_cost_type) {
+    const Mv diff     = {{(int16_t)(mv.x - ref_mv.x), (int16_t)(mv.y - ref_mv.y)}};
+    const Mv abs_diff = {{(int16_t)abs(diff.x), (int16_t)abs(diff.y)}};
+
+    switch (mv_cost_type) {
+    case MV_COST_ENTROPY:
+        assert(mvcost);
+        return (int)ROUND_POWER_OF_TWO_64(
+            (int64_t)svt_mv_cost(diff, mvjcost, mvcost) * error_per_bit,
+            RDDIV_BITS + AV1_PROB_COST_SHIFT - RD_EPB_SHIFT + PIXEL_TRANSFORM_ERROR_SCALE);
+    case MV_COST_OPT: {
+        return (int)ROUND_POWER_OF_TWO_64(
+            (int64_t)((abs_diff.y + abs_diff.x) << 8) * error_per_bit,
+            RDDIV_BITS + AV1_PROB_COST_SHIFT - RD_EPB_SHIFT + PIXEL_TRANSFORM_ERROR_SCALE);
+    }
+    case MV_COST_NONE:
+        return 0;
+    default:
+        assert(0 && "Invalid rd_cost_type");
+        return 0;
+    }
+}
+
+static INLINE int svt_aom_fp_mv_err_cost(Mv mv, const svt_mv_cost_param* mv_cost_params) {
+    return svt_mv_err_cost(mv,
+                           mv_cost_params->ref_mv,
+                           mv_cost_params->mvjcost,
+                           mv_cost_params->mvcost,
+                           mv_cost_params->error_per_bit,
+                           mv_cost_params->mv_cost_type);
 }
 
 #ifdef __cplusplus

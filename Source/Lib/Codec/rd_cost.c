@@ -14,6 +14,7 @@
 * Includes
 ***************************************/
 #include "rd_cost.h"
+#include "mcomp.h" // svt_mv_cost (shared MV-rate helper; replaces local duplicate)
 #include "common_utils.h"
 #include "aom_dsp_rtcd.h"
 #include "svt_log.h"
@@ -44,40 +45,25 @@ void svt_aom_get_block_dimensions(BlockSize bsize, int plane, const MacroBlockD*
 int  svt_aom_allow_palette(int allow_screen_content_tools, BlockSize bsize);
 int  svt_aom_allow_intrabc(const FrameHeader* frm_hdr, SliceType slice_type);
 
-MvJointType svt_av1_get_mv_joint(const Mv* mv) {
-    if (mv->y == 0) {
-        return mv->x == 0 ? MV_JOINT_ZERO : MV_JOINT_HNZVZ;
-    } else {
-        return mv->x == 0 ? MV_JOINT_HZVNZ : MV_JOINT_HNZVNZ;
-    }
-}
-
-static int32_t mv_cost(const Mv* mv, const int32_t* joint_cost, const int32_t* const comp_cost[2]) {
-    int32_t jn_c = svt_av1_get_mv_joint(mv);
-    int32_t res  = joint_cost[jn_c] + comp_cost[0][CLIP3(MV_LOW, MV_UPP, mv->y)] +
-        comp_cost[1][CLIP3(MV_LOW, MV_UPP, mv->x)];
-    return res;
-}
-
-int32_t svt_av1_mv_bit_cost_light(const Mv* mv, const Mv* ref) {
+int32_t svt_av1_mv_bit_cost_light(const Mv mv, const Mv ref) {
     const uint32_t factor     = 50;
-    const uint32_t absmvdiffx = ABS(mv->x - ref->x);
-    const uint32_t absmvdiffy = ABS(mv->y - ref->y);
+    const uint32_t absmvdiffx = ABS(mv.x - ref.x);
+    const uint32_t absmvdiffy = ABS(mv.y - ref.y);
     const uint32_t mv_rate    = 1296 + (factor * (absmvdiffx + absmvdiffy));
     return mv_rate;
 }
 
-int32_t svt_av1_mv_bit_cost(const Mv* mv, const Mv* ref, const int32_t* mvjcost, const int32_t* const mvcost[2],
+int32_t svt_av1_mv_bit_cost(const Mv mv, const Mv ref, const int32_t* mvjcost, const int32_t* const mvcost[2],
                             int32_t weight) {
     // Restrict the size of the MV diff to be within the max AV1 range.  If the MV diff
     // is outside this range, the diff will index beyond the cost array, causing a seg fault.
     // Both the MVs and the MV diffs should be within the allowable range for accessing the MV cost
     // infrastructure.
-    const int16_t x         = MIN(MAX(mv->x - ref->x, MV_LOW), MV_UPP);
-    const int16_t y         = MIN(MAX(mv->y - ref->y, MV_LOW), MV_UPP);
+    const int16_t x         = MIN(MAX(mv.x - ref.x, MV_LOW), MV_UPP);
+    const int16_t y         = MIN(MAX(mv.y - ref.y, MV_LOW), MV_UPP);
     Mv            temp_diff = {{x, y}};
 
-    return ROUND_POWER_OF_TWO(mv_cost(&temp_diff, mvjcost, mvcost) * weight, 7);
+    return ROUND_POWER_OF_TWO(svt_mv_cost(temp_diff, mvjcost, mvcost) * weight, 7);
 }
 
 /////////////////////////////COEFFICIENT CALCULATION //////////////////////////////////////////////
@@ -536,7 +522,7 @@ uint64_t svt_aom_intra_fast_cost(PictureControlSet* pcs, ModeDecisionContext* ct
         const int* dvcost[2] = {(int*)&ctx->md_rate_est_ctx->dv_cost[0][MV_MAX],
                                 (int*)&ctx->md_rate_est_ctx->dv_cost[1][MV_MAX]};
         int32_t    mv_rate   = svt_av1_mv_bit_cost(
-            &mv, &ref_mv, ctx->md_rate_est_ctx->dv_joint_cost, dvcost, MV_COST_WEIGHT_SUB);
+            mv, ref_mv, ctx->md_rate_est_ctx->dv_joint_cost, dvcost, MV_COST_WEIGHT_SUB);
 
         rate                      = mv_rate + ctx->md_rate_est_ctx->intrabc_fac_bits[cand->block_mi.use_intrabc];
         cand_bf->fast_luma_rate   = rate;
@@ -1094,8 +1080,8 @@ uint64_t svt_aom_inter_fast_cost(PictureControlSet* pcs, ModeDecisionContext* ct
                 for (RefList ref_list_idx = 0; ref_list_idx < 2; ++ref_list_idx) {
                     Mv mv     = cand->block_mi.mv[ref_list_idx];
                     Mv ref_mv = cand->pred_mv[ref_list_idx];
-                    mv_rate += svt_av1_mv_bit_cost(&mv,
-                                                   &ref_mv,
+                    mv_rate += svt_av1_mv_bit_cost(mv,
+                                                   ref_mv,
                                                    ctx->md_rate_est_ctx->nmv_vec_cost,
                                                    ctx->md_rate_est_ctx->nmvcoststack,
                                                    MV_COST_WEIGHT);
@@ -1103,20 +1089,14 @@ uint64_t svt_aom_inter_fast_cost(PictureControlSet* pcs, ModeDecisionContext* ct
             } else if (inter_mode == NEAREST_NEWMV || inter_mode == NEAR_NEWMV) {
                 Mv mv     = cand->block_mi.mv[1];
                 Mv ref_mv = cand->pred_mv[1];
-                mv_rate += svt_av1_mv_bit_cost(&mv,
-                                               &ref_mv,
-                                               ctx->md_rate_est_ctx->nmv_vec_cost,
-                                               ctx->md_rate_est_ctx->nmvcoststack,
-                                               MV_COST_WEIGHT);
+                mv_rate += svt_av1_mv_bit_cost(
+                    mv, ref_mv, ctx->md_rate_est_ctx->nmv_vec_cost, ctx->md_rate_est_ctx->nmvcoststack, MV_COST_WEIGHT);
             } else {
                 assert(inter_mode == NEW_NEARESTMV || inter_mode == NEW_NEARMV);
                 Mv mv     = cand->block_mi.mv[0];
                 Mv ref_mv = cand->pred_mv[0];
-                mv_rate += svt_av1_mv_bit_cost(&mv,
-                                               &ref_mv,
-                                               ctx->md_rate_est_ctx->nmv_vec_cost,
-                                               ctx->md_rate_est_ctx->nmvcoststack,
-                                               MV_COST_WEIGHT);
+                mv_rate += svt_av1_mv_bit_cost(
+                    mv, ref_mv, ctx->md_rate_est_ctx->nmv_vec_cost, ctx->md_rate_est_ctx->nmvcoststack, MV_COST_WEIGHT);
             }
         } else {
             assert(!is_compound); // single ref inter prediction
@@ -1124,7 +1104,7 @@ uint64_t svt_aom_inter_fast_cost(PictureControlSet* pcs, ModeDecisionContext* ct
             Mv mv     = cand->block_mi.mv[0];
             Mv ref_mv = cand->pred_mv[0];
             mv_rate   = svt_av1_mv_bit_cost(
-                &mv, &ref_mv, ctx->md_rate_est_ctx->nmv_vec_cost, ctx->md_rate_est_ctx->nmvcoststack, MV_COST_WEIGHT);
+                mv, ref_mv, ctx->md_rate_est_ctx->nmv_vec_cost, ctx->md_rate_est_ctx->nmvcoststack, MV_COST_WEIGHT);
         }
     }
     // inter intra mode rate

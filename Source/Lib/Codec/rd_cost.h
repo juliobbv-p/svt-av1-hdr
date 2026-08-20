@@ -60,10 +60,17 @@ uint64_t    svt_aom_tx_size_bits(PictureControlSet* pcs, uint8_t segment_id, MdR
 uint64_t svt_aom_get_tx_size_bits(ModeDecisionCandidateBuffer* candidateBuffer, ModeDecisionContext* ctx,
                                   PictureControlSet* pcs, uint8_t tx_depth, bool block_has_coeff);
 
-MvJointType svt_av1_get_mv_joint(const Mv* mv);
-int32_t     svt_av1_mv_bit_cost(const Mv* mv, const Mv* ref, const int32_t* mvjcost, const int32_t* const mvcost[2],
-                                int32_t weight);
-int32_t     svt_av1_mv_bit_cost_light(const Mv* mv, const Mv* ref);
+static INLINE MvJointType svt_av1_get_mv_joint(const Mv mv) {
+    if (mv.y == 0) {
+        return mv.x == 0 ? MV_JOINT_ZERO : MV_JOINT_HNZVZ;
+    } else {
+        return mv.x == 0 ? MV_JOINT_HZVNZ : MV_JOINT_HNZVNZ;
+    }
+}
+
+int32_t svt_av1_mv_bit_cost(const Mv mv, const Mv ref, const int32_t* mvjcost, const int32_t* const mvcost[2],
+                            int32_t weight);
+int32_t svt_av1_mv_bit_cost_light(const Mv mv, const Mv ref);
 int32_t svt_aom_get_switchable_rate(BlockModeInfo* block_mi, const FrameHeader* const frm_hdr, ModeDecisionContext* ctx,
                                     const bool enable_dual_filter);
 

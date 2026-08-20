@@ -70,24 +70,24 @@ extern AomVarianceFnPtr svt_aom_mefn_ptr[BLOCK_SIZES_ALL];
 
 void av1_init_dsmotion_compensation(SearchSiteConfig* cfg, int stride);
 void svt_av1_init3smotion_compensation(SearchSiteConfig* cfg, int stride);
-void svt_av1_set_mv_search_range(MvLimits* mv_limits, const Mv* mv);
+void svt_av1_set_mv_search_range(MvLimits* mv_limits, const Mv mv);
 int  svt_av1_full_pixel_search(struct PictureControlSet* pcs, IntraBcContext /*MACROBLOCK*/* x, BlockSize bsize,
-                               Mv* mvp_full, int step_param, int error_per_bit, int* cost_list, const Mv* ref_mv);
-int  svt_aom_mv_err_cost(const Mv* mv, const Mv* ref, const int* mvjcost, const int* mvcost[2], int error_per_bit);
-int  svt_aom_mv_err_cost_light(const Mv* mv, const Mv* ref);
-int svt_av1_get_mvpred_var(const IntraBcContext* x, const Mv* best_mv, const Mv* center_mv, const AomVarianceFnPtr* vfp,
-                           int use_mvcost);
+                               Mv* mvp_full, int step_param, int error_per_bit, int* cost_list, const Mv ref_mv);
+int  svt_aom_mv_err_cost(const Mv mv, const Mv ref, const int* mvjcost, const int* mvcost[2], int error_per_bit);
+int  svt_aom_mv_err_cost_light(const Mv mv, const Mv ref);
+int  svt_av1_get_mvpred_var(const IntraBcContext* x, const Mv best_mv, const Mv center_mv, const AomVarianceFnPtr* vfp,
+                            int use_mvcost);
 void svt_av1_intrabc_hash_search(struct PictureControlSet* pcs, IntraBcContext* x, BlockSize bsize, int x_pos,
-                                 int y_pos, const Mv* ref_mv, int intra, const AomVarianceFnPtr* fn_ptr,
+                                 int y_pos, const Mv ref_mv, int intra, const AomVarianceFnPtr* fn_ptr,
                                  int* best_hash_cost, Mv* best_hash_mv);
 #if CONFIG_ENABLE_OBMC
 struct ModeDecisionContext;
 struct Av1Common;
-int svt_av1_obmc_full_pixel_search(struct ModeDecisionContext* ctx, IntraBcContext* x, const Mv* mvp_full, int sadpb,
-                                   const AomVarianceFnPtr* fn_ptr, const Mv* ref_mv, Mv* dst_mv, int is_second);
+int svt_av1_obmc_full_pixel_search(struct ModeDecisionContext* ctx, IntraBcContext* x, const Mv mvp_full, int sadpb,
+                                   const AomVarianceFnPtr* fn_ptr, const Mv ref_mv, Mv* dst_mv, int is_second);
 int svt_av1_find_best_obmc_sub_pixel_tree_up(struct ModeDecisionContext* ctx, IntraBcContext* x,
                                              const struct Av1Common* const cm, int mi_row, int mi_col, Mv* bestmv,
-                                             const Mv* ref_mv, int allow_hp, int error_per_bit,
+                                             const Mv ref_mv, int allow_hp, int error_per_bit,
                                              const AomVarianceFnPtr* vfp, int forced_stop, int iters_per_step,
                                              int* mvjcost, const int* mvcost[2], int* distortion, unsigned int* sse1,
                                              int is_second, int use_accurate_subpel_search);

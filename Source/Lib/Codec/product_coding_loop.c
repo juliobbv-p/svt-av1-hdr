@@ -1754,7 +1754,7 @@ void svt_pme_sad_loop_kernel_c(const svt_mv_cost_param* mv_cost_params,
             uint32_t refinement_pos_y = search_position_start_y + ySearchIndex;
             best_mv.x                 = mvx + (refinement_pos_x * 8);
             best_mv.y                 = mvy + (refinement_pos_y * 8);
-            cost += svt_aom_fp_mv_err_cost(&best_mv, mv_cost_params);
+            cost += svt_aom_fp_mv_err_cost(best_mv, mv_cost_params);
             if (cost < *best_cost) {
                 *best_mvx  = mvx + (refinement_pos_x * 8);
                 *best_mvy  = mvy + (refinement_pos_y * 8);
@@ -1828,7 +1828,7 @@ static void md_full_pel_search_large_lbd(svt_mv_cost_param* mv_cost_params, Mode
                 Mv best_mv;
                 best_mv.x = mvx + (refinement_pos_x * 8);
                 best_mv.y = mvy + (refinement_pos_y * 8);
-                cost += svt_aom_fp_mv_err_cost(&best_mv, mv_cost_params);
+                cost += svt_aom_fp_mv_err_cost(best_mv, mv_cost_params);
                 if (cost < *best_cost) {
                     *best_mvx  = mvx + (refinement_pos_x * 8);
                     *best_mvy  = mvy + (refinement_pos_y * 8);
@@ -1839,7 +1839,7 @@ static void md_full_pel_search_large_lbd(svt_mv_cost_param* mv_cost_params, Mode
     }
 }
 
-static void svt_init_mv_cost_params(svt_mv_cost_param* mv_cost_params, ModeDecisionContext* ctx, const Mv* ref_mv,
+static void svt_init_mv_cost_params(svt_mv_cost_param* mv_cost_params, ModeDecisionContext* ctx, const Mv ref_mv,
                                     uint8_t base_q_idx, uint32_t rdmult, uint8_t hbd_md) {
     mv_cost_params->ref_mv        = ref_mv;
     mv_cost_params->full_ref_mv   = get_fullmv_from_mv(ref_mv);
@@ -1864,7 +1864,7 @@ static void md_full_pel_search(PictureControlSet* pcs, ModeDecisionContext* ctx,
     uint32_t          rdmult  = dist_type != SAD ? ctx->full_lambda_md[hbd_md ? EB_10_BIT_MD : EB_8_BIT_MD]
                                                  : ctx->fast_lambda_md[hbd_md ? EB_10_BIT_MD : EB_8_BIT_MD];
     svt_init_mv_cost_params(
-        &mv_cost_params, ctx, &ctx->ref_mv, frm_hdr->quantization_params.base_q_idx, rdmult, hbd_md);
+        &mv_cost_params, ctx, ctx->ref_mv, frm_hdr->quantization_params.base_q_idx, rdmult, hbd_md);
     uint32_t cost;
     // Search area adjustment
     if ((ctx->blk_org_x + (mvx >> 3) + search_position_start_x) < (-ref_pic->border + 1)) {
@@ -1978,7 +1978,7 @@ static void md_full_pel_search(PictureControlSet* pcs, ModeDecisionContext* ctx,
             Mv best_mv;
             best_mv.x = mvx + (refinement_pos_x * 8);
             best_mv.y = mvy + (refinement_pos_y * 8);
-            cost += svt_aom_fp_mv_err_cost(&best_mv, &mv_cost_params);
+            cost += svt_aom_fp_mv_err_cost(best_mv, &mv_cost_params);
             if (cost < *best_cost) {
                 *best_mvx  = mvx + (refinement_pos_x * 8);
                 *best_mvy  = mvy + (refinement_pos_y * 8);
@@ -2496,12 +2496,12 @@ static int md_subpel_search(SUBPEL_STAGE       search_stage, //ME or PME
     mv_limits.col_min  = -(((mi_col + mi_width) * MI_SIZE) + AOM_INTERP_EXTEND);
     mv_limits.row_max  = (cm->mi_rows - mi_row) * MI_SIZE + AOM_INTERP_EXTEND;
     mv_limits.col_max  = (cm->mi_cols - mi_col) * MI_SIZE + AOM_INTERP_EXTEND;
-    svt_av1_set_mv_search_range(&mv_limits, &ref_mv);
-    svt_av1_set_subpel_mv_search_range(&ms_params->mv_limits, (FullMvLimits*)&mv_limits, &ref_mv);
+    svt_av1_set_mv_search_range(&mv_limits, ref_mv);
+    svt_av1_set_subpel_mv_search_range(&ms_params->mv_limits, (FullMvLimits*)&mv_limits, ref_mv);
     // Mvcost params
     svt_init_mv_cost_params(&ms_params->mv_cost_params,
                             ctx,
-                            &ref_mv,
+                            ref_mv,
                             frm_hdr->quantization_params.base_q_idx,
                             ctx->full_lambda_md[EB_8_BIT_MD],
                             0); // 10BIT not supported
@@ -2543,10 +2543,8 @@ static int md_subpel_search(SUBPEL_STAGE       search_stage, //ME or PME
     // TODO: should use get_fullmv_from_mv instead of shifting
     best_mv.x          = me_mv_x >> 3;
     best_mv.y          = me_mv_y >> 3;
-    Mv subpel_start_mv = get_mv_from_fullmv(&best_mv);
+    Mv subpel_start_mv = get_mv_from_fullmv(best_mv);
 
-    int          not_used = 0;
-    unsigned int pred_sse = 0; // not used
     // Assign which subpel search method to use
 #if CONFIG_ENABLE_FULL_SUBPEL
     fractional_mv_step_fp* subpel_search_method = md_subpel_ctrls.subpel_search_method == SUBPEL_TREE
@@ -2568,8 +2566,6 @@ static int md_subpel_search(SUBPEL_STAGE       search_stage, //ME or PME
                                        ms_params,
                                        subpel_start_mv,
                                        &best_mv,
-                                       &not_used,
-                                       &pred_sse,
                                        ctx->blk_geom->bsize);
     me_mv->x                                    = best_mv.x;
     me_mv->y                                    = best_mv.y;
@@ -2863,10 +2859,10 @@ static void read_refine_me_mvs(PictureControlSet* pcs, ModeDecisionContext* ctx,
                     // Variance is computed for 8bit, so use 8bit lambda
                     uint32_t rdmult = ctx->full_lambda_md[EB_8_BIT_MD];
                     svt_init_mv_cost_params(
-                        &mv_cost_params, ctx, &ctx->ref_mv, frm_hdr->quantization_params.base_q_idx, rdmult, hbd_md);
+                        &mv_cost_params, ctx, ctx->ref_mv, frm_hdr->quantization_params.base_q_idx, rdmult, hbd_md);
                     Mv best_mv;
                     best_mv.as_int = me_mv.as_int;
-                    ctx->fp_me_dist[list][ref] += svt_aom_fp_mv_err_cost(&best_mv, &mv_cost_params);
+                    ctx->fp_me_dist[list][ref] += svt_aom_fp_mv_err_cost(best_mv, &mv_cost_params);
                 }
                 // Copy ME MV after subpel
                 ctx->sub_me_mv[list][ref].as_int = me_mv.as_int;
@@ -6678,8 +6674,8 @@ static void get_start_end_tx_depth(PictureControlSet* pcs, ModeDecisionContext* 
 #if CONFIG_ENABLE_WARP || CONFIG_ENABLE_OBMC
 static INLINE void update_refined_mv_fast_rate(ModeDecisionContext* ctx, ModeDecisionCandidateBuffer* cand_bf,
                                                ModeDecisionCandidate* cand, Mv default_mv, Mv default_ref_mv) {
-    const int32_t default_mv_rate = svt_av1_mv_bit_cost(&default_mv,
-                                                        &default_ref_mv,
+    const int32_t default_mv_rate = svt_av1_mv_bit_cost(default_mv,
+                                                        default_ref_mv,
                                                         ctx->md_rate_est_ctx->nmv_vec_cost,
                                                         ctx->md_rate_est_ctx->nmvcoststack,
                                                         MV_COST_WEIGHT);
@@ -6687,7 +6683,7 @@ static INLINE void update_refined_mv_fast_rate(ModeDecisionContext* ctx, ModeDec
     const Mv      mv              = cand->block_mi.mv[0];
     const Mv      ref_mv          = cand->pred_mv[0];
     const int32_t refined_mv_rate = svt_av1_mv_bit_cost(
-        &mv, &ref_mv, ctx->md_rate_est_ctx->nmv_vec_cost, ctx->md_rate_est_ctx->nmvcoststack, MV_COST_WEIGHT);
+        mv, ref_mv, ctx->md_rate_est_ctx->nmv_vec_cost, ctx->md_rate_est_ctx->nmvcoststack, MV_COST_WEIGHT);
 
     cand_bf->fast_luma_rate = cand_bf->fast_luma_rate + refined_mv_rate - default_mv_rate;
 }

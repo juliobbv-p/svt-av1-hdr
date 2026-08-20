@@ -386,7 +386,7 @@ static TxSize   tx_size_array[MAX_TPL_MODE]      = {TX_16X16, TX_32X32, TX_64X64
 static TxSize   sub2_tx_size_array[MAX_TPL_MODE] = {TX_16X8, TX_32X16, TX_64X32};
 static TxSize   sub4_tx_size_array[MAX_TPL_MODE] = {TX_16X4, TX_32X8, TX_64X16};
 
-static void svt_tpl_init_mv_cost_params(svt_mv_cost_param* mv_cost_params, const Mv* ref_mv, uint8_t base_q_idx,
+static void svt_tpl_init_mv_cost_params(svt_mv_cost_param* mv_cost_params, const Mv ref_mv, uint8_t base_q_idx,
                                         uint32_t rdmult, uint8_t hbd_md) {
     mv_cost_params->ref_mv        = ref_mv;
     mv_cost_params->full_ref_mv   = get_fullmv_from_mv(ref_mv);
@@ -450,8 +450,8 @@ static void tpl_subpel_search(SequenceControlSet* scs, PictureParentControlSet* 
     mv_limits.col_min  = -(((xd->mi_col + mi_width) * MI_SIZE) + AOM_INTERP_EXTEND);
     mv_limits.row_max  = (cm->mi_rows - xd->mi_row) * MI_SIZE + AOM_INTERP_EXTEND;
     mv_limits.col_max  = (cm->mi_cols - xd->mi_col) * MI_SIZE + AOM_INTERP_EXTEND;
-    svt_av1_set_mv_search_range(&mv_limits, &ref_mv);
-    svt_av1_set_subpel_mv_search_range(&ms_params->mv_limits, (FullMvLimits*)&mv_limits, &ref_mv);
+    svt_av1_set_mv_search_range(&mv_limits, ref_mv);
+    svt_av1_set_subpel_mv_search_range(&ms_params->mv_limits, (FullMvLimits*)&mv_limits, ref_mv);
 
     // Mvcost params
     int32_t qIndex = quantizer_to_qindex[(uint8_t)scs->static_config.qp] +
@@ -459,7 +459,7 @@ static void tpl_subpel_search(SequenceControlSet* scs, PictureParentControlSet* 
     qIndex          = AOMMIN(MAXQ, qIndex);
     uint32_t rdmult = svt_aom_compute_rd_mult_based_on_qindex(EB_EIGHT_BIT, pcs->update_type, qIndex) /
         TPL_RDMULT_SCALING_FACTOR;
-    svt_tpl_init_mv_cost_params(&ms_params->mv_cost_params, &ref_mv, qIndex, rdmult,
+    svt_tpl_init_mv_cost_params(&ms_params->mv_cost_params, ref_mv, qIndex, rdmult,
                                 0); // 10BIT not supported
 
     // Subpel variance params
@@ -493,10 +493,8 @@ static void tpl_subpel_search(SequenceControlSet* scs, PictureParentControlSet* 
     // TODO: should use get_fullmv_from_mv instead of shifting
     best_sp_mv.x       = best_mv->x >> 3;
     best_sp_mv.y       = best_mv->y >> 3;
-    Mv subpel_start_mv = get_mv_from_fullmv(&best_sp_mv);
+    Mv subpel_start_mv = get_mv_from_fullmv(best_sp_mv);
 
-    int          not_used = 0;
-    unsigned int pred_sse = 0; // not used
 
     // Assign which subpel search method to use - always use pruned because tested regular and did not give any gain
     fractional_mv_step_fp* subpel_search_method = svt_av1_find_best_sub_pixel_tree_pruned;
@@ -511,8 +509,6 @@ static void tpl_subpel_search(SequenceControlSet* scs, PictureParentControlSet* 
                          ms_params,
                          subpel_start_mv,
                          &best_sp_mv,
-                         &not_used,
-                         &pred_sse,
                          block_size);
 
     // Update the MV to the new best
@@ -1498,7 +1494,7 @@ static AOM_INLINE void tpl_model_update_b(PictureParentControlSet* ref_pcs_ptr, 
     Av1Common* ref_cm = ref_pcs_ptr->av1_cm;
     TplStats*  ref_tpl_stats_ptr;
 
-    const Mv  full_mv     = get_fullmv_from_mv(&tpl_stats_ptr->mv);
+    const Mv  full_mv     = get_fullmv_from_mv(tpl_stats_ptr->mv);
     const int ref_pos_row = mi_row * MI_SIZE + full_mv.y;
     const int ref_pos_col = mi_col * MI_SIZE + full_mv.x;
 
