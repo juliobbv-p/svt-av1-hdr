@@ -52,8 +52,8 @@ EbPictureBufferDesc* svt_aom_get_ref_pic_buffer(PictureControlSet* pcs, MvRefere
     return ((EbReferenceObject*)(pcs->ref_pic_ptr_array[list_idx][ref_idx]->object_ptr))->reference_picture;
 }
 
-static INLINE Mv clamp_mv_to_umv_border_sb(const MacroBlockD* xd, const Mv* src_mv, int32_t bw, int32_t bh,
-                                           int32_t ss_x, int32_t ss_y) {
+static INLINE Mv clamp_mv_to_umv_border_sb(const MacroBlockD* xd, Mv src_mv, int32_t bw, int32_t bh, int32_t ss_x,
+                                           int32_t ss_y) {
     // If the MV points so far into the UMV border that no visible pixels
     // are used for reconstruction, the subpel part of the MV can be
     // discarded and the MV limited to 16 pixels with equivalent results.
@@ -61,7 +61,7 @@ static INLINE Mv clamp_mv_to_umv_border_sb(const MacroBlockD* xd, const Mv* src_
     const int32_t spel_right  = spel_left - SUBPEL_SHIFTS;
     const int32_t spel_top    = (AOM_INTERP_EXTEND + bh) << SUBPEL_BITS;
     const int32_t spel_bottom = spel_top - SUBPEL_SHIFTS;
-    Mv            clamped_mv  = {{(int16_t)(src_mv->x * (1 << (1 - ss_x))), (int16_t)(src_mv->y * (1 << (1 - ss_y)))}};
+    Mv            clamped_mv  = {{(int16_t)(src_mv.x * (1 << (1 - ss_x))), (int16_t)(src_mv.y * (1 << (1 - ss_y)))}};
     assert(ss_x <= 1);
     assert(ss_y <= 1);
 
@@ -109,7 +109,7 @@ static void av1_make_masked_scaled_inter_predictor(
             uint8_t  offset       = INTERPOLATION_OFFSET;
             uint32_t width_scale  = 1;
             uint32_t height_scale = 1;
-            if (av1_is_scaled(sf)) {
+            if (sf->is_scaled) {
                 width_scale  = sf->x_scale_fp != REF_NO_SCALE ? 2 : 1;
                 height_scale = sf->y_scale_fp != REF_NO_SCALE ? 2 : 1;
             }
@@ -2391,56 +2391,65 @@ static void inter_intra_prediction(PictureControlSet* pcs, ModeDecisionContext* 
     }
 }
 
-static void compute_subpel_params(SequenceControlSet* scs, int16_t pre_y, int16_t pre_x, Mv mv,
-                                  const struct ScaleFactors* const sf, uint16_t frame_width, uint16_t frame_height,
-                                  uint8_t blk_width, uint8_t blk_height, MacroBlockD* av1xd, const uint32_t ss_y,
-                                  const uint32_t ss_x, SubpelParams* subpel_params, int32_t* pos_y, int32_t* pos_x) {
-    const int32_t is_scaled = av1_is_scaled(sf);
+static NOINLINE void compute_subpel_params_scaled(SequenceControlSet* scs, int16_t pre_y, int16_t pre_x, Mv mv,
+                                                  const struct ScaleFactors* const sf, uint16_t frame_width,
+                                                  uint16_t frame_height, uint32_t ss_y, uint32_t ss_x,
+                                                  SubpelParams* subpel_params, int32_t* pos_y, int32_t* pos_x) {
+    int orig_pos_y = (pre_y + 0) << SUBPEL_BITS;
+    orig_pos_y += mv.y * (1 << (1 - ss_y));
+    int orig_pos_x = (pre_x + 0) << SUBPEL_BITS;
+    orig_pos_x += mv.x * (1 << (1 - ss_x));
+    *pos_y = sf->scale_value_y(orig_pos_y, sf);
+    *pos_x = sf->scale_value_x(orig_pos_x, sf);
+    *pos_x += SCALE_EXTRA_OFF;
+    *pos_y += SCALE_EXTRA_OFF;
 
-    if (is_scaled) {
-        int orig_pos_y = (pre_y + 0) << SUBPEL_BITS;
-        orig_pos_y += mv.y * (1 << (1 - ss_y));
-        int orig_pos_x = (pre_x + 0) << SUBPEL_BITS;
-        orig_pos_x += mv.x * (1 << (1 - ss_x));
-        *pos_y = sf->scale_value_y(orig_pos_y, sf);
-        *pos_x = sf->scale_value_x(orig_pos_x, sf);
-        *pos_x += SCALE_EXTRA_OFF;
-        *pos_y += SCALE_EXTRA_OFF;
+    // Note 1: Equations of top and left are expanded from macro -AOM_LEFT_TOP_MARGIN_SCALED(ss_y),
+    //      except recon ref padding in svt is 'scs->static_config.super_block_size * 2 + 32' when SR or resize is on instead of 288.
+    //      since 'is_scaled' is set, 'border_in_pixels' should be constant value of 2*sb_size+32
+    //
+    // Note 2: for issue 1835 "Segmentation Fault With Super Resolution on Ubuntu 18.04":
+    //      Limit top & left offset from AOM_INTERP_EXTEND(4) to INTERPOLATION_OFFSET(8) to avoid memory access underflow,
+    //      because svt_aom_pack_block() may access src_mod - INTERPOLATION_OFFSET - (INTERPOLATION_OFFSET * src_stride) later.
+    const int border_in_pixels = scs->super_block_size * 2 + 32;
+    const int top              = -(((border_in_pixels >> ss_y) - INTERPOLATION_OFFSET) << SCALE_SUBPEL_BITS);
+    const int left             = -(((border_in_pixels >> ss_x) - INTERPOLATION_OFFSET) << SCALE_SUBPEL_BITS);
+    const int bottom           = ((frame_height >> ss_y) + AOM_INTERP_EXTEND) << SCALE_SUBPEL_BITS;
+    const int right            = ((frame_width >> ss_x) + AOM_INTERP_EXTEND) << SCALE_SUBPEL_BITS;
 
-        // Note 1: Equations of top and left are expanded from macro -AOM_LEFT_TOP_MARGIN_SCALED(ss_y),
-        //      except recon ref padding in svt is 'scs->static_config.super_block_size * 2 + 32' when SR or resize is on instead of 288.
-        //      since 'is_scaled' is set, 'border_in_pixels' should be constant value of 2*sb_size+32
-        //
-        // Note 2: for issue 1835 "Segmentation Fault With Super Resolution on Ubuntu 18.04":
-        //      Limit top & left offset from AOM_INTERP_EXTEND(4) to INTERPOLATION_OFFSET(8) to avoid memory access underflow,
-        //      because svt_aom_pack_block() may access src_mod - INTERPOLATION_OFFSET - (INTERPOLATION_OFFSET * src_stride) later.
-        const int border_in_pixels = scs->super_block_size * 2 + 32;
-        const int top              = -(((border_in_pixels >> ss_y) - INTERPOLATION_OFFSET) << SCALE_SUBPEL_BITS);
-        const int left             = -(((border_in_pixels >> ss_x) - INTERPOLATION_OFFSET) << SCALE_SUBPEL_BITS);
-        const int bottom           = ((frame_height >> ss_y) + AOM_INTERP_EXTEND) << SCALE_SUBPEL_BITS;
-        const int right            = ((frame_width >> ss_x) + AOM_INTERP_EXTEND) << SCALE_SUBPEL_BITS;
+    *pos_y = clamp(*pos_y, top, bottom);
+    *pos_x = clamp(*pos_x, left, right);
 
-        *pos_y = clamp(*pos_y, top, bottom);
-        *pos_x = clamp(*pos_x, left, right);
+    subpel_params->subpel_x = *pos_x & SCALE_SUBPEL_MASK;
+    subpel_params->subpel_y = *pos_y & SCALE_SUBPEL_MASK;
+    subpel_params->xs       = sf->x_step_q4;
+    subpel_params->ys       = sf->y_step_q4;
 
-        subpel_params->subpel_x = *pos_x & SCALE_SUBPEL_MASK;
-        subpel_params->subpel_y = *pos_y & SCALE_SUBPEL_MASK;
-        subpel_params->xs       = sf->x_step_q4;
-        subpel_params->ys       = sf->y_step_q4;
+    *pos_y = *pos_y >> SCALE_SUBPEL_BITS;
+    *pos_x = *pos_x >> SCALE_SUBPEL_BITS;
+}
 
-        *pos_y = *pos_y >> SCALE_SUBPEL_BITS;
-        *pos_x = *pos_x >> SCALE_SUBPEL_BITS;
-
-    } else {
-        const Mv mv_q4 = clamp_mv_to_umv_border_sb(av1xd, &mv, blk_width, blk_height, ss_x, ss_y);
-
-        subpel_params->subpel_x = (mv_q4.x & SUBPEL_MASK) << SCALE_EXTRA_BITS;
-        subpel_params->subpel_y = (mv_q4.y & SUBPEL_MASK) << SCALE_EXTRA_BITS;
-        subpel_params->xs       = SCALE_SUBPEL_SHIFTS;
-        subpel_params->ys       = SCALE_SUBPEL_SHIFTS;
-        *pos_y                  = pre_y + (mv_q4.y >> SUBPEL_BITS);
-        *pos_x                  = pre_x + (mv_q4.x >> SUBPEL_BITS);
+// Hot path is the non-scaled case (is_scaled == 0 unless super-res/resize is on);
+// force-inline it into the caller so the 16 args stay in registers, and shunt the
+// rare scaled case to the cold out-of-line helper above.
+static AOM_FORCE_INLINE void compute_subpel_params(SequenceControlSet* scs, int16_t pre_y, int16_t pre_x, Mv mv,
+                                                   const struct ScaleFactors* const sf, uint16_t frame_width,
+                                                   uint16_t frame_height, uint8_t blk_width, uint8_t blk_height,
+                                                   MacroBlockD* av1xd, const uint32_t ss_y, const uint32_t ss_x,
+                                                   SubpelParams* subpel_params, int32_t* pos_y, int32_t* pos_x) {
+    if (sf->is_scaled) {
+        compute_subpel_params_scaled(
+            scs, pre_y, pre_x, mv, sf, frame_width, frame_height, ss_y, ss_x, subpel_params, pos_y, pos_x);
+        return;
     }
+    const Mv mv_q4 = clamp_mv_to_umv_border_sb(av1xd, mv, blk_width, blk_height, ss_x, ss_y);
+
+    subpel_params->subpel_x = (mv_q4.x & SUBPEL_MASK) << SCALE_EXTRA_BITS;
+    subpel_params->subpel_y = (mv_q4.y & SUBPEL_MASK) << SCALE_EXTRA_BITS;
+    subpel_params->xs       = SCALE_SUBPEL_SHIFTS;
+    subpel_params->ys       = SCALE_SUBPEL_SHIFTS;
+    *pos_y                  = pre_y + (mv_q4.y >> SUBPEL_BITS);
+    *pos_x                  = pre_x + (mv_q4.x >> SUBPEL_BITS);
 }
 
 void tf_inter_predictor(SequenceControlSet* scs, uint8_t* src_ptr, uint8_t* dst_ptr, int16_t pre_y, int16_t pre_x,
@@ -2625,7 +2634,7 @@ void svt_aom_enc_make_inter_predictor(SequenceControlSet* scs, uint8_t* src_ptr,
                 uint8_t  offset       = INTERPOLATION_OFFSET;
                 uint32_t width_scale  = 1;
                 uint32_t height_scale = 1;
-                if (av1_is_scaled(sf)) {
+                if (sf->is_scaled) {
                     width_scale  = sf->x_scale_fp != REF_NO_SCALE ? 2 : 1;
                     height_scale = sf->y_scale_fp != REF_NO_SCALE ? 2 : 1;
                 }
@@ -2750,7 +2759,7 @@ static void av1_inter_prediction_pd0(SequenceControlSet* scs, ModeDecisionContex
         EbPictureBufferDesc* ref_pic = ref_itr ? ref_pic_1 : ref_pic_0;
         ScaleFactors*        sf      = ref_itr ? sf1 : sf0;
         assert(ref_pic != NULL);
-        if (EB_UNLIKELY(av1_is_scaled(sf))) {
+        if (EB_UNLIKELY(sf->is_scaled)) {
             compute_subpel_params(scs,
                                   ref_origin_y,
                                   ref_origin_x,

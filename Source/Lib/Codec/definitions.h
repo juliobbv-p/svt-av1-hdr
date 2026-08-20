@@ -1765,6 +1765,7 @@ typedef struct ScaleFactors {
     int32_t y_scale_fp; // vertical fixed point scale factor
     int32_t x_step_q4;
     int32_t y_step_q4;
+    int32_t is_scaled; // precomputed av1_is_scaled(sf); per-frame invariant
 
     int32_t (*scale_value_x)(int32_t val, const struct ScaleFactors* sf);
     int32_t (*scale_value_y)(int32_t val, const struct ScaleFactors* sf);
