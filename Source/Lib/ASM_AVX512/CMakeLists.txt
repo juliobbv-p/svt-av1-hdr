@@ -47,6 +47,7 @@ set(all_files
     compute_sad_intrin_avx512.c
     convolve_2d_avx512.c
     convolve_avx512.c
+    copy_wxh_avx512.c
     convolve_avx512.h
     encodetxb_avx512.c
     highbd_fwd_txfm_AVX512.c

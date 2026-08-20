@@ -320,16 +320,66 @@ void svt_aom_hadamard_32x32_c(const int16_t* src_diff, ptrdiff_t src_stride, int
     }
 }
 
+// Specializing on the (power-of-two) block width lets the compiler emit inline
+// vector stores per row instead of calling libc memcpy for every one of the
+// millions of tiny block copies. Cross-platform: the compiler picks the right
+// stores for each target; the rare non-power-of-two width falls back to memcpy.
+#define SVT_COPY_WXH_ROWS(PTYPE, NBYTES)  \
+    for (uint32_t j = 0; j < height; j++) \
+    memcpy((PTYPE*)dst + j * dst_stride, (const PTYPE*)src + j * src_stride, (NBYTES))
+
 void svt_av1_copy_wxh_8bit_c(uint8_t* src, uint32_t src_stride, uint8_t* dst, uint32_t dst_stride, uint32_t height,
                              uint32_t width) {
-    for (uint32_t j = 0; j < height; j++) {
-        svt_memcpy_c(dst + j * dst_stride, src + j * src_stride, width);
+    switch (width) {
+    case 4:
+        SVT_COPY_WXH_ROWS(uint8_t, 4);
+        break;
+    case 8:
+        SVT_COPY_WXH_ROWS(uint8_t, 8);
+        break;
+    case 16:
+        SVT_COPY_WXH_ROWS(uint8_t, 16);
+        break;
+    case 32:
+        SVT_COPY_WXH_ROWS(uint8_t, 32);
+        break;
+    case 64:
+        SVT_COPY_WXH_ROWS(uint8_t, 64);
+        break;
+    case 128:
+        SVT_COPY_WXH_ROWS(uint8_t, 128);
+        break;
+    default:
+        SVT_COPY_WXH_ROWS(uint8_t, width);
+        break;
     }
 }
 
 void svt_av1_copy_wxh_16bit_c(uint16_t* src, uint32_t src_stride, uint16_t* dst, uint32_t dst_stride, uint32_t height,
                               uint32_t width) {
-    for (uint32_t j = 0; j < height; j++) {
-        svt_memcpy_c(dst + j * dst_stride, src + j * src_stride, width * 2);
+    switch (width) {
+    case 4:
+        SVT_COPY_WXH_ROWS(uint16_t, 4 * 2);
+        break;
+    case 8:
+        SVT_COPY_WXH_ROWS(uint16_t, 8 * 2);
+        break;
+    case 16:
+        SVT_COPY_WXH_ROWS(uint16_t, 16 * 2);
+        break;
+    case 32:
+        SVT_COPY_WXH_ROWS(uint16_t, 32 * 2);
+        break;
+    case 64:
+        SVT_COPY_WXH_ROWS(uint16_t, 64 * 2);
+        break;
+    case 128:
+        SVT_COPY_WXH_ROWS(uint16_t, 128 * 2);
+        break;
+    default:
+        SVT_COPY_WXH_ROWS(uint16_t, width * 2);
+        break;
     }
 }
+
+#undef SVT_COPY_WXH_ROWS
