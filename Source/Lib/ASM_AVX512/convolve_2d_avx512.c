@@ -1096,20 +1096,20 @@ void svt_av1_convolve_2d_copy_sr_avx512(const uint8_t* src, int32_t src_stride, 
 
     if (w == 2) {
         do {
-            svt_memcpy(dst, src, 2 * sizeof(*src));
+            memcpy(dst, src, 2 * sizeof(*src));
             src += src_stride;
             dst += dst_stride;
-            svt_memcpy(dst, src, 2 * sizeof(*src));
+            memcpy(dst, src, 2 * sizeof(*src));
             src += src_stride;
             dst += dst_stride;
             h -= 2;
         } while (h);
     } else if (w == 4) {
         do {
-            svt_memcpy(dst, src, 4 * sizeof(*src));
+            memcpy(dst, src, 4 * sizeof(*src));
             src += src_stride;
             dst += dst_stride;
-            svt_memcpy(dst, src, 4 * sizeof(*src));
+            memcpy(dst, src, 4 * sizeof(*src));
             src += src_stride;
             dst += dst_stride;
             h -= 2;

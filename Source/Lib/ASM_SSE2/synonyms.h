@@ -27,7 +27,7 @@
 
 static INLINE __m128i xx_loadl_32(const void* a) {
     int val;
-    svt_memcpy_intrin_sse(&val, a, sizeof(val));
+    memcpy(&val, a, sizeof(val));
     return _mm_cvtsi32_si128(val);
 }
 

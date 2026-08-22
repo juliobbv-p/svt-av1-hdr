@@ -228,7 +228,7 @@ static void copy_statistics_to_ref_obj_ect(PictureControlSet* pcs, SequenceContr
     if (scs->mfmv_enabled || !ppcs->is_not_scaled) {
         obj->frame_type = frm_hdr->frame_type;
         obj->order_hint = ppcs->cur_order_hint;
-        svt_memcpy(obj->ref_order_hint, ppcs->ref_order_hint, sizeof(obj->ref_order_hint));
+        memcpy(obj->ref_order_hint, ppcs->ref_order_hint, sizeof(obj->ref_order_hint));
     }
     // Copy the prev frame wn filter coeffs
     if (cm->wn_filter_ctrls.enabled && cm->wn_filter_ctrls.use_prev_frame_coeffs) {

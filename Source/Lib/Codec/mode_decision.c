@@ -612,11 +612,8 @@ void svt_aom_choose_best_av1_mv_pred(ModeDecisionContext* ctx, MvReferenceFrame 
                 if (ctx->approx_inter_rate) {
                     mv_rate += (uint32_t)svt_av1_mv_bit_cost_light(mv, ref_mv[1]);
                 } else {
-                    mv_rate += (uint32_t)svt_av1_mv_bit_cost(mv,
-                                                             ref_mv[1],
-                                                             md_rate_est_ctx->nmv_vec_cost,
-                                                             md_rate_est_ctx->nmvcoststack,
-                                                             MV_COST_WEIGHT);
+                    mv_rate += (uint32_t)svt_av1_mv_bit_cost(
+                        mv, ref_mv[1], md_rate_est_ctx->nmv_vec_cost, md_rate_est_ctx->nmvcoststack, MV_COST_WEIGHT);
                 }
             }
 
@@ -911,7 +908,7 @@ static void inj_non_simple_modes(PictureControlSet* pcs, ModeDecisionContext* ct
                                   simple_trans_cand->block_mi.ref_frame);
     if (enable_ii && is_ii_allowed) {
         ModeDecisionCandidate* cand = &ctx->fast_cand_array[cand_count];
-        svt_memcpy(cand, simple_trans_cand, sizeof(ModeDecisionCandidate));
+        memcpy(cand, simple_trans_cand, sizeof(ModeDecisionCandidate));
 
         inter_intra_search(pcs, ctx, cand);
         cand->block_mi.is_interintra_used = 1;
@@ -924,7 +921,7 @@ static void inj_non_simple_modes(PictureControlSet* pcs, ModeDecisionContext* ct
                                                            : ctx->inter_intra_comp_ctrls.wedge_mode_nsq;
         if (ii_wedge_mode == 1) {
             cand = &ctx->fast_cand_array[cand_count];
-            svt_memcpy(cand, simple_trans_cand, sizeof(ModeDecisionCandidate));
+            memcpy(cand, simple_trans_cand, sizeof(ModeDecisionCandidate));
 
             cand->block_mi.is_interintra_used   = 1;
             cand->block_mi.ref_frame[1]         = INTRA_FRAME;
@@ -940,7 +937,7 @@ static void inj_non_simple_modes(PictureControlSet* pcs, ModeDecisionContext* ct
         svt_aom_is_valid_unipred_ref(ctx, WARP_GROUP, list_idx, ref_idx);
     if (enable_wm && is_warp_allowed) {
         ModeDecisionCandidate* cand = &ctx->fast_cand_array[cand_count];
-        svt_memcpy(cand, simple_trans_cand, sizeof(ModeDecisionCandidate));
+        memcpy(cand, simple_trans_cand, sizeof(ModeDecisionCandidate));
 
         cand->block_mi.is_interintra_used = 0;
         cand->block_mi.motion_mode        = WARPED_CAUSAL;
@@ -980,7 +977,7 @@ static void inj_non_simple_modes(PictureControlSet* pcs, ModeDecisionContext* ct
                                           simple_trans_cand->block_mi.mode) == OBMC_CAUSAL);
     if (enable_obmc && is_obmc_allowed) {
         ModeDecisionCandidate* cand = &ctx->fast_cand_array[cand_count];
-        svt_memcpy(cand, simple_trans_cand, sizeof(ModeDecisionCandidate));
+        memcpy(cand, simple_trans_cand, sizeof(ModeDecisionCandidate));
 
         cand->block_mi.is_interintra_used = 0;
         cand->block_mi.motion_mode        = OBMC_CAUSAL;
@@ -1109,7 +1106,7 @@ static void inj_comp_modes(PictureControlSet* pcs, ModeDecisionContext* ctx, uin
             continue;
         }
         ModeDecisionCandidate* cand = &ctx->fast_cand_array[cand_count];
-        svt_memcpy(cand, &ctx->fast_cand_array[avg_cand_idx], sizeof(ModeDecisionCandidate));
+        memcpy(cand, &ctx->fast_cand_array[avg_cand_idx], sizeof(ModeDecisionCandidate));
         cand->skip_mode_allowed = false;
         determine_compound_mode(pcs, ctx, cand, cur_type);
         INC_MD_CAND_CNT(cand_count, pcs->ppcs->max_can_count);
@@ -2998,8 +2995,8 @@ TxType svt_aom_get_intra_uv_tx_type(UvPredictionMode pred_mode_uv, TxSize tx_siz
 
 // Values are now correlated to quantizer.
 static INLINE int mv_check_bounds(const MvLimits* mv_limits, const Mv mv) {
-    return (mv.y >> 3) < mv_limits->row_min || (mv.y >> 3) > mv_limits->row_max ||
-        (mv.x >> 3) < mv_limits->col_min || (mv.x >> 3) > mv_limits->col_max;
+    return (mv.y >> 3) < mv_limits->row_min || (mv.y >> 3) > mv_limits->row_max || (mv.x >> 3) < mv_limits->col_min ||
+        (mv.x >> 3) > mv_limits->col_max;
 }
 
 static void assert_release(int statement) {
@@ -3756,7 +3753,7 @@ void svt_aom_product_full_mode_decision_light_pd1(PictureControlSet* pcs, ModeDe
     blk_ptr->total_rate            = cand_bf->total_rate;
 
     // Set common signals (INTER/INTRA)
-    svt_memcpy(&blk_ptr->block_mi, &cand->block_mi, sizeof(BlockModeInfo));
+    memcpy(&blk_ptr->block_mi, &cand->block_mi, sizeof(BlockModeInfo));
     blk_ptr->palette_size[0] = blk_ptr->palette_size[1] = 0;
 
     // Set INTER mode signals
@@ -3844,7 +3841,7 @@ void svt_aom_product_full_mode_decision_light_pd1(PictureControlSet* pcs, ModeDe
         if (blk_ptr->y_has_coeff) {
             src_ptr = &(((int32_t*)cand_bf->quant->y_buffer)[txb_1d_offset]);
             dst_ptr = ((int32_t*)pcs->ppcs->enc_dec_ptr->quantized_coeff[ctx->sb_index]->y_buffer) + ctx->coded_area_sb;
-            svt_memcpy(dst_ptr, src_ptr, tx_width * tx_height * sizeof(int32_t));
+            memcpy(dst_ptr, src_ptr, tx_width * tx_height * sizeof(int32_t));
         }
         ctx->coded_area_sb += tx_width * tx_height;
 
@@ -3857,7 +3854,7 @@ void svt_aom_product_full_mode_decision_light_pd1(PictureControlSet* pcs, ModeDe
             src_ptr = &(((int32_t*)cand_bf->quant->u_buffer)[txb_1d_offset_uv]);
             dst_ptr = ((int32_t*)pcs->ppcs->enc_dec_ptr->quantized_coeff[ctx->sb_index]->u_buffer) +
                 ctx->coded_area_sb_uv;
-            svt_memcpy(dst_ptr, src_ptr, tx_width_uv * tx_height_uv * sizeof(int32_t));
+            memcpy(dst_ptr, src_ptr, tx_width_uv * tx_height_uv * sizeof(int32_t));
         }
 
         // Cr
@@ -3866,7 +3863,7 @@ void svt_aom_product_full_mode_decision_light_pd1(PictureControlSet* pcs, ModeDe
             src_ptr = &(((int32_t*)cand_bf->quant->v_buffer)[txb_1d_offset_uv]);
             dst_ptr = ((int32_t*)pcs->ppcs->enc_dec_ptr->quantized_coeff[ctx->sb_index]->v_buffer) +
                 ctx->coded_area_sb_uv;
-            svt_memcpy(dst_ptr, src_ptr, tx_width_uv * tx_height_uv * sizeof(int32_t));
+            memcpy(dst_ptr, src_ptr, tx_width_uv * tx_height_uv * sizeof(int32_t));
         }
         ctx->coded_area_sb_uv += tx_width_uv * tx_height_uv;
     }
@@ -3955,7 +3952,7 @@ uint32_t svt_aom_product_full_mode_decision(PictureControlSet* pcs, ModeDecision
     }
 
     // Set common signals (INTER/INTRA)
-    svt_memcpy(&blk_ptr->block_mi, &cand->block_mi, sizeof(BlockModeInfo));
+    memcpy(&blk_ptr->block_mi, &cand->block_mi, sizeof(BlockModeInfo));
     // Set INTER mode signals
     // INTER signals set first b/c INTER shuts Palette, so INTRA must overwrite if Palette + intrabc is used
     if (is_inter_block(&blk_ptr->block_mi)) {
@@ -3972,8 +3969,8 @@ uint32_t svt_aom_product_full_mode_decision(PictureControlSet* pcs, ModeDecision
         }
         if (blk_ptr->block_mi.motion_mode == WARPED_CAUSAL ||
             (cand->block_mi.mode == GLOBALMV || cand->block_mi.mode == GLOBAL_GLOBALMV)) {
-            svt_memcpy(&ctx->blk_ptr->wm_params_l0, &cand->wm_params_l0, sizeof(WarpedMotionParams));
-            svt_memcpy(&ctx->blk_ptr->wm_params_l1, &cand->wm_params_l1, sizeof(WarpedMotionParams));
+            memcpy(&ctx->blk_ptr->wm_params_l0, &cand->wm_params_l0, sizeof(WarpedMotionParams));
+            memcpy(&ctx->blk_ptr->wm_params_l1, &cand->wm_params_l1, sizeof(WarpedMotionParams));
         }
 
         if (ctx->pd_pass == PD_PASS_1) {
@@ -4042,10 +4039,10 @@ uint32_t svt_aom_product_full_mode_decision(PictureControlSet* pcs, ModeDecision
     blk_ptr->y_has_coeff   = cand_bf->y_has_coeff;
     blk_ptr->u_has_coeff   = cand_bf->u_has_coeff;
     blk_ptr->v_has_coeff   = cand_bf->v_has_coeff;
-    svt_memcpy(blk_ptr->tx_type, cand->transform_type, sizeof(TxType) * MAX_TXB_COUNT);
+    memcpy(blk_ptr->tx_type, cand->transform_type, sizeof(TxType) * MAX_TXB_COUNT);
     blk_ptr->tx_type_uv = cand->transform_type_uv;
-    svt_memcpy(&blk_ptr->quant_dc, &cand_bf->quant_dc, sizeof(QuantDcData));
-    svt_memcpy(&blk_ptr->eob, &cand_bf->eob, sizeof(EobData));
+    memcpy(&blk_ptr->quant_dc, &cand_bf->quant_dc, sizeof(QuantDcData));
+    memcpy(&blk_ptr->eob, &cand_bf->eob, sizeof(EobData));
 
     // If bypassing EncDec, save recon/coeff
     if (ctx->bypass_encdec && ctx->pd_pass == PD_PASS_1) {
@@ -4070,7 +4067,7 @@ uint32_t svt_aom_product_full_mode_decision(PictureControlSet* pcs, ModeDecision
             }
 
             if (blk_ptr->y_has_coeff & (1 << txb_itr)) {
-                svt_memcpy(dst_ptr, src_ptr, tx_width * tx_height * sizeof(int32_t));
+                memcpy(dst_ptr, src_ptr, tx_width * tx_height * sizeof(int32_t));
             }
 
             txb_1d_offset += tx_width * tx_height;
@@ -4086,7 +4083,7 @@ uint32_t svt_aom_product_full_mode_decision(PictureControlSet* pcs, ModeDecision
                 }
 
                 if (blk_ptr->u_has_coeff & (1 << txb_itr)) {
-                    svt_memcpy(dst_ptr, src_ptr, tx_width_uv * tx_height_uv * sizeof(int32_t));
+                    memcpy(dst_ptr, src_ptr, tx_width_uv * tx_height_uv * sizeof(int32_t));
                 }
 
                 // Cr
@@ -4100,7 +4097,7 @@ uint32_t svt_aom_product_full_mode_decision(PictureControlSet* pcs, ModeDecision
                 }
 
                 if (blk_ptr->v_has_coeff & (1 << txb_itr)) {
-                    svt_memcpy(dst_ptr, src_ptr, tx_width_uv * tx_height_uv * sizeof(int32_t));
+                    memcpy(dst_ptr, src_ptr, tx_width_uv * tx_height_uv * sizeof(int32_t));
                 }
 
                 txb_1d_offset_uv += tx_width_uv * tx_height_uv;

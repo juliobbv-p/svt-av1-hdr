@@ -1492,8 +1492,8 @@ static MvJointType av1_get_mv_joint_diff(const int32_t diff[const 2]) {
     return diff[1] == 0 ? MV_JOINT_HZVNZ : MV_JOINT_HNZVNZ;
 }
 
-void svt_av1_encode_mv(PictureParentControlSet* pcs, AomWriter* ec_writer, const Mv mv, const Mv ref,
-                       NmvContext* mvctx, int32_t usehp) {
+void svt_av1_encode_mv(PictureParentControlSet* pcs, AomWriter* ec_writer, const Mv mv, const Mv ref, NmvContext* mvctx,
+                       int32_t usehp) {
     // The y-component (row component) of the MV is coded first
     int32_t           diff[2] = {mv.y - ref.y, mv.x - ref.x};
     const MvJointType j       = av1_get_mv_joint_diff(diff);
@@ -4058,7 +4058,7 @@ static void write_wiener_filter(int32_t wiener_win, const WienerInfo* wiener_inf
                                          WIENER_FILT_TAP2_SUBEXP_K,
                                          ref_wiener_info->hfilter[2] - WIENER_FILT_TAP2_MINV,
                                          wiener_info->hfilter[2] - WIENER_FILT_TAP2_MINV);
-    svt_memcpy(ref_wiener_info, wiener_info, sizeof(*wiener_info));
+    memcpy(ref_wiener_info, wiener_info, sizeof(*wiener_info));
 }
 
 static void write_sgrproj_filter(const SgrprojInfo* sgrproj_info, SgrprojInfo* ref_sgrproj_info, AomWriter* wb) {
@@ -4091,7 +4091,7 @@ static void write_sgrproj_filter(const SgrprojInfo* sgrproj_info, SgrprojInfo* r
                                              (uint16_t)(sgrproj_info->xqd[1] - SGRPROJ_PRJ_MIN1));
     }
 
-    svt_memcpy(ref_sgrproj_info, sgrproj_info, sizeof(*sgrproj_info));
+    memcpy(ref_sgrproj_info, sgrproj_info, sizeof(*sgrproj_info));
 }
 
 static void loop_restoration_write_sb_coeffs(PictureControlSet* pcs, FRAME_CONTEXT* frame_context,

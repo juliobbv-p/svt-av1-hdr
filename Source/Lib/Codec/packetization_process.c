@@ -860,13 +860,13 @@ EbErrorType svt_aom_packetization_kernel_iter(void* context) {
     queue_entry_ptr->total_num_bits = pcs->ppcs->total_num_bits;
     queue_entry_ptr->frame_type     = frm_hdr->frame_type;
     queue_entry_ptr->poc            = pcs->picture_number;
-    svt_memcpy(&queue_entry_ptr->av1_ref_signal, &pcs->ppcs->av1_ref_signal, sizeof(Av1RpsNode));
+    memcpy(&queue_entry_ptr->av1_ref_signal, &pcs->ppcs->av1_ref_signal, sizeof(Av1RpsNode));
 
     queue_entry_ptr->slice_type = pcs->slice_type;
 #if DETAILED_FRAME_OUTPUT
     queue_entry_ptr->ref_poc_list0 = pcs->ppcs->ref_pic_poc_array[REF_LIST_0][0];
     queue_entry_ptr->ref_poc_list1 = pcs->ppcs->ref_pic_poc_array[REF_LIST_1][0];
-    svt_memcpy(queue_entry_ptr->ref_poc_array, pcs->ppcs->av1_ref_signal.ref_poc_array, 7 * sizeof(uint64_t));
+    memcpy(queue_entry_ptr->ref_poc_array, pcs->ppcs->av1_ref_signal.ref_poc_array, 7 * sizeof(uint64_t));
 #endif
     queue_entry_ptr->show_frame          = frm_hdr->show_frame;
     queue_entry_ptr->has_show_existing   = pcs->ppcs->has_show_existing;

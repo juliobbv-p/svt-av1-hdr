@@ -1736,7 +1736,7 @@ void svt_aom_update_mi_map(PictureControlSet* pcs, ModeDecisionContext* ctx, con
     BlockModeInfo* block_mi = &(mbmi->block_mi);
 
     // copy mbmi data
-    svt_memcpy(block_mi, &blk_ptr->block_mi, sizeof(BlockModeInfo));
+    memcpy(block_mi, &blk_ptr->block_mi, sizeof(BlockModeInfo));
 
     if (svt_av1_allow_palette(pcs->ppcs->palette_level, bsize)) {
         mbmi->palette_mode_info.palette_size = blk_ptr->palette_size[0];

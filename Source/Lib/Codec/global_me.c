@@ -415,7 +415,7 @@ static void compute_global_motion(PictureParentControlSet* pcs, int* frm_corners
                     // Save the wm_params modified by
                     // svt_av1_refine_integerized_param() rather than motion index to
                     // avoid rerunning refine() below.
-                    svt_memcpy(&global_motion, &tmp_wm_params, sizeof(WarpedMotionParams));
+                    memcpy(&global_motion, &tmp_wm_params, sizeof(WarpedMotionParams));
                 }
             }
         }
