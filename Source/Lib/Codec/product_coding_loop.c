@@ -7764,14 +7764,15 @@ static void post_mds0_nic_pruning(PictureControlSet* pcs, ModeDecisionContext* c
                     ctx->md_stage_1_count[cidx] = 0;
                     continue;
                 }
-                uint64_t dev = ((best_cost - best_md_stage_cost) * 100) / best_md_stage_cost;
-                if (dev) {
-                    if (dev >= mds1_class_th) {
+                const uint64_t dev_num = (best_cost - best_md_stage_cost) * 100; // dev = dev_num / best_md_stage_cost
+                if (dev_num >= best_md_stage_cost) { // dev != 0
+                    if (dev_num >= (uint64_t)mds1_class_th * best_md_stage_cost) { // dev >= mds1_class_th
                         ctx->md_stage_1_count[cidx] = 0;
                         continue;
                     }
                     if (mds1_band_cnt >= 3 && ctx->md_stage_1_count[cidx] > 1) {
-                        const uint8_t band_idx      = (uint8_t)(dev * (mds1_band_cnt - 1) / mds1_class_th);
+                        const uint64_t dev          = dev_num / best_md_stage_cost;
+                        const uint8_t  band_idx     = (uint8_t)(dev * (mds1_band_cnt - 1) / mds1_class_th);
                         ctx->md_stage_1_count[cidx] = DIVIDE_AND_ROUND(ctx->md_stage_1_count[cidx], band_idx + 1);
                     }
                 }
@@ -7827,14 +7828,15 @@ static void post_mds1_nic_pruning(PictureControlSet* pcs, ModeDecisionContext* c
                     ctx->md_stage_2_count[cidx] = 0;
                     continue;
                 }
-                uint64_t dev = ((best_cost - best_md_stage_cost) * 100) / best_md_stage_cost;
-                if (dev) {
-                    if (dev >= mds2_class_th) {
+                const uint64_t dev_num = (best_cost - best_md_stage_cost) * 100; // dev = dev_num / best_md_stage_cost
+                if (dev_num >= best_md_stage_cost) { // dev != 0
+                    if (dev_num >= (uint64_t)mds2_class_th * best_md_stage_cost) { // dev >= mds2_class_th
                         ctx->md_stage_2_count[cidx] = 0;
                         continue;
                     }
                     if (mds2_band_cnt >= 3 && ctx->md_stage_2_count[cidx] > 1) {
-                        uint8_t band_idx            = (uint8_t)(dev * (mds2_band_cnt - 1) / mds2_class_th);
+                        const uint64_t dev          = dev_num / best_md_stage_cost;
+                        uint8_t        band_idx     = (uint8_t)(dev * (mds2_band_cnt - 1) / mds2_class_th);
                         ctx->md_stage_2_count[cidx] = DIVIDE_AND_ROUND(ctx->md_stage_2_count[cidx], band_idx + 1);
                     }
                 }
@@ -7855,9 +7857,11 @@ static void post_mds1_nic_pruning(PictureControlSet* pcs, ModeDecisionContext* c
                     }
                     uint64_t dev      = (*cand_bf_arr[cand_buff[cand_count]]->full_cost - best_cost) * 100 / best_cost;
                     uint64_t prev_dev = dev;
+                    // dev < cand_th / D  <=>  (dev+1)*D <= cand_th (integer), avoids the per-iter RHS divide
                     while (
                         (!mds2_relative_dev_th || dev <= prev_dev + mds2_relative_dev_th) &&
-                        (dev < mds2_cand_th / (mds2_cand_th_rank_factor ? mds2_cand_th_rank_factor * cand_count : 1))) {
+                        ((dev + 1) * (uint64_t)(mds2_cand_th_rank_factor ? mds2_cand_th_rank_factor * cand_count : 1) <=
+                         mds2_cand_th)) {
                         cand_count++;
                         // Break out of loop if reached max cand_count to avoid accessing unallocated candidate buffer
                         if (cand_count >= ctx->md_stage_2_count[cidx]) {
@@ -7910,14 +7914,15 @@ static void post_mds2_nic_pruning(PictureControlSet* pcs, ModeDecisionContext* c
                     ctx->md_stage_3_count[cidx] = 0;
                     continue;
                 }
-                uint64_t dev = ((best_cost - best_md_stage_cost) * 100) / best_md_stage_cost;
-                if (dev) {
-                    if (dev >= mds3_class_th) {
+                const uint64_t dev_num = (best_cost - best_md_stage_cost) * 100; // dev = dev_num / best_md_stage_cost
+                if (dev_num >= best_md_stage_cost) { // dev != 0
+                    if (dev_num >= (uint64_t)mds3_class_th * best_md_stage_cost) { // dev >= mds3_class_th
                         ctx->md_stage_3_count[cidx] = 0;
                         continue;
                     }
                     if (mds3_band_cnt >= 3 && ctx->md_stage_3_count[cidx] > 1) {
-                        const uint8_t band_idx      = (uint8_t)(dev * (mds3_band_cnt - 1) / mds3_class_th);
+                        const uint64_t dev          = dev_num / best_md_stage_cost;
+                        const uint8_t  band_idx     = (uint8_t)(dev * (mds3_band_cnt - 1) / mds3_class_th);
                         ctx->md_stage_3_count[cidx] = DIVIDE_AND_ROUND(ctx->md_stage_3_count[cidx], band_idx + 1);
                     }
                 }
