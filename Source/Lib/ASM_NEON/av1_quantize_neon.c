@@ -939,83 +939,70 @@ void svt_aom_quantize_b_neon(const TranLow* coeff_ptr, intptr_t n_coeffs, const 
     }
 }
 
-uint8_t svt_av1_compute_cul_level_neon(const int16_t* const scan, const int32_t* const quant_coeff, uint16_t* eob) {
-    if (*eob == 1) {
-        if (quant_coeff[0] > 0) {
-            return AOMMIN(COEFF_CONTEXT_MASK, quant_coeff[0]) | (2 << COEFF_CONTEXT_BITS);
-        }
-        if (quant_coeff[0] < 0) {
-            return AOMMIN(COEFF_CONTEXT_MASK, -quant_coeff[0]) | (1 << COEFF_CONTEXT_BITS);
-        }
-        return 0;
-    }
-    if (*eob == 0) {
-        return 0;
-    }
-
+int32_t svt_av1_compute_cul_level_neon(const int16_t* const scan, const int32_t* const quant_coeff, int32_t eob,
+                                       int32_t n_coeffs) {
     int32x4_t sum_s32[2] = {vdupq_n_s32(0), vdupq_n_s32(0)};
-    int32x4_t zeros      = vdupq_n_s32(0);
 
-    uint16_t       sz       = *eob;
-    const int16_t* scan_ptr = scan;
-    while (sz >= 8) {
-        const int32_t quant_coeff0 = quant_coeff[scan_ptr[0]];
-        const int32_t quant_coeff1 = quant_coeff[scan_ptr[1]];
-        const int32_t quant_coeff2 = quant_coeff[scan_ptr[2]];
-        const int32_t quant_coeff3 = quant_coeff[scan_ptr[3]];
-        const int32_t quant_coeff4 = quant_coeff[scan_ptr[4]];
-        const int32_t quant_coeff5 = quant_coeff[scan_ptr[5]];
-        const int32_t quant_coeff6 = quant_coeff[scan_ptr[6]];
-        const int32_t quant_coeff7 = quant_coeff[scan_ptr[7]];
+    if (eob * 12 < n_coeffs) {
+        // Sparse: scan-based gather, bounded by eob.
+        int32x4_t      zeros    = vdupq_n_s32(0);
+        int32_t        sz       = eob;
+        const int16_t* scan_ptr = scan;
+        while (sz >= 8) {
+            const int32_t quant_coeff0 = quant_coeff[scan_ptr[0]];
+            const int32_t quant_coeff1 = quant_coeff[scan_ptr[1]];
+            const int32_t quant_coeff2 = quant_coeff[scan_ptr[2]];
+            const int32_t quant_coeff3 = quant_coeff[scan_ptr[3]];
+            const int32_t quant_coeff4 = quant_coeff[scan_ptr[4]];
+            const int32_t quant_coeff5 = quant_coeff[scan_ptr[5]];
+            const int32_t quant_coeff6 = quant_coeff[scan_ptr[6]];
+            const int32_t quant_coeff7 = quant_coeff[scan_ptr[7]];
 
-        int32x4_t quant_coeff_0123 = vcombine_s32(
-            vcreate_s32((((uint64_t)quant_coeff1) << 32) | (uint32_t)quant_coeff0),
-            vcreate_s32((((uint64_t)quant_coeff3) << 32) | (uint32_t)quant_coeff2));
+            int32x4_t quant_coeff_0123 = vcombine_s32(
+                vcreate_s32((((uint64_t)quant_coeff1) << 32) | (uint32_t)quant_coeff0),
+                vcreate_s32((((uint64_t)quant_coeff3) << 32) | (uint32_t)quant_coeff2));
 
-        int32x4_t quant_coeff_4567 = vcombine_s32(
-            vcreate_s32((((uint64_t)quant_coeff5) << 32) | (uint32_t)quant_coeff4),
-            vcreate_s32((((uint64_t)quant_coeff7) << 32) | (uint32_t)quant_coeff6));
+            int32x4_t quant_coeff_4567 = vcombine_s32(
+                vcreate_s32((((uint64_t)quant_coeff5) << 32) | (uint32_t)quant_coeff4),
+                vcreate_s32((((uint64_t)quant_coeff7) << 32) | (uint32_t)quant_coeff6));
 
-        sum_s32[0] = vabaq_s32(sum_s32[0], quant_coeff_0123, zeros);
-        sum_s32[1] = vabaq_s32(sum_s32[1], quant_coeff_4567, zeros);
+            sum_s32[0] = vabaq_s32(sum_s32[0], quant_coeff_0123, zeros);
+            sum_s32[1] = vabaq_s32(sum_s32[1], quant_coeff_4567, zeros);
 
-        scan_ptr += 8;
-        sz -= 8;
+            scan_ptr += 8;
+            sz -= 8;
+        }
+
+        if (sz >= 4) {
+            const int32_t quant_coeff0 = quant_coeff[scan_ptr[0]];
+            const int32_t quant_coeff1 = quant_coeff[scan_ptr[1]];
+            const int32_t quant_coeff2 = quant_coeff[scan_ptr[2]];
+            const int32_t quant_coeff3 = quant_coeff[scan_ptr[3]];
+
+            int32x4_t quant_coeff_0123 = vcombine_s32(
+                vcreate_s32((((uint64_t)quant_coeff1) << 32) | (uint32_t)quant_coeff0),
+                vcreate_s32((((uint64_t)quant_coeff3) << 32) | (uint32_t)quant_coeff2));
+
+            sum_s32[0] = vabaq_s32(sum_s32[0], quant_coeff_0123, zeros);
+
+            scan_ptr += 4;
+            sz -= 4;
+        }
+
+        int sum = 0;
+        while (sz) {
+            sum += abs(quant_coeff[*scan_ptr]);
+            scan_ptr++;
+            sz--;
+        }
+        return sum + vaddvq_s32(vaddq_s32(sum_s32[0], sum_s32[1]));
     }
 
-    if (sz >= 4) {
-        const int32_t quant_coeff0 = quant_coeff[scan_ptr[0]];
-        const int32_t quant_coeff1 = quant_coeff[scan_ptr[1]];
-        const int32_t quant_coeff2 = quant_coeff[scan_ptr[2]];
-        const int32_t quant_coeff3 = quant_coeff[scan_ptr[3]];
-
-        int32x4_t quant_coeff_0123 = vcombine_s32(
-            vcreate_s32((((uint64_t)quant_coeff1) << 32) | (uint32_t)quant_coeff0),
-            vcreate_s32((((uint64_t)quant_coeff3) << 32) | (uint32_t)quant_coeff2));
-
-        sum_s32[0] = vabaq_s32(sum_s32[0], quant_coeff_0123, zeros);
-
-        scan_ptr += 4;
-        sz -= 4;
+    // Dense: gather-free linear over the whole block. n_coeffs is always a multiple of 16.
+    assert(n_coeffs % 8 == 0);
+    for (int32_t i = 0; i < n_coeffs; i += 8) {
+        sum_s32[0] = vaddq_s32(sum_s32[0], vabsq_s32(vld1q_s32(quant_coeff + i)));
+        sum_s32[1] = vaddq_s32(sum_s32[1], vabsq_s32(vld1q_s32(quant_coeff + i + 4)));
     }
-
-    int sum = 0;
-    while (sz) {
-        sum += abs(quant_coeff[*scan_ptr]);
-        scan_ptr++;
-        sz--;
-    }
-
-    int32x4_t partial_sums = vaddq_s32(sum_s32[0], sum_s32[1]);
-
-    const int32_t cul_level = AOMMIN(COEFF_CONTEXT_MASK, sum + vaddvq_s32(partial_sums));
-
-    // DC value, calculation from set_dc_sign()
-    if (quant_coeff[0] < 0) {
-        return (cul_level | (1 << COEFF_CONTEXT_BITS));
-    }
-    if (quant_coeff[0] > 0) {
-        return (cul_level + (2 << COEFF_CONTEXT_BITS));
-    }
-    return (uint8_t)cul_level;
+    return vaddvq_s32(vaddq_s32(sum_s32[0], sum_s32[1]));
 }

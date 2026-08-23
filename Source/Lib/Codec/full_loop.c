@@ -1353,24 +1353,21 @@ void svt_aom_quantize_inv_quantize_light(PictureControlSet* pcs, int32_t* coeff,
     }
 }
 
-// See av1_get_txb_entropy_context in libaom
-uint8_t svt_av1_compute_cul_level_c(const int16_t* const scan, const int32_t* const quant_coeff, uint16_t* eob) {
+// See av1_get_txb_entropy_context in libaom. Reference: sum |quant_coeff| over the eob coded coeffs
+// in scan order, capped at COEFF_CONTEXT_MASK; the caller applies the clamp + DC sign. (The SIMD
+// kernels additionally switch to a linear whole-block sum for dense blocks; the C reference stays
+// simple and eob-bounded.)
+int32_t svt_av1_compute_cul_level_c(const int16_t* const scan, const int32_t* const quant_coeff, int32_t eob,
+                                    int32_t n_coeffs) {
+    (void)n_coeffs;
     int32_t cul_level = 0;
-    for (int32_t c = 0; c < *eob; ++c) {
-        const int16_t pos   = scan[c];
-        const int32_t v     = quant_coeff[pos];
-        int32_t       level = ABS(v);
-        cul_level += level;
-        // Early exit the loop if cul_level reaches COEFF_CONTEXT_MASK
+    for (int32_t c = 0; c < eob; ++c) {
+        cul_level += ABS(quant_coeff[scan[c]]);
         if (cul_level >= COEFF_CONTEXT_MASK) {
             break;
         }
     }
-
-    cul_level = AOMMIN(COEFF_CONTEXT_MASK, cul_level);
-    // DC value
-    set_dc_sign(&cul_level, quant_coeff[0]);
-    return (uint8_t)cul_level;
+    return cul_level;
 }
 
 // Retract EOB by removing trailing low-magnitude coefficients separated by zero gaps
@@ -1515,6 +1512,18 @@ static INLINE uint16_t shave_coeff(int32_t* quant_buf, int32_t* recon_buf, const
     }
 
     return (uint16_t)updated_eob;
+}
+
+// eob<=1 is a single (possibly zero) DC coefficient whose raw level is |dc|; eob>1 uses the ISA
+// kernel (scan/gather for sparse blocks, linear for dense). The clamp + DC sign is applied here
+// once, shared by both paths and all ISA variants.
+static INLINE uint8_t compute_cul_level_fast(const int16_t* const scan, const int32_t* const quant_coeff,
+                                             int32_t n_coeffs, uint16_t* eob) {
+    int32_t cul_level = (*eob <= 1) ? abs(quant_coeff[0])
+                                    : svt_av1_compute_cul_level(scan, quant_coeff, *eob, n_coeffs);
+    cul_level         = AOMMIN(COEFF_CONTEXT_MASK, cul_level);
+    set_dc_sign(&cul_level, quant_coeff[0]);
+    return (uint8_t)cul_level;
 }
 
 uint8_t svt_aom_quantize_inv_quantize(PictureControlSet* pcs, ModeDecisionContext* ctx, int32_t* coeff,
@@ -1680,8 +1689,8 @@ uint8_t svt_aom_quantize_inv_quantize(PictureControlSet* pcs, ModeDecisionContex
         }
     }
     if (perform_rdoq && *eob != 0) {
-        int width    = tx_size_wide[txsize];
-        int height   = tx_size_high[txsize];
+        int width  = tx_size_wide[txsize];
+        int height = tx_size_high[txsize];
         // eob_perc >= th  <=>  eob*100 >= th*(w*h) for positive integers; avoids a per-TU divide.
         const int eob_scaled = (*eob) * 100;
         const int wh         = width * height;
@@ -1752,7 +1761,7 @@ uint8_t svt_aom_quantize_inv_quantize(PictureControlSet* pcs, ModeDecisionContex
     }
 
     // Derive cul_level
-    return svt_av1_compute_cul_level(scan_order->scan, quant_coeff, eob);
+    return compute_cul_level_fast(scan_order->scan, quant_coeff, n_coeffs, eob);
 }
 
 void svt_aom_inv_transform_recon_wrapper(PictureControlSet* pcs, ModeDecisionContext* ctx, uint8_t* pred_buffer,

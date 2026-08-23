@@ -25,6 +25,7 @@
 #include "definitions.h"
 #include "pcs.h"
 #include "q_matrices.h"
+#include "cabac_context_model.h"
 
 namespace {
 using std::make_tuple;
@@ -1212,34 +1213,42 @@ TEST_P(ComputeCulLevelTest, test_match) {
     const auto test_func_{GetParam()};
     SVTRandom rnd{0, (1 << 10) - 1};
     SVTRandom quant_rnd{-10, 10};
-    constexpr int max_size = 50;
-    // scan[] is a set of indexes for quant_coeff[]
-    std::array<int16_t, max_size> scan{};
-    std::array<int32_t, max_size> quant_coeff{};
 
-    for (int test = 0; test < 1000; test++) {
-        uint16_t eob_ref = rnd.random() % max_size, eob_test = eob_ref;
-
-        if (eob_ref == 0) {
-            quant_coeff.fill(0);
-        } else {
-            std::generate(quant_coeff.begin(), quant_coeff.end(), [&]() {
-                return quant_rnd.random();
-            });
+    // Kernel contract: n_coeffs is a real transform size (multiple of 16,
+    // required by the dense linear path); scan[] is a permutation of [0,
+    // n_coeffs); coeffs at scan positions >= eob are zero (as in a coded
+    // block). The kernel returns the raw sum of |quant_coeff| over the coded
+    // coeffs and the caller clamps to COEFF_CONTEXT_MASK, so the clamped
+    // results are what must match. eob > 1 (the caller handles eob <= 1).
+    for (const int32_t n_coeffs : {16, 32, 64, 256, 1024}) {
+        std::vector<int16_t> scan(n_coeffs);
+        std::vector<int32_t> quant_coeff(n_coeffs);
+        for (int32_t i = 0; i < n_coeffs; ++i) {
+            scan[i] = (int16_t)i;
         }
 
-        std::generate(scan.begin() + 1, scan.end(), [&]() {
-            return rnd.random() % max_size;
-        });
+        for (int test = 0; test < 200; test++) {
+            // Fisher-Yates shuffle keeps scan a permutation of [0, n_coeffs).
+            for (int32_t i = n_coeffs - 1; i > 0; --i) {
+                const int32_t j = rnd.random() % (i + 1);
+                std::swap(scan[i], scan[j]);
+            }
+            const int32_t eob =
+                2 + rnd.random() % (n_coeffs - 1);  // [2, n_coeffs]
 
-        int32_t ref_res = svt_av1_compute_cul_level_c(
-            scan.data(), quant_coeff.data(), &eob_ref);
+            std::fill(quant_coeff.begin(), quant_coeff.end(), 0);
+            for (int32_t c = 0; c < eob; ++c) {
+                quant_coeff[scan[c]] = quant_rnd.random();
+            }
 
-        int32_t test_res =
-            test_func_(scan.data(), quant_coeff.data(), &eob_test);
+            const int32_t ref_res = svt_av1_compute_cul_level_c(
+                scan.data(), quant_coeff.data(), eob, n_coeffs);
+            const int32_t test_res =
+                test_func_(scan.data(), quant_coeff.data(), eob, n_coeffs);
 
-        EXPECT_EQ(ref_res, test_res);
-        EXPECT_EQ(eob_ref, eob_test);
+            EXPECT_EQ(AOMMIN(COEFF_CONTEXT_MASK, ref_res),
+                      AOMMIN(COEFF_CONTEXT_MASK, test_res));
+        }
     }
 }
 
