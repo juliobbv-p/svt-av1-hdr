@@ -633,21 +633,20 @@ static INLINE int get_coeff_cost_general(int is_last, int ci, TranLow abs_qc, in
     } else {
         cost += txb_costs->base_cost[coeff_ctx][AOMMIN(abs_qc, 3)];
     }
-    if (abs_qc != 0) {
-        if (ci == 0) {
-            cost += txb_costs->dc_sign_cost[dc_sign_ctx][sign];
+    // All callers invoke this only on the non-zero coeff path, so abs_qc != 0 always.
+    if (ci == 0) {
+        cost += txb_costs->dc_sign_cost[dc_sign_ctx][sign];
+    } else {
+        cost += av1_cost_literal(1);
+    }
+    if (abs_qc > NUM_BASE_LEVELS) {
+        int br_ctx;
+        if (is_last) {
+            br_ctx = get_br_ctx_eob(ci, bwl, tx_class);
         } else {
-            cost += av1_cost_literal(1);
+            br_ctx = get_br_ctx(levels, ci, bwl, tx_class);
         }
-        if (abs_qc > NUM_BASE_LEVELS) {
-            int br_ctx;
-            if (is_last) {
-                br_ctx = get_br_ctx_eob(ci, bwl, tx_class);
-            } else {
-                br_ctx = get_br_ctx(levels, ci, bwl, tx_class);
-            }
-            cost += get_br_cost(abs_qc, txb_costs->lps_cost[br_ctx]);
-        }
+        cost += get_br_cost(abs_qc, txb_costs->lps_cost[br_ctx]);
     }
     return cost;
 }
@@ -705,14 +704,13 @@ static AOM_FORCE_INLINE int get_two_coeff_cost_simple(int ci, TranLow abs_qc, in
     if (abs_qc <= 3) {
         diff = txb_costs->base_cost[coeff_ctx][abs_qc + 4];
     }
-    if (abs_qc) {
-        cost += av1_cost_literal(1);
-        if (abs_qc > NUM_BASE_LEVELS) {
-            const int br_ctx      = get_br_ctx(levels, ci, bwl, tx_class);
-            int       brcost_diff = 0;
-            cost += get_br_cost_with_diff(abs_qc, txb_costs->lps_cost[br_ctx], &brcost_diff);
-            diff += brcost_diff;
-        }
+    // Caller (update_coeff_simple) only invokes this with abs_qc != 0.
+    cost += av1_cost_literal(1);
+    if (abs_qc > NUM_BASE_LEVELS) {
+        const int br_ctx      = get_br_ctx(levels, ci, bwl, tx_class);
+        int       brcost_diff = 0;
+        cost += get_br_cost_with_diff(abs_qc, txb_costs->lps_cost[br_ctx], &brcost_diff);
+        diff += brcost_diff;
     }
     *cost_low = cost - diff;
 
@@ -723,17 +721,15 @@ static INLINE int get_coeff_cost_eob(int ci, TranLow abs_qc, int sign, int coeff
                                      const LvMapCoeffCost* txb_costs, int bwl, TxClass tx_class) {
     int cost = 0;
     cost += txb_costs->base_eob_cost[coeff_ctx][AOMMIN(abs_qc, 3) - 1];
-    if (abs_qc != 0) {
-        if (ci == 0) {
-            cost += txb_costs->dc_sign_cost[dc_sign_ctx][sign];
-        } else {
-            cost += av1_cost_literal(1);
-        }
-        if (abs_qc > NUM_BASE_LEVELS) {
-            int br_ctx;
-            br_ctx = get_br_ctx_eob(ci, bwl, tx_class);
-            cost += get_br_cost(abs_qc, txb_costs->lps_cost[br_ctx]);
-        }
+    // Callers only invoke this on the non-zero coeff path, so abs_qc != 0 always.
+    if (ci == 0) {
+        cost += txb_costs->dc_sign_cost[dc_sign_ctx][sign];
+    } else {
+        cost += av1_cost_literal(1);
+    }
+    if (abs_qc > NUM_BASE_LEVELS) {
+        const int br_ctx = get_br_ctx_eob(ci, bwl, tx_class);
+        cost += get_br_cost(abs_qc, txb_costs->lps_cost[br_ctx]);
     }
     return cost;
 }
@@ -754,7 +750,6 @@ static AOM_FORCE_INLINE void update_coeff_eob(int* accu_rate, int64_t* accu_dist
                                               TranLow* dqcoeff, uint8_t* levels, int sharpness, const QmVal* iqm_ptr) {
     assert(si != *eob - 1);
     const int     ci        = scan[si];
-    const int     dqv       = get_dqv(dequant, ci, iqm_ptr);
     const TranLow qc        = qcoeff[ci];
     const int     coeff_ctx = get_lower_levels_ctx(levels, ci, bwl, tx_size, tx_class);
     if (qc == 0) {
@@ -782,6 +777,7 @@ static AOM_FORCE_INLINE void update_coeff_eob(int* accu_rate, int64_t* accu_dist
             rate_low         = txb_costs->base_cost[coeff_ctx][0];
             rd_low           = RDCOST(rdmult, *accu_rate + rate_low, *accu_dist);
         } else {
+            const int dqv = get_dqv(dequant, ci, iqm_ptr);
             get_qc_dqc_low(abs_qc, sign, dqv, shift, &qc_low, &dqc_low);
             abs_qc_low = abs_qc - 1;
             dist_low   = get_coeff_dist(tqc, dqc_low, shift) - dist0;
@@ -854,7 +850,6 @@ static INLINE void update_coeff_general(int* accu_rate, int64_t* accu_dist, int 
                                         const LvMapCoeffCost* txb_costs, const TranLow* tcoeff, TranLow* qcoeff,
                                         TranLow* dqcoeff, uint8_t* levels, const QmVal* iqm_ptr) {
     const int     ci        = scan[si];
-    const int     dqv       = get_dqv(dequant, ci, iqm_ptr);
     const TranLow qc        = qcoeff[ci];
     const int     is_last   = si == (eob - 1);
     const int     coeff_ctx = get_lower_levels_ctx_general(is_last, si, bwl, height, levels, ci, tx_size, tx_class);
@@ -880,6 +875,7 @@ static INLINE void update_coeff_general(int* accu_rate, int64_t* accu_dist, int 
             dist_low                      = dist0;
             rate_low                      = txb_costs->base_cost[coeff_ctx][0];
         } else {
+            const int dqv = get_dqv(dequant, ci, iqm_ptr);
             get_qc_dqc_low(abs_qc, sign, dqv, shift, &qc_low, &dqc_low);
             abs_qc_low = abs_qc - 1;
             dist_low   = get_coeff_dist(tqc, dqc_low, shift);
@@ -906,7 +902,6 @@ static AOM_FORCE_INLINE void update_coeff_simple(int* accu_rate, int si, int eob
                                                  const int16_t* scan, const LvMapCoeffCost* txb_costs,
                                                  const TranLow* tcoeff, TranLow* qcoeff, TranLow* dqcoeff,
                                                  uint8_t* levels, const QmVal* iqm_ptr) {
-    const int dqv = get_dqv(dequant, scan[si], iqm_ptr);
     (void)eob;
     // this simple version assumes the coeff's scan_idx is not DC (scan_idx != 0)
     // and not the last (scan_idx != eob - 1)
@@ -931,6 +926,7 @@ static AOM_FORCE_INLINE void update_coeff_simple(int* accu_rate, int si, int eob
         const int64_t dist = get_coeff_dist(abs_tqc, abs_dqc, shift);
         const int64_t rd   = RDCOST(rdmult, rate, dist);
 
+        const int     dqv         = get_dqv(dequant, ci, iqm_ptr);
         const TranLow abs_qc_low  = abs_qc - 1;
         const TranLow abs_dqc_low = (abs_qc_low * dqv) >> shift;
         const int64_t dist_low    = get_coeff_dist(abs_tqc, abs_dqc_low, shift);
@@ -1173,12 +1169,16 @@ static void svt_av1_optimize_b(PictureControlSet* pcs, ModeDecisionContext* ctx,
                     sharpness);
     }
 
-    int si_end = 1; // default: full RDOQ
-    if (ctx->rdoq_ctrls.cut_off_num) {
-        const int cut_off_coeff = AOMMAX((width * height) >> 7,
-                                         (*eob * ctx->rdoq_ctrls.cut_off_num) / ctx->rdoq_ctrls.cut_off_denum);
-        si_end                  = AOMMAX(1, *eob - cut_off_coeff);
-    }
+    // The "simple" RDOQ loop only runs for coeffs below the eob region (needs si >= si_end,
+    // and si_end >= 1). When the eob region already consumed everything (si < 1, e.g. eob==1
+    // or <= max_nz_num nonzero coeffs) skip the cut-off divide and the loop dispatch entirely.
+    if (si >= 1) {
+        int si_end = 1; // default: full RDOQ
+        if (ctx->rdoq_ctrls.cut_off_num) {
+            const int cut_off_coeff = AOMMAX((width * height) >> 7,
+                                             (*eob * ctx->rdoq_ctrls.cut_off_num) / ctx->rdoq_ctrls.cut_off_denum);
+            si_end                  = AOMMAX(1, *eob - cut_off_coeff);
+        }
 #define UPDATE_COEFF_SIMPLE_CASE(tx_class_literal) \
     case tx_class_literal:                         \
         for (; si >= si_end; --si) {               \
@@ -1200,13 +1200,14 @@ static void svt_av1_optimize_b(PictureControlSet* pcs, ModeDecisionContext* ctx,
                                 qparam->iqmatrix); \
         }                                          \
         break;
-    switch (tx_class) {
-        UPDATE_COEFF_SIMPLE_CASE(TX_CLASS_2D);
-        UPDATE_COEFF_SIMPLE_CASE(TX_CLASS_HORIZ);
-        UPDATE_COEFF_SIMPLE_CASE(TX_CLASS_VERT);
+        switch (tx_class) {
+            UPDATE_COEFF_SIMPLE_CASE(TX_CLASS_2D);
+            UPDATE_COEFF_SIMPLE_CASE(TX_CLASS_HORIZ);
+            UPDATE_COEFF_SIMPLE_CASE(TX_CLASS_VERT);
 #undef UPDATE_COEFF_SIMPLE_CASE
-    default:
-        assert(false);
+        default:
+            assert(false);
+        }
     }
 
     // DC position
@@ -1681,11 +1682,13 @@ uint8_t svt_aom_quantize_inv_quantize(PictureControlSet* pcs, ModeDecisionContex
     if (perform_rdoq && *eob != 0) {
         int width    = tx_size_wide[txsize];
         int height   = tx_size_high[txsize];
-        int eob_perc = (*eob) * 100 / (width * height);
-        if (eob_perc >= ctx->rdoq_ctrls.eob_th) {
+        // eob_perc >= th  <=>  eob*100 >= th*(w*h) for positive integers; avoids a per-TU divide.
+        const int eob_scaled = (*eob) * 100;
+        const int wh         = width * height;
+        if (eob_scaled >= ctx->rdoq_ctrls.eob_th * wh) {
             perform_rdoq = 0;
         }
-        if (perform_rdoq && (eob_perc >= ctx->rdoq_ctrls.eob_fast_th)) {
+        if (perform_rdoq && (eob_scaled >= ctx->rdoq_ctrls.eob_fast_th * wh)) {
             svt_fast_optimize_b(
                 (TranLow*)coeff, &candidate_plane, quant_coeff, (TranLow*)recon_coeff, eob, txsize, tx_type);
         }
