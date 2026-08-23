@@ -62,14 +62,15 @@ static INLINE void init_qp(const int16_t* round_ptr, const int16_t* quant_ptr, c
     }
 
     init_one_qp(&dequant, &qp[2]);
-    *thr = _mm256_srai_epi16(qp[2], 1 + log_scale);
+    // thr holds (dequant >> (1+log_scale)) - 1, so a single cmpgt tests abs >= threshold.
+    *thr = _mm256_sub_epi16(_mm256_srai_epi16(qp[2], 1 + log_scale), _mm256_set1_epi16(1));
 }
 
 static INLINE void update_qp(int log_scale, __m256i* thr, __m256i* qp) {
     qp[0] = _mm256_permute2x128_si256(qp[0], qp[0], 0x11);
     qp[1] = _mm256_permute2x128_si256(qp[1], qp[1], 0x11);
     qp[2] = _mm256_permute2x128_si256(qp[2], qp[2], 0x11);
-    *thr  = _mm256_srai_epi16(qp[2], 1 + log_scale);
+    *thr  = _mm256_sub_epi16(_mm256_srai_epi16(qp[2], 1 + log_scale), _mm256_set1_epi16(1));
 }
 
 #define store_quan(q, addr)                                      \
@@ -106,9 +107,7 @@ static INLINE uint16_t quant_gather_eob(__m256i eob) {
 static INLINE void quantize(const __m256i* thr, const __m256i* qp, __m256i* c, const int16_t* iscan_ptr,
                             TranLow* qcoeff, TranLow* dqcoeff, __m256i* eob) {
     const __m256i abs_coeff = _mm256_abs_epi16(*c);
-    __m256i       mask      = _mm256_cmpgt_epi16(abs_coeff, *thr);
-    mask                    = _mm256_or_si256(mask, _mm256_cmpeq_epi16(abs_coeff, *thr));
-    const int nzflag        = _mm256_movemask_epi8(mask);
+    const int     nzflag    = _mm256_movemask_epi8(_mm256_cmpgt_epi16(abs_coeff, *thr)); // abs >= thr
 
     if (nzflag) {
         __m256i q        = _mm256_adds_epi16(abs_coeff, qp[0]);
@@ -173,9 +172,7 @@ void svt_av1_quantize_fp_avx2(const TranLow* coeff_ptr, intptr_t n_coeffs, const
 static INLINE void quantize_32x32(const __m256i* thr, const __m256i* qp, __m256i* c, const int16_t* iscan_ptr,
                                   TranLow* qcoeff, TranLow* dqcoeff, __m256i* eob) {
     const __m256i abs_coeff = _mm256_abs_epi16(*c);
-    __m256i       mask      = _mm256_cmpgt_epi16(abs_coeff, *thr);
-    mask                    = _mm256_or_si256(mask, _mm256_cmpeq_epi16(abs_coeff, *thr));
-    const int nzflag        = _mm256_movemask_epi8(mask);
+    const int     nzflag    = _mm256_movemask_epi8(_mm256_cmpgt_epi16(abs_coeff, *thr)); // abs >= thr
 
     if (nzflag) {
         __m256i q = _mm256_adds_epi16(abs_coeff, qp[0]);
@@ -244,9 +241,7 @@ void svt_av1_quantize_fp_32x32_avx2(const TranLow* coeff_ptr, intptr_t n_coeffs,
 static INLINE void quantize_64x64(const __m256i* thr, const __m256i* qp, __m256i* c, const int16_t* iscan_ptr,
                                   TranLow* qcoeff, TranLow* dqcoeff, __m256i* eob) {
     const __m256i abs_coeff = _mm256_abs_epi16(*c);
-    __m256i       mask      = _mm256_cmpgt_epi16(abs_coeff, *thr);
-    mask                    = _mm256_or_si256(mask, _mm256_cmpeq_epi16(abs_coeff, *thr));
-    const int nzflag        = _mm256_movemask_epi8(mask);
+    const int     nzflag    = _mm256_movemask_epi8(_mm256_cmpgt_epi16(abs_coeff, *thr)); // abs >= thr
 
     if (nzflag) {
         __m256i q         = _mm256_adds_epi16(abs_coeff, qp[0]);
