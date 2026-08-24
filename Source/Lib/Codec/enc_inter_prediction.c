@@ -2012,7 +2012,7 @@ static void model_rd_for_sb(PictureControlSet* pcs, EbPictureBufferDesc* predict
                                          plane ? ctx->blk_geom->bwidth_uv : ctx->blk_geom->bwidth,
                                          plane ? ctx->blk_geom->bheight_uv : ctx->blk_geom->bheight,
                                          hbd,
-                                         plane ? scs->static_config.ac_bias : effective_ac_bias);
+                                         effective_ac_bias);
         }
 
         uint32_t        rate;
