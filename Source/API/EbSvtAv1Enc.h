@@ -1031,15 +1031,29 @@ typedef struct EbSvtAv1EncConfiguration {
      * Validation (svt_av1_verify_settings):
      *   - max_managed_refs <= 4
      *   - if > 0: pred_structure must be LOW_DELAY.
-     *
-     * ABI note: this field was added in place of one padding byte. The
-     * library expects EbSvtAv1EncConfiguration to be zero-initialized
-     * before configuration (which svt_av1_enc_init_handle guarantees);
-     * applications building this struct manually with uninitialized
-     * memory could silently inherit a non-zero value here from prior
-     * stack contents and unexpectedly enable the feature.
      */
     uint8_t max_managed_refs;
+
+    /**
+     * @brief Highest hierarchical_levels this session may reach at runtime.
+     *
+     * Buffer pools are sized once at init from hierarchical_levels. A session
+     * that raises its mini-GOP size later via MG_SIZE_CHANGE_EVENT must declare
+     * the ceiling here, or the pools sized for the initial value run dry.
+     *
+     * 0 (default): hierarchical_levels is fixed for the session; pool sizing
+     *              and reference selection are preserved BIT-EXACTLY and no
+     *              extra memory is allocated.
+     * 1..2       : size pools for this many levels instead of the configured
+     *              hierarchical_levels.
+     *
+     * Validation (svt_av1_verify_settings):
+     *   - max_hierarchical_levels <= 2
+     *   - if > 0: rtc, pred_structure == LOW_DELAY and rate_control_mode ==
+     *     CBR, matching where MG_SIZE_CHANGE_EVENT is accepted.
+     *   - if > 0: must be >= hierarchical_levels.
+     */
+    uint8_t max_hierarchical_levels;
 
     // clang-format off
     /* Add 128 Byte Padding to Struct to avoid changing the size of the public configuration struct */
@@ -1050,6 +1064,7 @@ typedef struct EbSvtAv1EncConfiguration {
         - sizeof(uint32_t) * 2 // max intra/inter bitrates
         - sizeof(bool) // enable_intrabc
         - sizeof(uint8_t) // max_managed_refs (ref-frame mgmt)
+        - sizeof(uint8_t) // max_hierarchical_levels (runtime MG size change)
     ];
     // clang-format on
 } EbSvtAv1EncConfiguration;

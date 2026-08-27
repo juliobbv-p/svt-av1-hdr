@@ -399,7 +399,11 @@ static EbErrorType load_default_buffer_configuration_settings(SequenceControlSet
         min_child              = 1; // max_child is 1 for LD
         uint8_t max_refs       = dpb_frames;
         // For special, known, RPS structures and ref frame counts, we can reduce the number of ref buffers
-        if (scs->static_config.rtc && scs->static_config.hierarchical_levels == 0) {
+        // A session declaring max_hierarchical_levels may raise its MG size later
+        // via MG_SIZE_CHANGE_EVENT, so the flat-IPP shortcut would size the pools
+        // for layers it no longer has. Keep the full sizing for those sessions.
+        const bool mg_size_may_change = scs->static_config.max_hierarchical_levels > 0;
+        if (!mg_size_may_change && scs->static_config.rtc && scs->static_config.hierarchical_levels == 0) {
             max_refs = scs->mrp_ctrls.flat_max_refs;
             // For flat IPP the previous frame is always used as a reference. Therefore, that picture does
             // not require a special buffer for use as a TF ref.
@@ -4805,6 +4809,9 @@ static void copy_api_from_app(SequenceControlSet* scs, EbSvtAv1EncConfiguration*
 
     // Ref-frame management: propagate caller's max-anchors hint (0 = disabled).
     scs->static_config.max_managed_refs = config_struct->max_managed_refs;
+
+    // Runtime MG-size change: propagate caller's ceiling (0 = MG size fixed).
+    scs->static_config.max_hierarchical_levels = config_struct->max_hierarchical_levels;
 
     // Override settings for Still IQ tune
     if (scs->static_config.tune == TUNE_IQ) {

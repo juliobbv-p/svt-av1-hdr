@@ -174,6 +174,23 @@ EbErrorType svt_av1_verify_settings(SequenceControlSet* scs) {
                   (unsigned)config->rate_control_mode);
         return_error = EB_ErrorBadParameter;
     }
+    // Runtime MG-size change: ABI cap, restricted to where MG_SIZE_CHANGE_EVENT
+    // is accepted, and never below the level count already configured.
+    if (config->max_hierarchical_levels > 2) {
+        SVT_ERROR("max_hierarchical_levels must be in [0, 2] (got %u)\n", (unsigned)config->max_hierarchical_levels);
+        return_error = EB_ErrorBadParameter;
+    }
+    if (config->max_hierarchical_levels > 0 &&
+        !(config->rtc && config->pred_structure == LOW_DELAY && config->rate_control_mode == SVT_AV1_RC_MODE_CBR)) {
+        SVT_ERROR("max_hierarchical_levels > 0 requires RTC low-delay CBR\n");
+        return_error = EB_ErrorBadParameter;
+    }
+    if (config->max_hierarchical_levels > 0 && config->max_hierarchical_levels < config->hierarchical_levels) {
+        SVT_ERROR("max_hierarchical_levels (%u) must be >= hierarchical_levels (%u)\n",
+                  (unsigned)config->max_hierarchical_levels,
+                  (unsigned)config->hierarchical_levels);
+        return_error = EB_ErrorBadParameter;
+    }
     if (config->rate_control_mode == SVT_AV1_RC_MODE_VBR && config->pred_structure == LOW_DELAY) {
         SVT_ERROR("VBR Rate control is currently not supported for LOW_DELAY, use CBR mode\n");
         return_error = EB_ErrorBadParameter;
@@ -1076,6 +1093,9 @@ EbErrorType svt_av1_set_default_params(EbSvtAv1EncConfiguration* config_ptr) {
     // Ref-frame management disabled by default → legacy bit-exact behavior
     // and no extra ref-buffer memory allocated.
     config_ptr->max_managed_refs = 0;
+
+    // MG size fixed for the session by default → legacy pool sizing.
+    config_ptr->max_hierarchical_levels = 0;
 
     return return_error;
 }
