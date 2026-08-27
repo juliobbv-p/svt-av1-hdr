@@ -64,7 +64,7 @@ namespace svt_av1_test_params {
  *
  */
 static const vector<uint8_t> default_enc_mode = {
-    MAX_ENC_PRESET,
+    ENC_M8,
 };
 static const vector<uint8_t> valid_enc_mode = {
     ENC_M0, /**< highest quality mode */
@@ -78,7 +78,9 @@ static const vector<uint8_t> valid_enc_mode = {
     MAX_ENC_PRESET,
 };
 static const vector<uint8_t> invalid_enc_mode = {
-    MAX_ENC_PRESET + 1,
+    // Presets above MAX_ENC_PRESET are clamped down in copy_api_from_app, so
+    // the only rejected values are those below MIN_ENC_PRESET (ENC_MR).
+    (uint8_t)(ENC_MR - 1),
 };
 
 /* The intra period defines the interval of frames after which you insert an
@@ -103,8 +105,7 @@ static const vector<int32_t> valid_intra_period_length = {
     0,   // all I frame
 };
 static const vector<int32_t> invalid_intra_period_length = {
-    -3,   // < -2
-    256,  // > 255
+    -3,  // < -2 (valid range is [-2, 2^31-2])
 };
 
 /* Random access.
@@ -127,14 +128,11 @@ static const vector<SvtAv1IntraRefreshType> invalid_intra_refresh_type = {};
  *
  * Default is 3. */
 static const vector<uint32_t> default_hierarchical_levels = {
-    3,
+    HIERARCHICAL_LEVELS_AUTO,
 };
-static const vector<uint32_t> valid_hierarchical_levels = {3, 4, 5};
+static const vector<uint32_t> valid_hierarchical_levels = {0, 1, 2, 3, 4, 5};
 static const vector<uint32_t> invalid_hierarchical_levels = {
-    0,
-    1,
-    2,
-    6,  // ...
+    6,  // > 5
 };
 
 /* Prediction structure used to construct GOP. There are two main structures
@@ -383,7 +381,7 @@ static const vector<uint32_t> invalid_super_block_size = {
  *
  * Default is 50. */
 static const vector<uint32_t> default_qp = {
-    50,
+    35,  // DEFAULT_QP
 };
 static const vector<uint32_t> valid_qp = {
     MIN_QP_VALUE,
@@ -606,7 +604,9 @@ static const vector<bool> invalid_constrained_intra = {
  *
  * Default is 0. */
 static const vector<uint8_t> default_rate_control_mode = {0};
-static const vector<uint8_t> valid_rate_control_mode = {0, 1, 2};
+// CBR (2) requires a LOW_DELAY pred structure, so it is rejected in the
+// default RANDOM_ACCESS context of this test.
+static const vector<uint8_t> valid_rate_control_mode = {0, 1};
 static const vector<uint8_t> invalid_rate_control_mode = {3, 4};
 /* Flag to enable the scene change detection algorithm.
  *
@@ -619,7 +619,7 @@ static const vector<uint32_t> valid_scene_change_detection = {
     1,
 };
 static const vector<uint32_t> invalid_scene_change_detection = {
-    2,
+    /* none: not range-checked in svt_av1_verify_settings */
 };
 
 /* Target bitrate in bits/second, only apllicable when rate control mode is
@@ -627,7 +627,7 @@ static const vector<uint32_t> invalid_scene_change_detection = {
  *
  * Default is 7000000. */
 static const vector<uint32_t> default_target_bit_rate = {
-    7000000,
+    2000513,  // DEFAULT_TBR
 };
 static const vector<uint32_t> valid_target_bit_rate = {
     0,
@@ -639,10 +639,10 @@ static const vector<uint32_t> valid_target_bit_rate = {
     1000000,
     7000000,
     10000000,
-    0xFFFFFFFF,
+    100000000,  // max allowed (100000 kbps)
 };
 static const vector<uint32_t> invalid_target_bit_rate = {
-    // none
+    100000001,  // > 100000000
 };
 
 /* Maxium QP value allowed for rate control use, only applicable when rate
@@ -673,16 +673,13 @@ static const vector<uint32_t> invalid_max_qp_allowed = {
  *
  * Default is 0. */
 /*
- * There is a value check for min_qp_allowed in EbEncHandle.c :
- * else if (config->min_qp_allowed >= MAX_QP_VALUE) {
- *     SVT_LOG("Error instance %u: MinQpAllowed must be [0 - %d]\n",
- *         channel_number + 1, MAX_QP_VALUE-1); return_error =
- *         EB_ErrorBadParameter;
- * }
- * The maximum valid value should be MAX_QP_VALUE - 10.
+ * svt_av1_verify_settings enforces min_qp_allowed <= MAX_QP_VALUE and
+ * min_qp_allowed <= max_qp_allowed. The test sets max_qp_allowed = MAX_QP_VALUE
+ * via config_enc_param(), so the maximum valid value is MAX_QP_VALUE.
+ * The default is MIN_QP_AUTO ((uint32_t)~0).
  */
 static const vector<uint32_t> default_min_qp_allowed = {
-    10,
+    ((uint32_t)~0),  // MIN_QP_AUTO
 };
 static const vector<uint32_t> valid_min_qp_allowed = {
     MIN_QP_VALUE,
@@ -693,10 +690,10 @@ static const vector<uint32_t> valid_min_qp_allowed = {
     32,
     50,
     56,
-    MAX_QP_VALUE - 1,
+    MAX_QP_VALUE,
 };
 static const vector<uint32_t> invalid_min_qp_allowed = {
-    MAX_QP_VALUE,
+    MAX_QP_VALUE + 1,
 };
 
 // Tresholds
@@ -760,9 +757,14 @@ static const vector<uint32_t> invalid_tier = {
 static const vector<uint32_t> default_level = {
     0,
 };
-static const vector<uint32_t> valid_level = {0, 1, 2, 10, 64, 100, 0xFFFFFFFF};
+// Valid AV1 levels: level == 0 (auto) or major.minor with major in [2, 9],
+// minor in [0, 3], and a defined seq_level_idx (see is_valid_seq_level_idx).
+static const vector<uint32_t> valid_level = {0, 20, 40, 51, 63, 93};
 static const vector<uint32_t> invalid_level = {
-    // none
+    1,    // major < 2
+    22,   // seq_level_idx 2 is undefined
+    70,   // seq_level_idx 20 is undefined
+    100,  // major > 9
 };
 
 /* Assembly instruction set used by encoder.
@@ -900,13 +902,17 @@ static const vector<int32_t> invalid_tile_rows = {
  * Default is 2. */
 static const vector<uint32_t> default_screen_content_mode = {2};
 static const vector<uint32_t> valid_screen_content_mode = {0, 1, 2, 3};
-static const vector<uint32_t> invalid_screen_content_mode = {4};
+static const vector<uint32_t> invalid_screen_content_mode = {
+    /* none: values > 1 are remapped (to 3 or 0) in copy_api_from_app */
+};
 
 /* Variables to control the use of ALT-REF (temporally filtered frames)
  */
 static const vector<uint8_t> default_enable_tf = {1};
 static const vector<uint8_t> valid_enable_tf = {0, 1, 2};
-static const vector<uint8_t> invalid_enable_tf = {3};
+static const vector<uint8_t> invalid_enable_tf = {
+    /* none: enable_tf is not range-checked in svt_av1_verify_settings */
+};
 
 static const vector<uint8_t> default_altref_strength = {5};
 static const vector<uint8_t> valid_altref_strength = {0, 1, 2, 3, 4, 5, 6};
