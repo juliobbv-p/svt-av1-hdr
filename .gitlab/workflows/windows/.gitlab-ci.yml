@@ -39,6 +39,19 @@
     when: always
     reports:
       junit: reports/*.xml
+  cache:
+    - key: "$CI_JOB_NAME_SLUG-gtest-parallel-v1"
+      paths:
+        - .cache/gtest-parallel
+      policy: pull-push
+  before_script:
+    - if (-Not (Test-Path -LiteralPath "$env:CI_PROJECT_DIR/.cache")) { New-Item -ItemType Directory -Path "$env:CI_PROJECT_DIR/.cache" -Force | Out-Null }
+    - if (Test-Path -LiteralPath "$env:CI_PROJECT_DIR/.cache/gtest-parallel") { Copy-Item -LiteralPath "$env:CI_PROJECT_DIR/.cache/gtest-parallel" -Destination "$env:LOCALAPPDATA/gtest-parallel" -Force }
+    - Invoke-WebRequest -OutFile gtest_parallel.py -Uri https://raw.githubusercontent.com/1480c1/gtest-parallel/unique_id/gtest_parallel.py
+  after_script:
+    - Copy-Item -LiteralPath "$env:LOCALAPPDATA/gtest-parallel" -Destination "$env:CI_PROJECT_DIR/.cache/gtest-parallel" -Force
+  needs:
+    - Win64 (MSVC, Tests)
 
 #
 # Compile jobs
@@ -67,29 +80,34 @@ Win64 (MSVC, Tests):
 
 Win64 Unit Tests:
   extends: .windows-unit-test-base
+  script:
+    - cmake -B Build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+    - python gtest_parallel.py --print_test_times ./Bin/Release/SvtAv1UnitTests -- --gtest_output="xml:reports/unit-{#}.xml"
+
+# Kept separate from the unit tests, and worker-capped, on purpose.
+# gtest-parallel orders tasks slowest-first from a timing cache that persists
+# across pipelines, so every e2e test lands at the head of the queue and the
+# encoders run concurrently. One SvtAv1E2ETests process peaks at 0.6-1.4 GB, so
+# at the default worker count (one per logical CPU) the container runs out of
+# memory and every in-flight e2e test dies at once with std::bad_alloc.
+Win64 E2E Tests:
+  extends: .windows-unit-test-base
   variables:
     SVT_AV1_TEST_VECTOR_PATH: $CI_PROJECT_DIR/test/vectors
+    SVT_AV1_E2E_WORKERS: 6
   cache:
-    - key: testvectors
-      paths:
-        - test/vectors
-      policy: pull-push
     - key: "$CI_JOB_NAME_SLUG-gtest-parallel-v1"
       paths:
         - .cache/gtest-parallel
       policy: pull-push
-  before_script:
-    - if (-Not (Test-Path -LiteralPath "$env:CI_PROJECT_DIR/.cache")) { New-Item -ItemType Directory -Path "$env:CI_PROJECT_DIR/.cache" -Force | Out-Null }
-    - if (Test-Path -LiteralPath "$env:CI_PROJECT_DIR/.cache/gtest-parallel") { Copy-Item -LiteralPath "$env:CI_PROJECT_DIR/.cache/gtest-parallel" -Destination "$env:LOCALAPPDATA/gtest-parallel" -Force }
-    - Invoke-WebRequest -OutFile gtest_parallel.py -Uri https://raw.githubusercontent.com/1480c1/gtest-parallel/unique_id/gtest_parallel.py
+    - key: testvectors
+      paths:
+        - test/vectors
+      policy: pull-push
   script:
     - cmake -B Build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
     - cmake --build Build --target TestVectors
-    - python gtest_parallel.py --print_test_times ./Bin/Release/SvtAv1UnitTests ./Bin/Release/SvtAv1E2ETests -- --gtest_output="xml:reports/{#}.xml"
-  after_script:
-    - Copy-Item -LiteralPath "$env:LOCALAPPDATA/gtest-parallel" -Destination "$env:CI_PROJECT_DIR/.cache/gtest-parallel" -Force
-  needs:
-    - Win64 (MSVC, Tests)
+    - python gtest_parallel.py --print_test_times --workers $env:SVT_AV1_E2E_WORKERS ./Bin/Release/SvtAv1E2ETests -- --gtest_output="xml:reports/e2e-{#}.xml"
 
 Win64 Enc Test:
   extends: .windows-test-base
