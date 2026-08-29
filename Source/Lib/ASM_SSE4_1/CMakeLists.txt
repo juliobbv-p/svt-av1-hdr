@@ -41,7 +41,6 @@ set(all_files
     corner_match_sse4.c
     encodetxb_sse4.c
     filterintra_sse4.c
-    hash_sse4_2.c
     highbd_convolve_2d_sse4.c
     highbd_fwd_txfm_sse4.c
     highbd_inv_txfm_sse4.c
@@ -57,12 +56,5 @@ set(all_files
     temporal_filtering_sse4_1.c
     warp_plane_sse4.c
     )
-
-# The crc32 instruction used in hash_sse4_2.c is an SSE4.2 instruction, so the
-# file needs its own arch flag with gcc/clang. MSVC needs no flag for it.
-check_c_compiler_flag(-msse4.2 HAS_MSSE4_2)
-if(HAS_MSSE4_2)
-    set_source_files_properties(hash_sse4_2.c PROPERTIES COMPILE_OPTIONS "-msse4.2")
-endif()
 
 add_library(ASM_SSE4_1 OBJECT ${all_files})

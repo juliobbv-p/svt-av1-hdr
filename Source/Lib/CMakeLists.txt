@@ -42,11 +42,13 @@ if(NOT COMPILE_C_ONLY AND HAVE_X86_PLATFORM)
         ${PROJECT_SOURCE_DIR}/Source/Lib/ASM_SSE2/
         ${PROJECT_SOURCE_DIR}/Source/Lib/ASM_SSSE3/
         ${PROJECT_SOURCE_DIR}/Source/Lib/ASM_SSE4_1/
+        ${PROJECT_SOURCE_DIR}/Source/Lib/ASM_SSE4_2/
         ${PROJECT_SOURCE_DIR}/Source/Lib/ASM_AVX2/
         ${PROJECT_SOURCE_DIR}/Source/Lib/ASM_AVX512/)
     add_subdirectory(ASM_SSE2)
     add_subdirectory(ASM_SSSE3)
     add_subdirectory(ASM_SSE4_1)
+    add_subdirectory(ASM_SSE4_2)
     add_subdirectory(ASM_AVX2)
     if(ENABLE_AVX512)
         add_subdirectory(ASM_AVX512)
@@ -88,6 +90,7 @@ if(NOT COMPILE_C_ONLY AND HAVE_X86_PLATFORM)
         $<TARGET_OBJECTS:ASM_SSE2>
         $<TARGET_OBJECTS:ASM_SSSE3>
         $<TARGET_OBJECTS:ASM_SSE4_1>
+        $<TARGET_OBJECTS:ASM_SSE4_2>
         $<TARGET_OBJECTS:ASM_AVX2>)
     if(ENABLE_AVX512)
         target_sources(SvtAv1Enc PRIVATE
