@@ -108,11 +108,13 @@ EbCpuFlags svt_aom_get_cpu_flags_to_use() {
 
 #if defined(__linux__) || HAVE_ELF_AUX_INFO
 
+#if HAVE_SVE && !defined(__ANDROID__)
 static inline uint64_t read_midr_el1(void) {
     uint64_t v;
     __asm__ volatile ("mrs %0, midr_el1" : "=r"(v));
     return v;
 }
+#endif
 
 // Define hwcap values ourselves: building with an old auxv header where these
 // hwcap values are not defined should not prevent features from being enabled.
@@ -170,6 +172,12 @@ EbCpuFlags svt_aom_get_cpu_flags(void) {
         flags |= EB_CPU_FLAGS_SVE2;
 #endif // HAVE_SVE2
 
+    // MIDR_EL1 is an EL1 register: reading it from EL0 needs kernel MRS
+    // trap-and-emulate (mainline >= 4.11, AOSP >= 4.14) and raises SIGILL
+    // without it. EB_CPU_FLAGS_NEOVERSE_V2 is only consumed under HAVE_SVE,
+    // and Neoverse V2 cannot occur on Android, so skip the read where the
+    // flag is unusable rather than risk the fault.
+#if HAVE_SVE && !defined(__ANDROID__)
     const uint64_t midr = read_midr_el1();
     const unsigned implementer = (midr >> 24) & 0xFF;   // [31:24]
     const unsigned partnum     = (midr >> 4)  & 0xFFF;  // [15:4]
@@ -177,6 +185,7 @@ EbCpuFlags svt_aom_get_cpu_flags(void) {
     if (implementer == 0x41 && partnum == 0xD4F) {
       flags |= EB_CPU_FLAGS_NEOVERSE_V2;
     }
+#endif
 
     return flags;
 }
