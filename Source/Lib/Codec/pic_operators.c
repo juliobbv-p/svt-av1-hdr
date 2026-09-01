@@ -229,22 +229,22 @@ void svt_aom_picture_full_distortion32_bits_single_facade(int32_t* coeff, int32_
                 }
             }
         }
+    }
 
-        // Transform size related tweaks
-        if (tx_bias == 1 || tx_bias == 2) {
-            if (is_intra_mode(mode)) {
-                if (area_width == 64 && area_height == 64) {
-                    // Strong bias against intra 64x64 blocks, as those often tend to be visually blurry
-                    distortion[DIST_CALC_RESIDUAL]   = (distortion[DIST_CALC_RESIDUAL] * 3) / 2;
-                    distortion[DIST_CALC_PREDICTION] = (distortion[DIST_CALC_PREDICTION] * 3) / 2;
-                } else if (tx_bias == 1 && (area_width * area_height) <= 32 * 32) {
-                    // Very mild large block intra bias to compensate for pred mode rebalancing picking
-                    // smaller blocks slightly more often
-                    distortion[DIST_CALC_RESIDUAL]   = (distortion[DIST_CALC_RESIDUAL] * 17) / 16;
-                    distortion[DIST_CALC_PREDICTION] = (distortion[DIST_CALC_PREDICTION] * 17) / 16;
-                }
-                //printf("32bit: w %i, h %i\n", area_width, area_height);
+    // Transform size related tweaks
+    if (tx_bias == 1 || tx_bias == 2) {
+        if (is_intra_mode(mode)) {
+            if (area_width == 64 && area_height == 64) {
+                // Strong bias against intra 64x64 blocks, as those often tend to be visually blurry
+                distortion[DIST_CALC_RESIDUAL]   = (distortion[DIST_CALC_RESIDUAL] * 3) / 2;
+                distortion[DIST_CALC_PREDICTION] = (distortion[DIST_CALC_PREDICTION] * 3) / 2;
+            } else if (tx_bias == 1 && (area_width * area_height) <= 32 * 32) {
+                // Very mild large block intra bias to compensate for pred mode rebalancing picking
+                // smaller blocks slightly more often
+                distortion[DIST_CALC_RESIDUAL]   = (distortion[DIST_CALC_RESIDUAL] * 17) / 16;
+                distortion[DIST_CALC_PREDICTION] = (distortion[DIST_CALC_PREDICTION] * 17) / 16;
             }
+            //printf("32bit: w %i, h %i\n", area_width, area_height);
         }
     }
 }
