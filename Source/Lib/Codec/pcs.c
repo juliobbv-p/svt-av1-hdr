@@ -1194,7 +1194,7 @@ EbErrorType ppcs_update_param(PictureParentControlSet* ppcs) {
         input_pic_buf_desc_init_data.bit_depth          = 8; //Should be 8bit
         input_pic_buf_desc_init_data.buffer_enable_mask = PICTURE_BUFFER_DESC_CHROMA_MASK;
         input_pic_buf_desc_init_data.border             = scs->border;
-        input_pic_buf_desc_init_data.color_format       = EB_YUV420; //set to 420 for MD
+        input_pic_buf_desc_init_data.color_format       = EB_YUV420; // chroma-complexity analysis only
         input_pic_buf_desc_init_data.split_mode         = false;
         svt_picture_buffer_desc_update(ppcs->chroma_downsampled_pic, (EbPtr)&input_pic_buf_desc_init_data);
     }

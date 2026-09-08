@@ -908,6 +908,8 @@ typedef struct PC_TREE {
 
 typedef struct ModeDecisionContext {
     EbDctor dctor;
+    uint8_t subsampling_x;
+    uint8_t subsampling_y;
 
     EbFifo*                       mode_decision_configuration_input_fifo_ptr;
     EbFifo*                       mode_decision_output_fifo_ptr;

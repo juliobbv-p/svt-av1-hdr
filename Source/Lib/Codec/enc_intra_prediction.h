@@ -41,6 +41,9 @@ static const IntraSize svt_aom_intra_unit[] =
 };
 // clang-format on
 
+void svt_av1_intra_prediction_uv_txb(struct ModeDecisionContext* ctx, PictureControlSet* pcs,
+                                     ModeDecisionCandidateBuffer* cand_bf, unsigned plane, unsigned x, unsigned y);
+
 EbErrorType svt_av1_intra_prediction(uint8_t hbd_md, struct ModeDecisionContext* ctx, PictureControlSet* pcs,
                                      ModeDecisionCandidateBuffer* cand_bf);
 EbErrorType svt_aom_update_neighbor_samples_array_open_loop_mb(uint8_t use_top_righ_bottom_left,

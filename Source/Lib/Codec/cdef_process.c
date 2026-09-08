@@ -356,8 +356,8 @@ static void cdef_seg_search(CdefContext* ctx, PictureControlSet* pcs, SequenceCo
     svt_aom_get_recon_pic(pcs, &recon_pic, is_16bit);
 
     for (int pli = 0; pli < num_planes; pli++) {
-        const int subsampling_x = (pli == 0) ? 0 : 1;
-        const int subsampling_y = (pli == 0) ? 0 : 1;
+        const int subsampling_x = (pli == 0) ? 0 : scs->subsampling_x;
+        const int subsampling_y = (pli == 0) ? 0 : scs->subsampling_y;
         xdec[pli]               = subsampling_x;
         ydec[pli]               = subsampling_y;
         // The checks are stubs for 4:2:2 and 4:4:4 support

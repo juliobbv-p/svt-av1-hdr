@@ -414,6 +414,29 @@ void svt_av1_dr_prediction_z2_c(uint8_t* dst, ptrdiff_t stride, int32_t bw, int3
     }
 }
 
+// AV1 7.11.5: 4:4:4 CfL retains every luma sample and converts it to Q3.
+void svt_cfl_luma_subsampling_444_lbd_c(const uint8_t* input, int32_t input_stride, int16_t* output_q3, int32_t width,
+                                        int32_t height) {
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            output_q3[x] = input[x] << 3;
+        }
+        input += input_stride;
+        output_q3 += CFL_BUF_LINE;
+    }
+}
+
+void svt_cfl_luma_subsampling_444_hbd_c(const uint16_t* input, int32_t input_stride, int16_t* output_q3, int32_t width,
+                                        int32_t height) {
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            output_q3[x] = input[x] << 3;
+        }
+        input += input_stride;
+        output_q3 += CFL_BUF_LINE;
+    }
+}
+
 /************************************************************************************************
 * svt_cfl_luma_subsampling_420_lbd_c
 * Subsample luma samples to match chroma size. Low bit depth and C

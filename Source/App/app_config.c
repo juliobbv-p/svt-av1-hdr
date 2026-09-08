@@ -763,10 +763,9 @@ ConfigDescription config_entry_global_options[] = {
     {BUFFERED_INPUT_TOKEN,
      "Buffer `n` input frames into memory and use them to encode, default is -1 [-1: no frames "
      "buffered, 1-`(2^31)-1`]"},
-    {ENCODER_COLOR_FORMAT,
-     "Color format, only yuv420 is supported at this time, default is 1 [0: yuv400, 1: yuv420, 2: "
-     "yuv422, 3: yuv444]"},
-    {PROFILE_TOKEN, "Bitstream profile, default is 0 [0: main, 1: high, 2: professional]"},
+    {ENCODER_COLOR_FORMAT, "Color format, default is 1 [1 or 420: yuv420, 3 or 444: yuv444]"},
+    {PROFILE_TOKEN,
+     "Bitstream profile [0: main (default; automatically selects high for 4:4:4), 1: high, 2: professional]"},
     {LEVEL_TOKEN,
      "Bitstream level, defined in A.3 of the av1 spec, default is 0 [0: autodetect from input, "
      "2.0-7.3]"},

@@ -479,8 +479,8 @@ EbErrorType svt_av1_verify_settings(SequenceControlSet* scs) {
         return_error = EB_ErrorBadParameter;
     }
 
-    if (config->encoder_color_format != EB_YUV420) {
-        SVT_ERROR("Only support 420 now \n");
+    if (config->encoder_color_format != EB_YUV420 && config->encoder_color_format != EB_YUV444) {
+        SVT_ERROR("Only 4:2:0 and 4:4:4 color formats are supported\n");
         return_error = EB_ErrorBadParameter;
     }
 

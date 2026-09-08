@@ -254,7 +254,7 @@ void svt_aom_get_txb_ctx(PictureControlSet* pcs, const int32_t plane,
     const uint8_t* const left_ptr = svt_aom_na_left_ptr_pu(dc_sign_level_coeff_neighbor_array, blk_org_y);
 
     static const int8_t signs[3]    = {0, -1, 1};
-    const int32_t       plane_shift = !!plane;
+    const int32_t       plane_shift = plane ? pcs->scs->subsampling_x : 0;
     int32_t             txb_w_unit  = MIN(eb_tx_size_wide_unit[tx_size],
                              (int32_t)((pcs->ppcs->aligned_width >> plane_shift) - blk_org_x) >> 2);
     int32_t             txb_h_unit  = MIN(eb_tx_size_high_unit[tx_size],
@@ -613,107 +613,59 @@ static void av1_encode_tx_coef_uv(PictureControlSet* pcs, EntropyCodingContext* 
                                   uint32_t intraLumaDir, EbPictureBufferDesc* coeff_ptr,
                                   NeighborArrayUnit* cr_dc_sign_level_coeff_na,
                                   NeighborArrayUnit* cb_dc_sign_level_coeff_na) {
-    MbModeInfo* const mbmi   = ec_ctx->mbmi;
-    const BlockSize   bsize  = mbmi->bsize;
-    const bool        has_uv = is_chroma_reference(blk_org_y >> 2, blk_org_x >> 2, bsize, 1, 1);
+    const int         chroma_ss = pcs->scs->subsampling_x;
+    MbModeInfo* const mbmi      = ec_ctx->mbmi;
+    const BlockSize   bsize     = mbmi->bsize;
+    const bool        has_uv    = is_chroma_reference(blk_org_y >> 2, blk_org_x >> 2, bsize, chroma_ss, chroma_ss);
 
     if (!has_uv) {
         return;
     }
     const int32_t   is_inter       = is_inter_mode(mbmi->block_mi.mode) || mbmi->block_mi.use_intrabc;
-    const BlockSize bsize_uv       = get_plane_block_size(bsize, 1, 1);
+    const BlockSize bsize_uv       = get_plane_block_size(bsize, chroma_ss, chroma_ss);
     const uint8_t   tx_depth       = mbmi->block_mi.tx_depth;
-    const TxSize    chroma_tx_size = av1_get_max_uv_txsize(bsize, 1, 1);
+    const TxSize    chroma_tx_size = av1_get_max_uv_txsize(bsize, chroma_ss, chroma_ss);
     const int       tx_width_uv    = tx_size_wide[chroma_tx_size];
     const int       tx_height_uv   = tx_size_high[chroma_tx_size];
-    const unsigned  txb_count      = 1;
-
-    for (unsigned tx_index = 0; tx_index < txb_count; ++tx_index) {
-        // Hoist tx_org lookup + ROUND_UV: reused by 4 sites below.
-        const Position org  = tx_org[bsize][is_inter][tx_depth][tx_index];
-        const uint32_t uv_x = ROUND_UV(blk_org_x + org.x) >> 1;
-        const uint32_t uv_y = ROUND_UV(blk_org_y + org.y) >> 1;
-
-        // cb
-        int32_t* coeff_buffer = (int32_t*)coeff_ptr->u_buffer + ec_ctx->coded_area_sb_uv;
-        int16_t  txb_skip_ctx = 0;
-        int16_t  dc_sign_ctx  = 0;
-
-        svt_aom_get_txb_ctx(pcs,
-                            COMPONENT_CHROMA,
-                            cb_dc_sign_level_coeff_na,
-                            uv_x,
-                            uv_y,
-                            bsize_uv,
-                            chroma_tx_size,
-                            &txb_skip_ctx,
-                            &dc_sign_ctx);
-
-        int32_t cul_level_cb = av1_write_coeffs_txb_1d(pcs->ppcs,
-                                                       frame_context,
-                                                       mbmi,
-                                                       ec_writer,
-                                                       blk_ptr,
-                                                       chroma_tx_size,
-                                                       tx_index,
-                                                       intraLumaDir,
-                                                       coeff_buffer,
-                                                       COMPONENT_CHROMA,
-                                                       txb_skip_ctx,
-                                                       dc_sign_ctx,
-                                                       blk_ptr->eob.u[tx_index],
-                                                       ec_ctx);
-
-        // cr
-        coeff_buffer = (int32_t*)coeff_ptr->v_buffer + ec_ctx->coded_area_sb_uv;
-        txb_skip_ctx = 0;
-        dc_sign_ctx  = 0;
-
-        svt_aom_get_txb_ctx(pcs,
-                            COMPONENT_CHROMA,
-                            cr_dc_sign_level_coeff_na,
-                            uv_x,
-                            uv_y,
-                            bsize_uv,
-                            chroma_tx_size,
-                            &txb_skip_ctx,
-                            &dc_sign_ctx);
-
-        int32_t cul_level_cr = av1_write_coeffs_txb_1d(pcs->ppcs,
-                                                       frame_context,
-                                                       mbmi,
-                                                       ec_writer,
-                                                       blk_ptr,
-                                                       chroma_tx_size,
-                                                       tx_index,
-                                                       intraLumaDir,
-                                                       coeff_buffer,
-                                                       COMPONENT_CHROMA,
-                                                       txb_skip_ctx,
-                                                       dc_sign_ctx,
-                                                       blk_ptr->eob.v[tx_index],
-                                                       ec_ctx);
-        // Update the cb Dc Sign Level Coeff Neighbor Array
-        uint8_t dc_sign_level_coeff = (uint8_t)cul_level_cb;
-        svt_aom_neighbor_array_unit_mode_write_pu(cb_dc_sign_level_coeff_na,
-                                                  &dc_sign_level_coeff,
-                                                  uv_x,
-                                                  uv_y,
-                                                  tx_width_uv,
-                                                  tx_height_uv,
-                                                  NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
-        // Update the cr DC Sign Level Coeff Neighbor Array
-        dc_sign_level_coeff = (uint8_t)cul_level_cr;
-        svt_aom_neighbor_array_unit_mode_write_pu(cr_dc_sign_level_coeff_na,
-                                                  &dc_sign_level_coeff,
-                                                  uv_x,
-                                                  uv_y,
-                                                  tx_width_uv,
-                                                  tx_height_uv,
-                                                  NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
-
-        ec_ctx->coded_area_sb_uv += tx_width_uv * tx_height_uv;
+    const unsigned  txb_count      = svt_aom_uv_tx_count(bsize, chroma_ss);
+    // AV1 5.11.34: write every transform in U before the transforms in V.
+    for (unsigned plane = 1; plane <= 2; ++plane) {
+        NeighborArrayUnit* na = plane == 1 ? cb_dc_sign_level_coeff_na : cr_dc_sign_level_coeff_na;
+        for (unsigned tx_index = 0; tx_index < txb_count; ++tx_index) {
+            const Position org          = tx_org[bsize][is_inter][tx_depth][tx_index];
+            const uint32_t uv_x         = ROUND_UV_TO(blk_org_x + org.x, chroma_ss) >> chroma_ss;
+            const uint32_t uv_y         = ROUND_UV_TO(blk_org_y + org.y, chroma_ss) >> chroma_ss;
+            int32_t*       coeff_buffer = (int32_t*)coeff_ptr->buffer[plane] + ec_ctx->coded_area_sb_uv +
+                tx_index * tx_width_uv * tx_height_uv;
+            int16_t txb_skip_ctx = 0, dc_sign_ctx = 0;
+            svt_aom_get_txb_ctx(
+                pcs, COMPONENT_CHROMA, na, uv_x, uv_y, bsize_uv, chroma_tx_size, &txb_skip_ctx, &dc_sign_ctx);
+            const int32_t cul_level = av1_write_coeffs_txb_1d(
+                pcs->ppcs,
+                frame_context,
+                mbmi,
+                ec_writer,
+                blk_ptr,
+                chroma_tx_size,
+                tx_index,
+                intraLumaDir,
+                coeff_buffer,
+                COMPONENT_CHROMA,
+                txb_skip_ctx,
+                dc_sign_ctx,
+                plane == 1 ? blk_ptr->eob.u[tx_index] : blk_ptr->eob.v[tx_index],
+                ec_ctx);
+            uint8_t dc_sign_level_coeff = (uint8_t)cul_level;
+            svt_aom_neighbor_array_unit_mode_write_pu(na,
+                                                      &dc_sign_level_coeff,
+                                                      uv_x,
+                                                      uv_y,
+                                                      tx_width_uv,
+                                                      tx_height_uv,
+                                                      NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
+        }
     }
+    ec_ctx->coded_area_sb_uv += txb_count * tx_width_uv * tx_height_uv;
 }
 
 /************************************
@@ -726,6 +678,7 @@ static EbErrorType av1_encode_coeff_1d(PictureControlSet* pcs, EntropyCodingCont
                                        NeighborArrayUnit* luma_dc_sign_level_coeff_na,
                                        NeighborArrayUnit* cr_dc_sign_level_coeff_na,
                                        NeighborArrayUnit* cb_dc_sign_level_coeff_na) {
+    const int         chroma_ss    = pcs->scs->subsampling_x;
     EbErrorType       return_error = EB_ErrorNone;
     MbModeInfo* const mbmi         = ec_ctx->mbmi;
     const int32_t     is_inter     = is_inter_mode(mbmi->block_mi.mode) || mbmi->block_mi.use_intrabc;
@@ -759,24 +712,24 @@ static EbErrorType av1_encode_coeff_1d(PictureControlSet* pcs, EntropyCodingCont
         // tx_depth is 0 in this branch.
         int32_t cul_level_y, cul_level_cb = 0, cul_level_cr = 0;
 
-        const bool     has_uv       = is_chroma_reference(blk_org_y >> 2, blk_org_x >> 2, luma_bsize, 1, 1);
-        const uint8_t  tx_depth     = 0;
+        const bool     has_uv   = is_chroma_reference(blk_org_y >> 2, blk_org_x >> 2, luma_bsize, chroma_ss, chroma_ss);
+        const uint8_t  tx_depth = 0;
         const uint16_t txb_count    = tx_blocks_per_depth[luma_bsize][tx_depth];
         const TxSize   tx_size      = tx_depth_to_tx_size[tx_depth][luma_bsize];
         const int      tx_width     = tx_size_wide[tx_size];
         const int      tx_height    = tx_size_high[tx_size];
-        const TxSize   tx_size_uv   = av1_get_max_uv_txsize(luma_bsize, 1, 1);
+        const TxSize   tx_size_uv   = av1_get_max_uv_txsize(luma_bsize, chroma_ss, chroma_ss);
         const int      tx_width_uv  = tx_size_wide[tx_size_uv];
         const int      tx_height_uv = tx_size_high[tx_size_uv];
         // bsize_uv is only consumed under `has_uv`, but hoisting unconditionally is cheaper than branching twice.
-        const BlockSize bsize_uv = has_uv ? get_plane_block_size(luma_bsize, 1, 1) : 0;
+        const BlockSize bsize_uv = has_uv ? get_plane_block_size(luma_bsize, chroma_ss, chroma_ss) : 0;
         for (uint8_t txb_itr = 0; txb_itr < txb_count; txb_itr++) {
             // Hoist tx_org + ROUND_UV: reused by up to 7 sites per iteration.
             const Position org  = tx_org[luma_bsize][is_inter][tx_depth][txb_itr];
             const uint32_t tx_x = blk_org_x + org.x;
             const uint32_t tx_y = blk_org_y + org.y;
-            const uint32_t uv_x = ROUND_UV(tx_x) >> 1;
-            const uint32_t uv_y = ROUND_UV(tx_y) >> 1;
+            const uint32_t uv_x = ROUND_UV_TO(tx_x, chroma_ss) >> chroma_ss;
+            const uint32_t uv_y = ROUND_UV_TO(tx_y, chroma_ss) >> chroma_ss;
 
             int32_t* coeff_buffer = (int32_t*)coeff_ptr->y_buffer + ec_ctx->coded_area_sb;
 
@@ -2240,7 +2193,7 @@ static void encode_restoration_mode(PictureParentControlSet* pcs, AomWriteBitBuf
             svt_aom_wb_write_bit(wb, rsi->restoration_unit_size > 128);
         }
     }
-    if (!chroma_none) {
+    if (!chroma_none && pcs->scs->subsampling_x && pcs->scs->subsampling_y) {
         svt_aom_wb_write_bit(
             wb, pcs->child_pcs->rst_info[1].restoration_unit_size != pcs->child_pcs->rst_info[0].restoration_unit_size);
         assert(pcs->child_pcs->rst_info[1].restoration_unit_size == pcs->child_pcs->rst_info[0].restoration_unit_size ||
@@ -4155,6 +4108,7 @@ static void loop_restoration_write_sb_coeffs(PictureControlSet* pcs, FRAME_CONTE
 
 static void ec_update_neighbors(PictureControlSet* pcs, EntropyCodingContext* ec_ctx, uint32_t blk_org_x,
                                 uint32_t blk_org_y, uint16_t tile_idx, BlockSize bsize) {
+    const int          chroma_ss                   = pcs->scs->subsampling_x;
     NeighborArrayUnit* partition_context_na        = pcs->partition_context_na[tile_idx];
     NeighborArrayUnit* luma_dc_sign_level_coeff_na = pcs->luma_dc_sign_level_coeff_na[tile_idx];
     NeighborArrayUnit* cr_dc_sign_level_coeff_na   = pcs->cr_dc_sign_level_coeff_na[tile_idx];
@@ -4163,7 +4117,7 @@ static void ec_update_neighbors(PictureControlSet* pcs, EntropyCodingContext* ec
     uint8_t            skip_coeff                  = mbmi->block_mi.skip;
     const int          bwidth                      = block_size_wide[bsize];
     const int          bheight                     = block_size_high[bsize];
-    const bool         has_uv                      = is_chroma_reference(blk_org_y >> 2, blk_org_x >> 2, bsize, 1, 1);
+    const bool         has_uv = is_chroma_reference(blk_org_y >> 2, blk_org_x >> 2, bsize, chroma_ss, chroma_ss);
 
     // Update the Leaf Depth Neighbor Array
     svt_aom_neighbor_array_unit_mode_write_pu(partition_context_na,
@@ -4192,20 +4146,20 @@ static void ec_update_neighbors(PictureControlSet* pcs, EntropyCodingContext* ec
                                                   NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
 
         if (has_uv) {
-            const BlockSize bsize_uv   = get_plane_block_size(bsize, 1, 1);
+            const BlockSize bsize_uv   = get_plane_block_size(bsize, chroma_ss, chroma_ss);
             const int       bwidth_uv  = block_size_wide[bsize_uv];
             const int       bheight_uv = block_size_high[bsize_uv];
             svt_aom_neighbor_array_unit_mode_write_pu(cb_dc_sign_level_coeff_na,
                                                       &dc_sign_level_coeff,
-                                                      ((blk_org_x >> 3) << 3) >> 1,
-                                                      ((blk_org_y >> 3) << 3) >> 1,
+                                                      ROUND_UV_TO(blk_org_x, chroma_ss) >> chroma_ss,
+                                                      ROUND_UV_TO(blk_org_y, chroma_ss) >> chroma_ss,
                                                       bwidth_uv,
                                                       bheight_uv,
                                                       NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
             svt_aom_neighbor_array_unit_mode_write_pu(cr_dc_sign_level_coeff_na,
                                                       &dc_sign_level_coeff,
-                                                      ((blk_org_x >> 3) << 3) >> 1,
-                                                      ((blk_org_y >> 3) << 3) >> 1,
+                                                      ROUND_UV_TO(blk_org_x, chroma_ss) >> chroma_ss,
+                                                      ROUND_UV_TO(blk_org_y, chroma_ss) >> chroma_ss,
                                                       bwidth_uv,
                                                       bheight_uv,
                                                       NEIGHBOR_ARRAY_UNIT_TOP_AND_LEFT_ONLY_MASK);
@@ -4350,6 +4304,7 @@ static inline void pack_map_tokens(AomWriter* w, const TOKENEXTRA** tp, int n, i
 
 static void write_palette_mode_info(PictureParentControlSet* ppcs, FRAME_CONTEXT* ec_ctx, MbModeInfo* mbmi,
                                     EcBlkStruct* blk_ptr, BlockSize bsize, int mi_row, int mi_col, AomWriter* w) {
+    const int      chroma_ss         = ppcs->scs->subsampling_x;
     const uint32_t intra_luma_mode   = mbmi->block_mi.mode;
     uint32_t       intra_chroma_mode = mbmi->block_mi.uv_mode;
 
@@ -4366,7 +4321,8 @@ static void write_palette_mode_info(PictureParentControlSet* ppcs, FRAME_CONTEXT
         }
     }
 
-    const int uv_dc_pred = intra_chroma_mode == UV_DC_PRED && is_chroma_reference(mi_row, mi_col, bsize, 1, 1);
+    const int uv_dc_pred = intra_chroma_mode == UV_DC_PRED &&
+        is_chroma_reference(mi_row, mi_col, bsize, chroma_ss, chroma_ss);
     if (uv_dc_pred) {
         assert(blk_ptr->palette_size[1] == 0); //remove when chroma is on
         const int palette_uv_mode_ctx = (blk_ptr->palette_size[0] > 0);
@@ -4932,6 +4888,7 @@ int svt_aom_is_interintra_wedge_used(BlockSize bsize);
 static EbErrorType write_modes_b(PictureControlSet* pcs, EntropyCodingContext* ec_ctx, EntropyCoder* ec,
                                  SuperBlock* sb_ptr, EcBlkStruct* blk_ptr, uint16_t tile_idx,
                                  EbPictureBufferDesc* coeff_ptr, const int mi_row, const int mi_col) {
+    const int           chroma_ss     = pcs->scs->subsampling_x;
     EbErrorType         return_error  = EB_ErrorNone;
     FRAME_CONTEXT*      frame_context = ec->fc;
     AomWriter*          ec_writer     = &ec->ec_writer;
@@ -4949,8 +4906,8 @@ static EbErrorType write_modes_b(PictureControlSet* pcs, EntropyCodingContext* e
     const int          bwidth                      = block_size_wide[bsize];
     const int          bheight                     = block_size_high[bsize];
     bool               skip_coeff                  = mbmi->block_mi.skip;
-    const bool         has_uv                      = is_chroma_reference(blk_org_y >> 2, blk_org_x >> 2, bsize, 1, 1);
-    ec_ctx->mbmi                                   = mbmi;
+    const bool         has_uv = is_chroma_reference(blk_org_y >> 2, blk_org_x >> 2, bsize, chroma_ss, chroma_ss);
+    ec_ctx->mbmi              = mbmi;
 
     const uint8_t skip_mode = mbmi->block_mi.skip_mode;
 

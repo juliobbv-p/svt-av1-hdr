@@ -2212,7 +2212,8 @@ EbErrorType svt_aom_denoise_and_model_ctor(AomDenoiseAndModel* object_ptr, EbPtr
 
 static int32_t denoise_and_model_realloc_if_necessary(struct AomDenoiseAndModel* ctx, EbPictureBufferDesc* sd,
                                                       int32_t use_highbd) {
-    const int32_t chroma_sub_log2[2] = {1, 1}; //todo: send chroma subsampling
+    const int     chroma_ss          = sd->color_format == EB_YUV444 ? 0 : 1;
+    const int32_t chroma_sub_log2[2] = {chroma_ss, chroma_ss};
 
     free(ctx->flat_blocks);
     ctx->flat_blocks = NULL;
@@ -2246,9 +2247,9 @@ static int32_t denoise_and_model_realloc_if_necessary(struct AomDenoiseAndModel*
 
 static void unpack_2d_pic(uint8_t* packed[3], EbPictureBufferDesc* outputPicturePtr) {
     uint16_t luma_width    = (uint16_t)(outputPicturePtr->width);
-    uint16_t chroma_width  = luma_width >> 1;
+    uint16_t chroma_width  = luma_width >> (outputPicturePtr->color_format == EB_YUV444 ? 0 : 1);
     uint16_t luma_height   = (uint16_t)(outputPicturePtr->height);
-    uint16_t chroma_height = luma_height >> 1;
+    uint16_t chroma_height = luma_height >> (outputPicturePtr->color_format == EB_YUV444 ? 0 : 1);
 
     svt_unpack_and_2bcompress((uint16_t*)(packed[0]),
                               outputPicturePtr->y_stride,
@@ -2282,7 +2283,8 @@ int32_t svt_aom_denoise_and_model_run(struct AomDenoiseAndModel* ctx, EbPictureB
                                       int32_t use_highbd) {
     const int32_t block_size = ctx->block_size;
     uint8_t*      raw_data[3];
-    int32_t       chroma_sub_log2[2] = {1, 1}; //todo: send chroma subsampling
+    const int     chroma_ss          = sd->color_format == EB_YUV444 ? 0 : 1;
+    int32_t       chroma_sub_log2[2] = {chroma_ss, chroma_ss};
     int32_t       strides[3]         = {sd->y_stride, sd->u_stride, sd->v_stride};
 
     if (!denoise_and_model_realloc_if_necessary(ctx, sd, use_highbd)) {

@@ -206,7 +206,7 @@ static void create_me_context_and_picture_control(MotionEstimationContext_t* me_
                                                   PictureParentControlSet*   picture_control_set_ptr_frame,
                                                   PictureParentControlSet*   centre_pcs,
                                                   EbPictureBufferDesc* input_picture_ptr_central, int blk_row,
-                                                  int blk_col, uint32_t ss_x, uint32_t ss_y) {
+                                                  int blk_col) {
     // set reference picture for alt-refs
     me_context_ptr->me_ctx->alt_ref_reference_ptr = (EbPaReferenceObject*)
                                                         picture_control_set_ptr_frame->pa_ref_pic_wrapper->object_ptr;
@@ -246,7 +246,9 @@ static void create_me_context_and_picture_control(MotionEstimationContext_t* me_
     me_context_ptr->me_ctx->b64_src_stride = padded_pic_ptr->y_stride;
 
     // Load the 1/4 decimated SB from the 1/4 decimated input to the 1/4 intermediate SB buffer
-    buffer_index = ((b64_origin_y >> ss_y)) * quarter_pic_ptr->y_stride + (b64_origin_x >> ss_x);
+    // This is downsampled luma, independent of the chroma format. Quarter-area
+    // pictures always halve both dimensions, including for 4:4:4 inputs.
+    buffer_index = (b64_origin_y >> 1) * quarter_pic_ptr->y_stride + (b64_origin_x >> 1);
 
     me_context_ptr->me_ctx->quarter_b64_buffer        = &quarter_pic_ptr->y_buffer[buffer_index];
     me_context_ptr->me_ctx->quarter_b64_buffer_stride = quarter_pic_ptr->y_stride;
@@ -2917,9 +2919,7 @@ static EbErrorType produce_temporally_filtered_pic(PictureParentControlSet** pcs
                                                               pcs_list[index_center],
                                                               input_picture_ptr_central,
                                                               blk_row,
-                                                              blk_col,
-                                                              ss_x,
-                                                              ss_y);
+                                                              blk_col);
                         ctx->num_of_list_to_search       = 1;
                         ctx->num_of_ref_pic_to_search[0] = 1;
                         ctx->num_of_ref_pic_to_search[1] = 0;
@@ -3396,9 +3396,7 @@ static EbErrorType produce_temporally_filtered_pic_ld(PictureParentControlSet** 
                                                           pcs_list[index_center],
                                                           input_picture_ptr_central,
                                                           blk_row,
-                                                          blk_col,
-                                                          ss_x,
-                                                          ss_y);
+                                                          blk_col);
                     ctx->num_of_list_to_search       = 1;
                     ctx->num_of_ref_pic_to_search[0] = 1;
                     ctx->num_of_ref_pic_to_search[1] = 0;

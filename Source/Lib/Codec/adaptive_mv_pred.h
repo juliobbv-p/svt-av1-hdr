@@ -53,7 +53,8 @@ void svt_av1_count_overlappable_neighbors(const PictureControlSet* pcs, BlkStruc
 
 void svt_av1_find_best_ref_mvs_from_stack(CandidateMv ref_mv_stack[][MAX_REF_MV_STACK_SIZE], MacroBlockD* xd,
                                           MvReferenceFrame ref_frame, Mv* nearest_mv, Mv* near_mv);
-int svt_aom_is_dv_valid(const Mv dv, const MacroBlockD* xd, int mi_row, int mi_col, BlockSize bsize, int mib_size_log2);
+int  svt_aom_is_dv_valid(const Mv dv, const MacroBlockD* xd, int mi_row, int mi_col, BlockSize bsize, int mib_size_log2,
+                         int chroma_ss);
 
 Mv svt_aom_gm_get_motion_vector_enc(const WarpedMotionParams* gm, int32_t allow_hp, BlockSize bsize, int32_t mi_col,
                                     int32_t mi_row, int32_t is_integer);

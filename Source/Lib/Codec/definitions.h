@@ -325,6 +325,8 @@ enum {
 #define MAX_TXB_COUNT_UV 4 // Maximum number of transform blocks per depth for chroma planes
 #define MAX_LAD 120 // max lookahead-distance 2x60fps
 #define ROUND_UV(x) (((x) >> 3) << 3)
+// Round in luma coordinates to the origin of a minimum 4x4 chroma block.
+#define ROUND_UV_TO(x, ss) (((x) >> (2 + (ss))) << (2 + (ss)))
 #define SWITCHABLE_FILTER_CONTEXTS ((SWITCHABLE_FILTERS + 1) * 4)
 #define CFL_BUF_LINE (32)
 #define CFL_BUF_LINE_I128 (CFL_BUF_LINE >> 3)

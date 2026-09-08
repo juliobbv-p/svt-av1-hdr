@@ -486,9 +486,9 @@ uint64_t svt_aom_get_intra_uv_fast_rate(PictureControlSet* pcs, ModeDecisionCont
         : cand->block_mi.uv_mode;
     const uint32_t         mi_row      = ctx->blk_org_y >> MI_SIZE_LOG2;
     const uint32_t         mi_col      = ctx->blk_org_x >> MI_SIZE_LOG2;
-    // Subsampling assumes YUV 420 content
-    const uint8_t ss_x = 1;
-    const uint8_t ss_y = 1;
+    // Chroma geometry follows the sequence color format.
+    const uint8_t ss_x = ctx->subsampling_x;
+    const uint8_t ss_y = ctx->subsampling_y;
 
     uint64_t chroma_rate = 0;
     // Estimate chroma nominal intra mode bits

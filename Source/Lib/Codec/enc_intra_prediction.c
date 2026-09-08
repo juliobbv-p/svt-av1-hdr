@@ -439,8 +439,8 @@ void svt_av1_predict_intra_block(MacroBlockD* xd, BlockSize bsize, TxSize tx_siz
                                  EbPictureBufferDesc* recon_buffer, int32_t col_off, int32_t row_off, int32_t plane,
                                  Part shape, uint32_t dst_offset_x, uint32_t dst_offset_y, SeqHeader* seq_header_ptr,
                                  EbBitDepth bit_depth) {
-    const int       ss_x        = plane ? 1 : 0;
-    const int       ss_y        = plane ? 1 : 0;
+    const int       ss_x        = plane ? (recon_buffer->color_format == EB_YUV444 ? 0 : 1) : 0;
+    const int       ss_y        = plane ? (recon_buffer->color_format == EB_YUV444 ? 0 : 1) : 0;
     const BlockSize plane_bsize = get_plane_block_size(bsize, ss_x, ss_y);
     const int       wpx         = block_size_wide[plane_bsize];
     const int       hpx         = block_size_high[plane_bsize];
@@ -563,6 +563,80 @@ void svt_av1_predict_intra_block(MacroBlockD* xd, BlockSize bsize, TxSize tx_siz
                            plane);
 }
 
+// Predict one full-resolution chroma transform. Interior references come from
+// this candidate's reconstructed transforms; boundary references come from MD.
+void svt_av1_intra_prediction_uv_txb(ModeDecisionContext* ctx, PictureControlSet* pcs,
+                                     ModeDecisionCandidateBuffer* cand_bf, unsigned plane, unsigned x, unsigned y) {
+    assert(!ctx->subsampling_x && plane > 0 && plane < MAX_PLANES);
+    const int          hbd   = !!SVT_EFFECTIVE_HBD_MD(ctx->hbd_md);
+    const unsigned     bytes = 1u << hbd;
+    const BlockSize    bsize = ctx->blk_geom->bsize;
+    const TxSize       tx    = av1_get_max_uv_txsize(bsize, 0, 0);
+    const unsigned     w = tx_size_wide[tx], h = tx_size_high[tx];
+    NeighborArrayUnit* na                      = plane == 1 ? (hbd ? ctx->cb_recon_na_16bit : ctx->recon_neigh_cb)
+                                                            : (hbd ? ctx->cr_recon_na_16bit : ctx->recon_neigh_cr);
+    uint16_t           top_storage[2 * 32 + 1] = {0}, left_storage[2 * 32 + 1] = {0};
+    uint8_t*           top    = (uint8_t*)top_storage + bytes;
+    uint8_t*           left   = (uint8_t*)left_storage + bytes;
+    const uint8_t*     rec    = cand_bf->recon->buffer[plane];
+    const unsigned     stride = cand_bf->recon->stride[plane];
+    if (y) {
+        const unsigned n = MIN(2 * w, ctx->blk_geom->bwidth - x);
+        memcpy(top, rec + (x + (y - 1) * stride) * bytes, n * bytes);
+        for (unsigned i = n; i < 2 * w; ++i) {
+            memcpy(top + i * bytes, top + (n - 1) * bytes, bytes);
+        }
+    } else if (ctx->blk_org_y) {
+        memcpy(top, na->top_array + (ctx->blk_org_x + x) * bytes, 2 * w * bytes);
+    }
+    if (x) {
+        // The transform below the left neighbor has not been reconstructed yet.
+        for (unsigned i = 0; i < 2 * h; ++i) {
+            memcpy(left + i * bytes, rec + (x - 1 + (y + MIN(i, h - 1)) * stride) * bytes, bytes);
+        }
+    } else if (ctx->blk_org_x) {
+        const unsigned sb = pcs->scs->sb_size;
+        const unsigned n  = MIN(2 * h, sb - ((ctx->blk_org_y + y) % sb));
+        memcpy(left, na->left_array + (ctx->blk_org_y + y) * bytes, n * bytes);
+        for (unsigned i = n; i < 2 * h; ++i) {
+            memcpy(left + i * bytes, left + (n - 1) * bytes, bytes);
+        }
+    }
+    const uint8_t* tl = NULL;
+    if (x && y) {
+        tl = rec + (x - 1 + (y - 1) * stride) * bytes;
+    } else if (y && ctx->blk_org_x) {
+        tl = na->left_array + (ctx->blk_org_y + y - 1) * bytes;
+    } else if (x && ctx->blk_org_y) {
+        tl = na->top_array + (ctx->blk_org_x + x - 1) * bytes;
+    } else if (ctx->blk_org_x && ctx->blk_org_y) {
+        tl = na->top_left_array + svt_aom_na_topleft_offset(na, ctx->blk_org_x, ctx->blk_org_y) * bytes;
+    }
+    if (tl) {
+        memcpy(top - bytes, tl, bytes);
+        memcpy(left - bytes, tl, bytes);
+    }
+    svt_av1_predict_intra_block(ctx->blk_ptr->av1xd,
+                                bsize,
+                                tx,
+                                (PredictionMode)cand_bf->cand->block_mi.uv_mode,
+                                cand_bf->cand->block_mi.angle_delta[PLANE_TYPE_UV],
+                                0,
+                                NULL,
+                                FILTER_INTRA_MODES,
+                                top,
+                                left,
+                                cand_bf->pred,
+                                x >> 2,
+                                y >> 2,
+                                plane,
+                                ctx->shape,
+                                x,
+                                y,
+                                &pcs->scs->seq_header,
+                                hbd ? EB_TEN_BIT : EB_EIGHT_BIT);
+}
+
 /** IntraPrediction()
 is the main function to compute intra prediction for a PU
 */
@@ -571,9 +645,9 @@ EbErrorType svt_av1_intra_prediction(uint8_t hbd_md, ModeDecisionContext* ctx, P
     SVT_FOLD_HBD_MD(hbd_md);
     EbErrorType    return_error   = EB_ErrorNone;
     const TxSize   tx_size        = tx_depth_to_tx_size[cand_bf->cand->block_mi.tx_depth][ctx->blk_geom->bsize];
-    const TxSize   tx_size_chroma = av1_get_max_uv_txsize(ctx->blk_geom->bsize, 1, 1);
+    const TxSize   tx_size_chroma = av1_get_max_uv_txsize(ctx->blk_geom->bsize, ctx->subsampling_x, ctx->subsampling_y);
     const uint32_t sb_size_luma   = pcs->ppcs->scs->sb_size;
-    const uint32_t sb_size_chroma = pcs->ppcs->scs->sb_size / 2;
+    const uint32_t sb_size_chroma = pcs->ppcs->scs->sb_size >> ctx->subsampling_x;
     const bool     is_16bit       = !!hbd_md;
 
     uint8_t        top_neigh_array[(64 * 2 + 1) << 1];
@@ -595,8 +669,8 @@ EbErrorType svt_av1_intra_prediction(uint8_t hbd_md, ModeDecisionContext* ctx, P
         const IntraSize    intra_size  = ang == 0 ? svt_aom_intra_unit[mode] : (IntraSize){2, 2};
         const int          bwidth      = plane ? ctx->blk_geom->bwidth_uv : ctx->blk_geom->bwidth;
         const int          bheight     = plane ? ctx->blk_geom->bheight_uv : ctx->blk_geom->bheight;
-        const int          blk_org_x   = plane ? ctx->round_origin_x >> 1 : ctx->blk_org_x;
-        const int          blk_org_y   = plane ? ctx->round_origin_y >> 1 : ctx->blk_org_y;
+        const int          blk_org_x   = plane ? ctx->round_origin_x >> ctx->subsampling_x : ctx->blk_org_x;
+        const int          blk_org_y   = plane ? ctx->round_origin_y >> ctx->subsampling_y : ctx->blk_org_y;
         const int          sb_size     = plane ? sb_size_chroma : sb_size_luma;
         NeighborArrayUnit* recon_neigh = plane == 0 ? (is_16bit ? ctx->luma_recon_na_16bit : ctx->recon_neigh_y)
             : plane == 1                            ? (is_16bit ? ctx->cb_recon_na_16bit : ctx->recon_neigh_cb)
@@ -632,7 +706,11 @@ EbErrorType svt_av1_intra_prediction(uint8_t hbd_md, ModeDecisionContext* ctx, P
         svt_av1_predict_intra_block(
             ctx->blk_ptr->av1xd,
             ctx->blk_geom->bsize,
-            plane ? tx_size_chroma : tx_size,
+            // Fast-loop estimate; the full loop predicts/reconstructs each UV TX.
+            plane ? (svt_aom_multi_uv_tx(ctx->blk_geom->bsize, ctx->subsampling_x)
+                         ? blocksize_to_txsize[ctx->blk_geom->bsize]
+                         : tx_size_chroma)
+                  : tx_size,
             mode,
             plane ? cand_bf->cand->block_mi.angle_delta[PLANE_TYPE_UV]
                   : cand_bf->cand->block_mi.angle_delta[PLANE_TYPE_Y],

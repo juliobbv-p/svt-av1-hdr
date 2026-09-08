@@ -349,8 +349,8 @@ void svt_av1_cdef_frame(SequenceControlSet* scs, PictureControlSet* pcs) {
     prev_row_cdef = row_cdef + 1;
     curr_row_cdef = prev_row_cdef + nhfb + 2;
     for (int32_t pli = 0; pli < num_planes; pli++) {
-        int32_t subsampling_x = (pli == 0) ? 0 : 1;
-        int32_t subsampling_y = (pli == 0) ? 0 : 1;
+        int32_t subsampling_x = (pli == 0) ? 0 : cm->subsampling_x;
+        int32_t subsampling_y = (pli == 0) ? 0 : cm->subsampling_y;
         xdec[pli]             = subsampling_x; //CHKN xd->plane[pli].subsampling_x;
         ydec[pli]             = subsampling_y; //CHKN  xd->plane[pli].subsampling_y;
         mi_wide_l2[pli]       = MI_SIZE_LOG2 - subsampling_x; //CHKN xd->plane[pli].subsampling_x;

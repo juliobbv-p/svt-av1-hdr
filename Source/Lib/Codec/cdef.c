@@ -708,7 +708,7 @@ void svt_cdef_filter_fb_lbd(uint8_t* dst8, int32_t dstride, const uint8_t* in8, 
                             uint8_t dir[CDEF_NBLOCKS][CDEF_NBLOCKS], int32_t* dirinit,
                             int32_t var[CDEF_NBLOCKS][CDEF_NBLOCKS], int32_t pli, CdefList* dlist, int32_t cdef_count,
                             int32_t cdef_strength, int32_t damping, int32_t coeff_shift, uint8_t subsampling_factor) {
-    if (xdec == 0 && ydec == 0) { // luma: BLOCK_8X8
+    if (pli == 0 && xdec == 0 && ydec == 0) { // luma: BLOCK_8X8
         cdef_filter_fb_lbd_luma(dst8,
                                 dstride,
                                 in8,

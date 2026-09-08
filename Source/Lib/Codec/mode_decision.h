@@ -118,7 +118,7 @@ EbErrorType svt_aom_mode_decision_cand_bf_ctor(ModeDecisionCandidateBuffer* buff
                                                uint64_t* fast_cost, uint64_t* full_cost, uint64_t* full_cost_ssim_ptr);
 
 EbErrorType svt_aom_mode_decision_scratch_cand_bf_ctor(ModeDecisionCandidateBuffer* buffer_ptr, uint8_t sb_size,
-                                                       EbBitDepth max_bitdepth);
+                                                       EbColorFormat color_format, EbBitDepth max_bitdepth);
 
 uint32_t product_full_mode_decision_pd0(struct ModeDecisionContext* ctx, BlkStruct* blk_ptr,
                                         ModeDecisionCandidateBuffer** buffer_ptr_array);

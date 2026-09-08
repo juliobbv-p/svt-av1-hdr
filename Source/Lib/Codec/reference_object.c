@@ -48,10 +48,16 @@ static void initialize_samples_neighboring_reference_picture(EbPictureBufferDesc
         ref_pic->y_buffer, ref_pic->y_stride, ref_pic->width, ref_pic->height);
 
     initialize_samples_neighboring_reference_picture_8bit(
-        ref_pic->u_buffer, ref_pic->u_stride, ref_pic->width >> 1, ref_pic->height >> 1);
+        ref_pic->u_buffer,
+        ref_pic->u_stride,
+        ref_pic->width >> (ref_pic->color_format == EB_YUV444 ? 0 : 1),
+        ref_pic->height >> (ref_pic->color_format >= EB_YUV422 ? 0 : 1));
 
     initialize_samples_neighboring_reference_picture_8bit(
-        ref_pic->v_buffer, ref_pic->v_stride, ref_pic->width >> 1, ref_pic->height >> 1);
+        ref_pic->v_buffer,
+        ref_pic->v_stride,
+        ref_pic->width >> (ref_pic->color_format == EB_YUV444 ? 0 : 1),
+        ref_pic->height >> (ref_pic->color_format >= EB_YUV422 ? 0 : 1));
 }
 
 static void svt_reference_object_dctor(EbPtr p) {

@@ -165,8 +165,8 @@ void svt_av1_setup_dst_planes(PictureControlSet* pcs, MacroblockdPlane* planes, 
                 bsize,
                 src->u_buffer,
                 (scs->max_input_luma_width - scs->max_input_pad_right) >>
-                    1, // The width/height should be the unpadded width/height (see AV1 spec 7.14.2 Edge Loop Filter Process)
-                (scs->max_input_luma_height - scs->max_input_pad_bottom) >> 1,
+                    scs->subsampling_x, // The width/height should be the unpadded width/height (see AV1 spec 7.14.2 Edge Loop Filter Process)
+                (scs->max_input_luma_height - scs->max_input_pad_bottom) >> scs->subsampling_y,
                 src->u_stride,
                 mi_row,
                 mi_col,
@@ -180,8 +180,8 @@ void svt_av1_setup_dst_planes(PictureControlSet* pcs, MacroblockdPlane* planes, 
                 bsize,
                 src->v_buffer,
                 (scs->max_input_luma_width - scs->max_input_pad_right) >>
-                    1, // The width/height should be the unpadded width/height (see AV1 spec 7.14.2 Edge Loop Filter Process)
-                (scs->max_input_luma_height - scs->max_input_pad_bottom) >> 1,
+                    scs->subsampling_x, // The width/height should be the unpadded width/height (see AV1 spec 7.14.2 Edge Loop Filter Process)
+                (scs->max_input_luma_height - scs->max_input_pad_bottom) >> scs->subsampling_y,
                 src->v_stride,
                 mi_row,
                 mi_col,
@@ -597,12 +597,12 @@ void svt_aom_loop_filter_sb(EbPictureBufferDesc* frame_buffer, //reconpicture,
     pd[0].subsampling_y = 0;
     pd[0].plane_type    = PLANE_TYPE_Y;
     pd[0].is_16bit      = frame_buffer->bit_depth > 8;
-    pd[1].subsampling_x = 1;
-    pd[1].subsampling_y = 1;
+    pd[1].subsampling_x = pcs->scs->subsampling_x;
+    pd[1].subsampling_y = pcs->scs->subsampling_y;
     pd[1].plane_type    = PLANE_TYPE_UV;
     pd[1].is_16bit      = frame_buffer->bit_depth > 8;
-    pd[2].subsampling_x = 1;
-    pd[2].subsampling_y = 1;
+    pd[2].subsampling_x = pcs->scs->subsampling_x;
+    pd[2].subsampling_y = pcs->scs->subsampling_y;
     pd[2].plane_type    = PLANE_TYPE_UV;
     pd[2].is_16bit      = frame_buffer->bit_depth > 8;
 
@@ -708,10 +708,9 @@ static void svt_copy_buffer(EbPictureBufferDesc* src, EbPictureBufferDesc* dst, 
     uint16_t copy_width  = ALIGN_POWER_OF_TWO(src->width, 3) << is_16bit;
     uint16_t copy_height = ALIGN_POWER_OF_TWO(src->height, 3);
 
-    // TODO: Don't assume YUV420
     if (plane) {
-        copy_width >>= 1;
-        copy_height >>= 1;
+        copy_width >>= src->color_format == EB_YUV444 ? 0 : 1;
+        copy_height >>= src->color_format >= EB_YUV422 ? 0 : 1;
     }
 
     uint16_t copy_stride       = src->stride[plane] << is_16bit;

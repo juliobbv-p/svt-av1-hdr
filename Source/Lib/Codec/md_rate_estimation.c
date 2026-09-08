@@ -730,7 +730,7 @@ static AOM_INLINE void update_inter_mode_stats(FRAME_CONTEXT* fc, PredictionMode
  * Updates all the palette stats/CDF for the current block
  ******************************************************************************/
 static AOM_INLINE void update_palette_cdf(MacroBlockD* xd, const MbModeInfo* const mbmi, BlkStruct* blk_ptr,
-                                          const int mi_row, const int mi_col) {
+                                          const int mi_row, const int mi_col, int chroma_ss) {
     FRAME_CONTEXT*  fc                = xd->tile_ctx;
     const BlockSize bsize             = mbmi->bsize;
     const int       palette_bsize_ctx = svt_aom_get_palette_bsize_ctx(bsize);
@@ -745,7 +745,8 @@ static AOM_INLINE void update_palette_cdf(MacroBlockD* xd, const MbModeInfo* con
         }
     }
     uint32_t  intra_chroma_mode = blk_ptr->block_mi.uv_mode;
-    const int uv_dc_pred        = intra_chroma_mode == UV_DC_PRED && is_chroma_reference(mi_row, mi_col, bsize, 1, 1);
+    const int uv_dc_pred        = intra_chroma_mode == UV_DC_PRED &&
+        is_chroma_reference(mi_row, mi_col, bsize, chroma_ss, chroma_ss);
 
     if (uv_dc_pred) {
         const int n                   = blk_ptr->palette_size[1];
@@ -821,7 +822,7 @@ static AOM_INLINE void sum_intra_stats(PictureControlSet* pcs, BlkStruct* blk_pt
                    2 * MAX_ANGLE_DELTA + 1);
     }
     if (svt_aom_allow_palette(pcs->ppcs->frm_hdr.allow_screen_content_tools, bsize)) {
-        update_palette_cdf(xd, mbmi, blk_ptr, mi_row, mi_col);
+        update_palette_cdf(xd, mbmi, blk_ptr, mi_row, mi_col, pcs->scs->subsampling_x);
     }
 }
 

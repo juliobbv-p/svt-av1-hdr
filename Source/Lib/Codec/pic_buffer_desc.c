@@ -516,6 +516,8 @@ EbErrorType svt_recon_picture_buffer_desc_ctor(EbPictureBufferDesc* pic_buf, EbP
 }
 
 void svt_aom_link_eb_to_aom_buffer_desc_8bit(EbPictureBufferDesc* picBuffDsc, Yv12BufferConfig* aomBuffDsc) {
+    const int ss_x = picBuffDsc->color_format == EB_YUV444 ? 0 : 1;
+    const int ss_y = picBuffDsc->color_format >= EB_YUV422 ? 0 : 1;
     // Forces an 8 bit version
     // Note: Not all fields are connected. Add more connections as needed.
     {
@@ -524,18 +526,18 @@ void svt_aom_link_eb_to_aom_buffer_desc_8bit(EbPictureBufferDesc* picBuffDsc, Yv
         aomBuffDsc->v_buffer = picBuffDsc->v_buffer;
 
         aomBuffDsc->y_width  = picBuffDsc->width;
-        aomBuffDsc->uv_width = picBuffDsc->width / 2;
+        aomBuffDsc->uv_width = picBuffDsc->width >> ss_x;
 
         aomBuffDsc->y_height  = picBuffDsc->height;
-        aomBuffDsc->uv_height = picBuffDsc->height / 2;
+        aomBuffDsc->uv_height = picBuffDsc->height >> ss_y;
 
         aomBuffDsc->y_stride  = picBuffDsc->y_stride;
         aomBuffDsc->uv_stride = picBuffDsc->u_stride;
 
         aomBuffDsc->border = picBuffDsc->border;
 
-        aomBuffDsc->subsampling_x = 1;
-        aomBuffDsc->subsampling_y = 1;
+        aomBuffDsc->subsampling_x = ss_x;
+        aomBuffDsc->subsampling_y = ss_y;
 
         aomBuffDsc->y_crop_width   = aomBuffDsc->y_width;
         aomBuffDsc->uv_crop_width  = aomBuffDsc->uv_width;
@@ -550,7 +552,8 @@ void svt_aom_link_eb_to_aom_buffer_desc(EbPictureBufferDesc* picBuffDsc, Yv12Buf
                                         uint16_t pad_right, uint16_t pad_bottom, bool is_16bit) {
     (void)is_16bit;
 
-    const int32_t ss_x = 1, ss_y = 1;
+    const int32_t ss_x = picBuffDsc->color_format == EB_YUV444 ? 0 : 1;
+    const int32_t ss_y = picBuffDsc->color_format >= EB_YUV422 ? 0 : 1;
     //NOTe:  Not all fileds are connected. add more connections as needed.
     if (picBuffDsc->bit_depth == EB_EIGHT_BIT) {
         aomBuffDsc->y_buffer = picBuffDsc->y_buffer;

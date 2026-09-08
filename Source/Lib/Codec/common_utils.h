@@ -148,26 +148,30 @@ static INLINE TxSize av1_get_max_uv_txsize(BlockSize bsize, int32_t subsampling_
     return av1_get_adjusted_tx_size(uv_tx);
 }
 
-// bsize is the luma bsize. tx_depth only used for luma.
-static INLINE TxSize av1_get_tx_size(BlockSize bsize, int tx_depth, int plane /*, const MacroBlockD *xd*/) {
-    //const MbModeInfo *mbmi = xd->mi[0];
-    // if (xd->lossless[mbmi->segment_id]) return TX_4X4;
-    if (plane == 0) {
-        return tx_depth_to_tx_size[tx_depth][bsize];
-    }
-    // const MacroblockdPlane *pd = &xd->plane[plane];
+extern const uint8_t block_size_wide[BLOCK_SIZES_ALL];
+extern const uint8_t block_size_high[BLOCK_SIZES_ALL];
 
-    uint32_t ss_x = plane > 0 ? 1 : 0;
-    uint32_t ss_y = plane > 0 ? 1 : 0;
-    return av1_get_max_uv_txsize(bsize, ss_x, ss_y);
+// Number of chroma transforms, independent of the luma transform partition.
+static INLINE int svt_aom_uv_tx_count(BlockSize bsize, unsigned ss) {
+    const BlockSize uv = get_plane_block_size(bsize, ss, ss);
+    const TxSize    tx = av1_get_max_uv_txsize(bsize, ss, ss);
+    return (block_size_wide[uv] / tx_size_wide[tx]) * (block_size_high[uv] / tx_size_high[tx]);
+}
+
+// 4:4:4 coding blocks larger than 32 use matching 32-pixel luma/chroma
+// transform partitions. Smaller blocks retain independent luma TX search.
+static INLINE bool svt_aom_multi_uv_tx(BlockSize bsize, unsigned ss) {
+    return !ss && (block_size_wide[bsize] > 32 || block_size_high[bsize] > 32);
+}
+
+static INLINE bool svt_aom_uv_tx_pass(BlockSize bsize, unsigned ss, unsigned depth, unsigned tx_index) {
+    return svt_aom_multi_uv_tx(bsize, ss) || !depth || !tx_index;
 }
 
 extern const PartitionType from_shape_to_part[EXT_PARTITION_TYPES];
 extern const Part          from_part_to_shape[PART_S + 1];
 
 // Width/height lookup tables in units of various block sizes
-extern const uint8_t block_size_wide[BLOCK_SIZES_ALL];
-extern const uint8_t block_size_high[BLOCK_SIZES_ALL];
 extern const uint8_t mi_size_wide[BLOCK_SIZES_ALL];
 extern const uint8_t mi_size_high[BLOCK_SIZES_ALL];
 

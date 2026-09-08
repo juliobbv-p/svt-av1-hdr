@@ -9,9 +9,115 @@
  * PATENTS file, you can obtain it at https://www.aomedia.org/license/patent-license.
  */
 #include <immintrin.h>
+#include <string.h>
 
 #include "definitions.h"
 #include "common_dsp_rtcd.h"
+
+// 4:4:4 needs no averaging: widen luma and shift to Q3. All intermediates
+// fit in 16 bits (10-bit maximum: 1023 * 8 = 8184). Process two independent
+// rows per iteration, with exact-width loads/stores for the narrow blocks.
+void svt_cfl_luma_subsampling_444_lbd_avx2(const uint8_t* input, int32_t input_stride, int16_t* output_q3,
+                                           int32_t width, int32_t height) {
+    assert(width == 4 || width == 8 || width == 16 || width == 32);
+    assert(height >= 4 && height <= CFL_BUF_LINE && !(height & (height - 1)));
+    if (width == 4) {
+        for (int y = 0; y < height; y += 2) {
+            int32_t a, b;
+            memcpy(&a, input, sizeof(a));
+            memcpy(&b, input + input_stride, sizeof(b));
+            const __m128i top = _mm_slli_epi16(_mm_cvtepu8_epi16(_mm_cvtsi32_si128(a)), 3);
+            const __m128i bot = _mm_slli_epi16(_mm_cvtepu8_epi16(_mm_cvtsi32_si128(b)), 3);
+            _mm_storel_epi64((__m128i*)output_q3, top);
+            _mm_storel_epi64((__m128i*)(output_q3 + CFL_BUF_LINE), bot);
+            input += 2 * input_stride;
+            output_q3 += 2 * CFL_BUF_LINE;
+        }
+    } else if (width == 8) {
+        for (int y = 0; y < height; y += 2) {
+            const __m128i top = _mm_slli_epi16(_mm_cvtepu8_epi16(_mm_loadl_epi64((const __m128i*)input)), 3);
+            const __m128i bot = _mm_slli_epi16(
+                _mm_cvtepu8_epi16(_mm_loadl_epi64((const __m128i*)(input + input_stride))), 3);
+            _mm_storeu_si128((__m128i*)output_q3, top);
+            _mm_storeu_si128((__m128i*)(output_q3 + CFL_BUF_LINE), bot);
+            input += 2 * input_stride;
+            output_q3 += 2 * CFL_BUF_LINE;
+        }
+    } else if (width == 16) {
+        for (int y = 0; y < height; y += 2) {
+            const __m256i top = _mm256_slli_epi16(_mm256_cvtepu8_epi16(_mm_loadu_si128((const __m128i*)input)), 3);
+            const __m256i bot = _mm256_slli_epi16(
+                _mm256_cvtepu8_epi16(_mm_loadu_si128((const __m128i*)(input + input_stride))), 3);
+            _mm256_storeu_si256((__m256i*)output_q3, top);
+            _mm256_storeu_si256((__m256i*)(output_q3 + CFL_BUF_LINE), bot);
+            input += 2 * input_stride;
+            output_q3 += 2 * CFL_BUF_LINE;
+        }
+    } else {
+        for (int y = 0; y < height; y += 2) {
+            const __m256i top0 = _mm256_slli_epi16(_mm256_cvtepu8_epi16(_mm_loadu_si128((const __m128i*)input)), 3);
+            const __m256i top1 = _mm256_slli_epi16(_mm256_cvtepu8_epi16(_mm_loadu_si128((const __m128i*)(input + 16))),
+                                                   3);
+            const __m256i bot0 = _mm256_slli_epi16(
+                _mm256_cvtepu8_epi16(_mm_loadu_si128((const __m128i*)(input + input_stride))), 3);
+            const __m256i bot1 = _mm256_slli_epi16(
+                _mm256_cvtepu8_epi16(_mm_loadu_si128((const __m128i*)(input + input_stride + 16))), 3);
+            _mm256_storeu_si256((__m256i*)output_q3, top0);
+            _mm256_storeu_si256((__m256i*)(output_q3 + 16), top1);
+            _mm256_storeu_si256((__m256i*)(output_q3 + CFL_BUF_LINE), bot0);
+            _mm256_storeu_si256((__m256i*)(output_q3 + CFL_BUF_LINE + 16), bot1);
+            input += 2 * input_stride;
+            output_q3 += 2 * CFL_BUF_LINE;
+        }
+    }
+}
+
+void svt_cfl_luma_subsampling_444_hbd_avx2(const uint16_t* input, int32_t input_stride, int16_t* output_q3,
+                                           int32_t width, int32_t height) {
+    assert(width == 4 || width == 8 || width == 16 || width == 32);
+    assert(height >= 4 && height <= CFL_BUF_LINE && !(height & (height - 1)));
+    if (width == 4) {
+        for (int y = 0; y < height; y += 2) {
+            const __m128i top = _mm_slli_epi16(_mm_loadl_epi64((const __m128i*)input), 3);
+            const __m128i bot = _mm_slli_epi16(_mm_loadl_epi64((const __m128i*)(input + input_stride)), 3);
+            _mm_storel_epi64((__m128i*)output_q3, top);
+            _mm_storel_epi64((__m128i*)(output_q3 + CFL_BUF_LINE), bot);
+            input += 2 * input_stride;
+            output_q3 += 2 * CFL_BUF_LINE;
+        }
+    } else if (width == 8) {
+        for (int y = 0; y < height; y += 2) {
+            const __m128i top = _mm_slli_epi16(_mm_loadu_si128((const __m128i*)input), 3);
+            const __m128i bot = _mm_slli_epi16(_mm_loadu_si128((const __m128i*)(input + input_stride)), 3);
+            _mm_storeu_si128((__m128i*)output_q3, top);
+            _mm_storeu_si128((__m128i*)(output_q3 + CFL_BUF_LINE), bot);
+            input += 2 * input_stride;
+            output_q3 += 2 * CFL_BUF_LINE;
+        }
+    } else if (width == 16) {
+        for (int y = 0; y < height; y += 2) {
+            const __m256i top = _mm256_slli_epi16(_mm256_loadu_si256((const __m256i*)input), 3);
+            const __m256i bot = _mm256_slli_epi16(_mm256_loadu_si256((const __m256i*)(input + input_stride)), 3);
+            _mm256_storeu_si256((__m256i*)output_q3, top);
+            _mm256_storeu_si256((__m256i*)(output_q3 + CFL_BUF_LINE), bot);
+            input += 2 * input_stride;
+            output_q3 += 2 * CFL_BUF_LINE;
+        }
+    } else {
+        for (int y = 0; y < height; y += 2) {
+            const __m256i top0 = _mm256_slli_epi16(_mm256_loadu_si256((const __m256i*)input), 3);
+            const __m256i top1 = _mm256_slli_epi16(_mm256_loadu_si256((const __m256i*)(input + 16)), 3);
+            const __m256i bot0 = _mm256_slli_epi16(_mm256_loadu_si256((const __m256i*)(input + input_stride)), 3);
+            const __m256i bot1 = _mm256_slli_epi16(_mm256_loadu_si256((const __m256i*)(input + input_stride + 16)), 3);
+            _mm256_storeu_si256((__m256i*)output_q3, top0);
+            _mm256_storeu_si256((__m256i*)(output_q3 + 16), top1);
+            _mm256_storeu_si256((__m256i*)(output_q3 + CFL_BUF_LINE), bot0);
+            _mm256_storeu_si256((__m256i*)(output_q3 + CFL_BUF_LINE + 16), bot1);
+            input += 2 * input_stride;
+            output_q3 += 2 * CFL_BUF_LINE;
+        }
+    }
+}
 
 static INLINE __m256i predict_unclipped(const __m256i* input, __m256i alpha_q12, __m256i alpha_sign, __m256i dc_q0) {
     __m256i ac_q3          = _mm256_loadu_si256(input);

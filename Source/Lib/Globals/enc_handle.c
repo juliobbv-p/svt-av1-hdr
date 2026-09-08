@@ -1343,6 +1343,16 @@ EB_API EbErrorType svt_av1_enc_init(EbComponentType* svt_enc_component) {
     // Per-instance block geometry table allocation
     EB_MALLOC_ARRAY(scs->blk_geom_mds, scs->max_block_cnt);
     svt_aom_build_blk_geom(scs->svt_aom_geom_idx, scs->blk_geom_mds);
+    // Geometry is per encoder instance. Keep the existing 4:2:0 table and
+    // allocations unchanged; full-resolution chroma shares luma block geometry.
+    if (scs->static_config.encoder_color_format == EB_YUV444) {
+        for (unsigned i = 0; i < scs->max_block_cnt; ++i) {
+            BlockGeom* g  = &scs->blk_geom_mds[i];
+            g->bwidth_uv  = g->bwidth;
+            g->bheight_uv = g->bheight;
+            g->bsize_uv   = g->bsize;
+        }
+    }
     /************************************
      * Sequence Control Set
      ************************************/
@@ -4085,6 +4095,11 @@ static void set_param_based_on_input(SequenceControlSet* scs) {
     if (scs->static_config.sframe_dist != 0 || scs->static_config.sframe_posi.sframe_posis) {
         scs->super_block_size = 64;
     }
+    // Full-resolution chroma uses 64x64 superblocks: at most four 32x32
+    // chroma transforms per coding block, without enlarging 4:2:0 metadata.
+    if (scs->static_config.encoder_color_format == EB_YUV444) {
+        scs->super_block_size = 64;
+    }
     // Set config info related to SB size
     if (scs->super_block_size == 128) {
         scs->seq_header.sb_size      = BLOCK_128X128;
@@ -4617,7 +4632,13 @@ static void copy_api_from_app(SequenceControlSet* scs, EbSvtAv1EncConfiguration*
         }
     }
     // Annex A parameters
-    scs->static_config.profile     = config_struct->profile;
+    scs->static_config.profile = config_struct->profile;
+    // The default Main Profile cannot signal full-resolution chroma. Resolve
+    // this in the library so API, raw, Y4M and pipe inputs behave identically.
+    if (scs->static_config.profile == MAIN_PROFILE && scs->chroma_format_idc == EB_YUV444) {
+        scs->static_config.profile = HIGH_PROFILE;
+        SVT_INFO("4:4:4 input: automatically selecting High Profile (profile 1)\n");
+    }
     scs->static_config.tier        = config_struct->tier;
     scs->static_config.level       = config_struct->level;
     scs->static_config.stat_report = config_struct->stat_report;

@@ -313,9 +313,9 @@ typedef struct EbSvtAv1EncConfiguration {
 
     /**
      * @brief Encoder color format.
-     * Only YUV420 is supported for now.
+     * YUV420 (Main Profile) and YUV444 (High Profile) are supported.
      *
-     * Min is YUV400.
+     * Supported values are YUV420 and YUV444.
      * Max is YUV444.
      * Default is YUV420.
      */
@@ -327,6 +327,8 @@ typedef struct EbSvtAv1EncConfiguration {
      * Min is MAIN_PROFILE.
      * Max is PROFESSIONAL_PROFILE.
      * Default is MAIN_PROFILE.
+     * MAIN_PROFILE is automatically promoted to HIGH_PROFILE for YUV444 input,
+     * with an informational log message. This does not convert the input format.
      */
     EbAv1SeqProfile profile;
     /* Constraints for bitstream in terms of max bitrate and max buffer size.

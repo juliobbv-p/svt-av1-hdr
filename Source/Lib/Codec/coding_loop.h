@@ -41,6 +41,17 @@ void svt_aom_residual_kernel(uint8_t* input, uint32_t input_offset, uint32_t inp
                              uint32_t pred_offset, uint32_t pred_stride, int16_t* residual, uint32_t residual_offset,
                              uint32_t residual_stride, bool hbd, uint32_t area_width, uint32_t area_height);
 
+// Compute quadrant SSE from the selected reconstruction for partition pruning.
+void svt_aom_calc_src_to_recon_dist_per_quadrant(PictureControlSet* pcs, ModeDecisionContext* ctx,
+                                                 EbPictureBufferDesc* input_pic, uint32_t input_origin_index,
+                                                 uint32_t                     input_cb_origin_in_index,
+                                                 ModeDecisionCandidateBuffer* cand_bf, uint32_t blk_origin_index,
+                                                 uint32_t blk_chroma_origin_index);
+
+// Probe horizontal/vertical transforms for partition pruning; invalidate skipped probes.
+void svt_aom_non_normative_txs(PictureControlSet* pcs, ModeDecisionContext* ctx, BlkStruct* blk_ptr,
+                               ModeDecisionCandidateBuffer* cand_bf);
+
 void svt_aom_move_blk_data(PictureControlSet* pcs, EncDecContext* ed_ctx, BlkStruct* src_cu, EcBlkStruct* dst_cu);
 #ifdef __cplusplus
 }

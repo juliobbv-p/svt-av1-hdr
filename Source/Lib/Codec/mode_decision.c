@@ -684,7 +684,7 @@ EbErrorType svt_aom_mode_decision_cand_bf_ctor(ModeDecisionCandidateBuffer* buff
 }
 
 EbErrorType svt_aom_mode_decision_scratch_cand_bf_ctor(ModeDecisionCandidateBuffer* buffer_ptr, uint8_t sb_size,
-                                                       EbBitDepth max_bitdepth) {
+                                                       EbColorFormat color_format, EbBitDepth max_bitdepth) {
     EbPictureBufferDescInitData picture_buffer_desc_init_data;
     EbPictureBufferDescInitData double_width_picture_buffer_desc_init_data;
     EbPictureBufferDescInitData thirty_two_width_picture_buffer_desc_init_data;
@@ -695,7 +695,7 @@ EbErrorType svt_aom_mode_decision_scratch_cand_bf_ctor(ModeDecisionCandidateBuff
     picture_buffer_desc_init_data.max_width                           = sb_size;
     picture_buffer_desc_init_data.max_height                          = sb_size;
     picture_buffer_desc_init_data.bit_depth                           = max_bitdepth;
-    picture_buffer_desc_init_data.color_format                        = EB_YUV420;
+    picture_buffer_desc_init_data.color_format                        = color_format;
     picture_buffer_desc_init_data.buffer_enable_mask                  = PICTURE_BUFFER_DESC_FULL_MASK;
     picture_buffer_desc_init_data.border                              = 0;
     picture_buffer_desc_init_data.split_mode                          = false;
@@ -703,7 +703,7 @@ EbErrorType svt_aom_mode_decision_scratch_cand_bf_ctor(ModeDecisionCandidateBuff
     double_width_picture_buffer_desc_init_data.max_width              = sb_size;
     double_width_picture_buffer_desc_init_data.max_height             = sb_size;
     double_width_picture_buffer_desc_init_data.bit_depth              = EB_SIXTEEN_BIT;
-    double_width_picture_buffer_desc_init_data.color_format           = EB_YUV420;
+    double_width_picture_buffer_desc_init_data.color_format           = color_format;
     double_width_picture_buffer_desc_init_data.buffer_enable_mask     = PICTURE_BUFFER_DESC_FULL_MASK;
     double_width_picture_buffer_desc_init_data.border                 = 0;
     double_width_picture_buffer_desc_init_data.split_mode             = false;
@@ -711,7 +711,7 @@ EbErrorType svt_aom_mode_decision_scratch_cand_bf_ctor(ModeDecisionCandidateBuff
     thirty_two_width_picture_buffer_desc_init_data.max_width          = sb_size;
     thirty_two_width_picture_buffer_desc_init_data.max_height         = sb_size;
     thirty_two_width_picture_buffer_desc_init_data.bit_depth          = EB_THIRTYTWO_BIT;
-    thirty_two_width_picture_buffer_desc_init_data.color_format       = EB_YUV420;
+    thirty_two_width_picture_buffer_desc_init_data.color_format       = color_format;
     thirty_two_width_picture_buffer_desc_init_data.buffer_enable_mask = PICTURE_BUFFER_DESC_FULL_MASK;
     thirty_two_width_picture_buffer_desc_init_data.border             = 0;
     thirty_two_width_picture_buffer_desc_init_data.split_mode         = false;
@@ -3143,7 +3143,7 @@ static void intra_bc_search(PictureControlSet* pcs, ModeDecisionContext* ctx, co
             Mv dv = {{x->best_mv.x * 8, x->best_mv.y * 8}};
 
             if (!mv_check_bounds(&x->mv_limits, dv) &&
-                svt_aom_is_dv_valid(dv, xd, mi_row, mi_col, bsize, scs->seq_header.sb_size_log2)) {
+                svt_aom_is_dv_valid(dv, xd, mi_row, mi_col, bsize, scs->seq_header.sb_size_log2, scs->subsampling_x)) {
                 dv_cand[*num_dv_cand] = dv;
                 (*num_dv_cand)++;
             }
@@ -3223,6 +3223,7 @@ static void inject_intra_candidates_pd0(PictureControlSet* pcs, ModeDecisionCont
 
 static void inject_intra_candidates(PictureControlSet* pcs, ModeDecisionContext* ctx, const bool dc_cand_only_flag,
                                     uint32_t* candidate_total_cnt) {
+    const int              chroma_ss        = ctx->subsampling_x;
     FrameHeader*           frm_hdr          = &pcs->ppcs->frm_hdr;
     PredictionMode         intra_mode_start = DC_PRED;
     PredictionMode         intra_mode_end   = dc_cand_only_flag ? DC_PRED : ctx->intra_ctrls.intra_mode_end;
@@ -3236,7 +3237,7 @@ static void inject_intra_candidates(PictureControlSet* pcs, ModeDecisionContext*
             directional_mode_skip_mask[i] = 1;
         }
     }
-    const TxSize tx_size_uv = av1_get_max_uv_txsize(ctx->blk_geom->bsize, 1, 1);
+    const TxSize tx_size_uv = av1_get_max_uv_txsize(ctx->blk_geom->bsize, chroma_ss, chroma_ss);
 
     for (PredictionMode intra_mode = intra_mode_start; intra_mode <= intra_mode_end; ++intra_mode) {
         if (av1_is_directional_mode(intra_mode) &&
@@ -3294,6 +3295,7 @@ static void inject_intra_candidates(PictureControlSet* pcs, ModeDecisionContext*
 
 static void inject_filter_intra_candidates(PictureControlSet* pcs, ModeDecisionContext* ctx,
                                            uint32_t* candidate_total_cnt) {
+    const int       chroma_ss        = ctx->subsampling_x;
     FilterIntraMode intra_mode_start = FILTER_DC_PRED;
     FilterIntraMode intra_mode_end   = ctx->intra_ctrls.intra_mode_end == PAETH_PRED ? FILTER_PAETH_PRED
           : ctx->intra_ctrls.intra_mode_end >= D157_PRED                             ? FILTER_D157_PRED
@@ -3302,7 +3304,7 @@ static void inject_filter_intra_candidates(PictureControlSet* pcs, ModeDecisionC
                                                                                      : FILTER_DC_PRED;
     intra_mode_end                   = MIN(intra_mode_end, ctx->filter_intra_ctrls.max_filter_intra_mode);
 
-    const TxSize           tx_size_uv     = av1_get_max_uv_txsize(ctx->blk_geom->bsize, 1, 1);
+    const TxSize           tx_size_uv     = av1_get_max_uv_txsize(ctx->blk_geom->bsize, chroma_ss, chroma_ss);
     uint32_t               cand_total_cnt = *candidate_total_cnt;
     ModeDecisionCandidate* cand_array     = ctx->fast_cand_array;
     FrameHeader*           frm_hdr        = &pcs->ppcs->frm_hdr;
@@ -3399,6 +3401,7 @@ void search_palette_luma(PictureControlSet* pcs, ModeDecisionContext* ctx, Palet
 #endif
 
 static void inject_palette_candidates(PictureControlSet* pcs, ModeDecisionContext* ctx, uint32_t* candidate_total_cnt) {
+    const int chroma_ss = ctx->subsampling_x;
 #if FTR_RTC_INTER_PALETTE
     // Skip the palette search on inter blocks where inter prediction is essentially perfect; if
     // neither ME nor PME distortion is available the search still runs. Returning with no candidates
@@ -3423,7 +3426,7 @@ static void inject_palette_candidates(PictureControlSet* pcs, ModeDecisionContex
 #endif
     uint32_t               can_total_cnt      = *candidate_total_cnt;
     ModeDecisionCandidate* cand_array         = ctx->fast_cand_array;
-    const TxSize           tx_size_uv         = av1_get_max_uv_txsize(ctx->blk_geom->bsize, 1, 1);
+    const TxSize           tx_size_uv         = av1_get_max_uv_txsize(ctx->blk_geom->bsize, chroma_ss, chroma_ss);
     uint32_t               tot_palette_cands  = 0;
     PaletteInfo*           palette_cand_array = ctx->palette_cand_array;
     // MD palette search
@@ -3748,9 +3751,10 @@ uint8_t av1_drl_ctx(const CandidateMv* ref_mv_stack, int32_t ref_idx);
 ***************************************/
 void svt_aom_product_full_mode_decision_light_pd1(PictureControlSet* pcs, ModeDecisionContext* ctx,
                                                   ModeDecisionCandidateBuffer* cand_bf) {
-    BlkStruct*             blk_ptr = ctx->blk_ptr;
-    ModeDecisionCandidate* cand    = cand_bf->cand;
-    blk_ptr->total_rate            = cand_bf->total_rate;
+    const int              chroma_ss = ctx->subsampling_x;
+    BlkStruct*             blk_ptr   = ctx->blk_ptr;
+    ModeDecisionCandidate* cand      = cand_bf->cand;
+    blk_ptr->total_rate              = cand_bf->total_rate;
 
     // Set common signals (INTER/INTRA)
     memcpy(&blk_ptr->block_mi, &cand->block_mi, sizeof(BlockModeInfo));
@@ -3845,7 +3849,7 @@ void svt_aom_product_full_mode_decision_light_pd1(PictureControlSet* pcs, ModeDe
         }
         ctx->coded_area_sb += tx_width * tx_height;
 
-        const TxSize tx_size_uv   = av1_get_max_uv_txsize(ctx->blk_geom->bsize, 1, 1);
+        const TxSize tx_size_uv   = av1_get_max_uv_txsize(ctx->blk_geom->bsize, chroma_ss, chroma_ss);
         const int    tx_width_uv  = tx_size_wide[tx_size_uv];
         const int    tx_height_uv = tx_size_high[tx_size_uv];
         // Cb
@@ -3879,6 +3883,7 @@ static INLINE double derive_ssim_threshold_factor_for_full_md(SequenceControlSet
 uint32_t svt_aom_product_full_mode_decision(PictureControlSet* pcs, ModeDecisionContext* ctx,
                                             ModeDecisionCandidateBuffer** buffer_ptr_array,
                                             uint32_t candidate_total_count, uint32_t* best_candidate_index_array) {
+    const int           chroma_ss          = ctx->subsampling_x;
     SequenceControlSet* scs                = pcs->scs;
     BlkStruct*          blk_ptr            = ctx->blk_ptr;
     uint32_t            lowest_cost_index  = best_candidate_index_array[0];
@@ -4045,17 +4050,23 @@ uint32_t svt_aom_product_full_mode_decision(PictureControlSet* pcs, ModeDecision
     memcpy(&blk_ptr->eob, &cand_bf->eob, sizeof(EobData));
 
     // If bypassing EncDec, save recon/coeff
+    if (svt_aom_multi_uv_tx(ctx->blk_geom->bsize, chroma_ss) && !blk_ptr->block_has_coeff) {
+        // Skip shortcuts need no transform search, but reconstruction and
+        // coefficient-buffer accounting still visit every chroma tile.
+        blk_ptr->block_mi.tx_depth = cand->block_mi.tx_depth = 1;
+    }
     if (ctx->bypass_encdec && ctx->pd_pass == PD_PASS_1) {
         const uint16_t tu_total_count = tx_blocks_per_depth[ctx->blk_geom->bsize][blk_ptr->block_mi.tx_depth];
         int32_t        txb_1d_offset = 0, txb_1d_offset_uv = 0;
         const TxSize   tx_size      = tx_depth_to_tx_size[blk_ptr->block_mi.tx_depth][ctx->blk_geom->bsize];
         const int      tx_width     = tx_size_wide[tx_size];
         const int      tx_height    = tx_size_high[tx_size];
-        const TxSize   tx_size_uv   = av1_get_max_uv_txsize(ctx->blk_geom->bsize, 1, 1);
+        const TxSize   tx_size_uv   = av1_get_max_uv_txsize(ctx->blk_geom->bsize, chroma_ss, chroma_ss);
         const int      tx_width_uv  = tx_size_wide[tx_size_uv];
         const int      tx_height_uv = tx_size_high[tx_size_uv];
         for (uint16_t txb_itr = 0; txb_itr < tu_total_count; txb_itr++) {
-            const bool uv_pass = (blk_ptr->block_mi.tx_depth == 0 || txb_itr == 0);
+            const bool uv_pass = svt_aom_uv_tx_pass(
+                ctx->blk_geom->bsize, ctx->subsampling_x, blk_ptr->block_mi.tx_depth, txb_itr);
 
             int32_t* src_ptr = &(((int32_t*)cand_bf->quant->y_buffer)[txb_1d_offset]);
             int32_t* dst_ptr = &(((int32_t*)ctx->blk_ptr->coeff_tmp->y_buffer)[txb_1d_offset]);

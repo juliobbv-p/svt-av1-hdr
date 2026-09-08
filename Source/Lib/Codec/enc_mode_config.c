@@ -5601,6 +5601,11 @@ static void set_pd0_ctrls(ModeDecisionContext* ctx, uint8_t lpd0_lvl) {
 }
 
 static void set_lpd1_ctrls(ModeDecisionContext* ctx, uint8_t lpd1_lvl) {
+    // The light path assumes one chroma transform. Full-resolution chroma
+    // uses the regular transform traversal, including on 64-pixel blocks.
+    if (!ctx->subsampling_x) {
+        lpd1_lvl = 0;
+    }
     Lpd1Ctrls* ctrls = &ctx->lpd1_ctrls;
     switch (lpd1_lvl) {
     case 0:
@@ -7246,6 +7251,9 @@ void svt_aom_sig_deriv_enc_dec_common(SequenceControlSet* scs, PictureControlSet
         } else {
             ctx->pd1_lvl_refinement = 2;
         }
+    }
+    if (!ctx->subsampling_x) {
+        ctx->pd1_lvl_refinement = 0;
     }
     svt_aom_set_nsq_geom_ctrls(ctx, pcs->nsq_geom_level, NULL, NULL, NULL);
 
@@ -9273,7 +9281,8 @@ void svt_aom_sig_deriv_mode_decision_config_default(SequenceControlSet* scs, Pic
         }
     }
     // Set tx_mode for the frame header
-    frm_hdr->tx_mode = (pcs->txs_level) ? TX_MODE_SELECT : TX_MODE_LARGEST;
+    frm_hdr->tx_mode = (pcs->txs_level || scs->static_config.encoder_color_format == EB_YUV444) ? TX_MODE_SELECT
+                                                                                                : TX_MODE_LARGEST;
     // Set the level for nic
     pcs->nic_level = svt_aom_get_nic_level_default(enc_mode, is_base);
 
@@ -9833,7 +9842,8 @@ void svt_aom_sig_deriv_mode_decision_config_rtc(SequenceControlSet* scs, Picture
         }
     }
     // Set tx_mode for the frame header
-    frm_hdr->tx_mode = (pcs->txs_level) ? TX_MODE_SELECT : TX_MODE_LARGEST;
+    frm_hdr->tx_mode = (pcs->txs_level || scs->static_config.encoder_color_format == EB_YUV444) ? TX_MODE_SELECT
+                                                                                                : TX_MODE_LARGEST;
     // Set the level for nic
     pcs->nic_level = svt_aom_get_nic_level_rtc(enc_mode);
 

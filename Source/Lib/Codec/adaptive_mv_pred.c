@@ -1309,13 +1309,13 @@ void svt_aom_init_xd(PictureControlSet* pcs, ModeDecisionContext* ctx) {
     xd->above_mbmi = (xd->up_available) ? xd->mi[-(xd->mi_stride)] : NULL;
     xd->left_mbmi  = (xd->left_available) ? xd->mi[-1] : NULL;
     if (!ctx->skip_intra || ctx->inter_intra_comp_ctrls.enabled) {
-        const uint8_t ss_x = 1, ss_y = 1;
-        xd->chroma_up_available   = bh < 2 /*mi_size_wide[BLOCK_8X8]*/ ? (mi_row - 1) > xd->tile.mi_row_start
-                                                                       : xd->up_available;
-        xd->chroma_left_available = bw < 2 /*mi_size_high[BLOCK_8X8]*/ ? (mi_col - 1) > xd->tile.mi_col_start
-                                                                       : xd->left_available;
+        const uint8_t ss_x = ctx->subsampling_x, ss_y = ctx->subsampling_y;
+        xd->chroma_up_available   = ss_y && bh < 2 /*mi_size_wide[BLOCK_8X8]*/ ? (mi_row - 1) > xd->tile.mi_row_start
+                                                                               : xd->up_available;
+        xd->chroma_left_available = ss_x && bw < 2 /*mi_size_high[BLOCK_8X8]*/ ? (mi_col - 1) > xd->tile.mi_col_start
+                                                                               : xd->left_available;
 
-        const int chroma_ref = ((mi_row & 0x01) || !(bh & 0x01)) && ((mi_col & 0x01) || !(bw & 0x01));
+        const int chroma_ref = (!ss_y || (mi_row & 0x01) || !(bh & 0x01)) && (!ss_x || (mi_col & 0x01) || !(bw & 0x01));
 
         // To help calculate the "above" and "left" chroma blocks, note that the
         // current block may cover multiple luma blocks (eg, if partitioned into
@@ -2081,8 +2081,8 @@ void svt_av1_count_overlappable_neighbors(const PictureControlSet* pcs, BlkStruc
     blk_ptr->overlappable_neighbors += count_overlappable_nb_left(cm, xd, mi_row, UINT32_MAX);
 }
 
-int svt_aom_is_dv_valid(const Mv dv, const MacroBlockD* xd, int mi_row, int mi_col, BlockSize bsize,
-                        int mib_size_log2) {
+int svt_aom_is_dv_valid(const Mv dv, const MacroBlockD* xd, int mi_row, int mi_col, BlockSize bsize, int mib_size_log2,
+                        int chroma_ss) {
     const int bw             = block_size_wide[bsize];
     const int bh             = block_size_high[bsize];
     const int scale_px_to_mv = 8;
@@ -2118,21 +2118,12 @@ int svt_aom_is_dv_valid(const Mv dv, const MacroBlockD* xd, int mi_row, int mi_c
 
     // Special case for sub 8x8 chroma cases, to prevent referring to chroma
     // pixels outside current tile.
-    for (int plane = 1; plane < 3 /* av1_num_planes(cm)*/; ++plane) {
-        //const struct MacroBlockDPlane *const pd = &xd->plane[plane];
-
-        if (is_chroma_reference(mi_row, mi_col, bsize, 1, 1/* pd->subsampling_x,
-            pd->subsampling_y*/)) {
-            if (bw < 8 /*&& pd->subsampling_x*/) {
-                if (src_left_edge < tile_left_edge + 4 * scale_px_to_mv) {
-                    return 0;
-                }
-            }
-            if (bh < 8 /* && pd->subsampling_y*/) {
-                if (src_top_edge < tile_top_edge + 4 * scale_px_to_mv) {
-                    return 0;
-                }
-            }
+    if (chroma_ss && is_chroma_reference(mi_row, mi_col, bsize, chroma_ss, chroma_ss)) {
+        if (bw < 8 && src_left_edge < tile_left_edge + 4 * scale_px_to_mv) {
+            return 0;
+        }
+        if (bh < 8 && src_top_edge < tile_top_edge + 4 * scale_px_to_mv) {
+            return 0;
         }
     }
 

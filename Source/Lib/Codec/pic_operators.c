@@ -479,6 +479,7 @@ void svt_aom_pad_input_picture_16bit(
 }
 
 void svt_aom_pack_2d_pic(EbPictureBufferDesc* input_picture, uint16_t* packed[3]) {
+    const int chroma_ss = input_picture->color_format == EB_YUV444 ? 0 : 1;
     svt_aom_compressed_pack_sb(input_picture->y_buffer,
                                input_picture->y_stride,
                                input_picture->y_buffer_bit_inc,
@@ -494,8 +495,8 @@ void svt_aom_pack_2d_pic(EbPictureBufferDesc* input_picture, uint16_t* packed[3]
                                input_picture->v_stride_bit_inc >> 2,
                                (uint16_t*)packed[1],
                                input_picture->v_stride,
-                               input_picture->width >> 1,
-                               input_picture->height >> 1);
+                               input_picture->width >> chroma_ss,
+                               input_picture->height >> chroma_ss);
 
     svt_aom_compressed_pack_sb(input_picture->v_buffer,
                                input_picture->v_stride,
@@ -503,8 +504,8 @@ void svt_aom_pack_2d_pic(EbPictureBufferDesc* input_picture, uint16_t* packed[3]
                                input_picture->v_stride_bit_inc >> 2,
                                (uint16_t*)packed[2],
                                input_picture->v_stride,
-                               input_picture->width >> 1,
-                               input_picture->height >> 1);
+                               input_picture->width >> chroma_ss,
+                               input_picture->height >> chroma_ss);
 }
 
 void svt_aom_convert_pic_8bit_to_16bit(EbPictureBufferDesc* src_8bit, EbPictureBufferDesc* dst_16bit, uint16_t ss_x,

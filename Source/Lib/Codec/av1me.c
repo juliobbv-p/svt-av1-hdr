@@ -1072,7 +1072,13 @@ void svt_av1_intrabc_hash_search(PictureControlSet* pcs, IntraBcContext* x, Bloc
         if (intra) {
             Mv dv = {{8 * (ref_block_hash.x - x_pos), 8 * (ref_block_hash.y - y_pos)}};
 
-            if (!svt_aom_is_dv_valid(dv, x->xd, mi_row, mi_col, bsize, pcs->ppcs->scs->seq_header.sb_size_log2)) {
+            if (!svt_aom_is_dv_valid(dv,
+                                     x->xd,
+                                     mi_row,
+                                     mi_col,
+                                     bsize,
+                                     pcs->ppcs->scs->seq_header.sb_size_log2,
+                                     pcs->scs->subsampling_x)) {
                 continue;
             }
         }

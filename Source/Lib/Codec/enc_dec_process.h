@@ -82,6 +82,8 @@ EbErrorType svt_aom_enc_dec_context_ctor(EbThreadContext* thread_ctx, const EbEn
 
 void* svt_aom_mode_decision_kernel(void* input_ptr);
 
+void svt_aom_update_intrabc_reference(PictureControlSet* pcs, uint32_t sb_origin_x, uint32_t sb_origin_y);
+
 // Computes the SSIM score from the five per-block integer sums (used by the C and
 // SIMD svt_ssim_* kernels).
 double svt_aom_similarity(uint32_t sum_s, uint32_t sum_r, uint32_t sum_sq_s, uint32_t sum_sq_r, uint32_t sum_sxr,
