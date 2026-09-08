@@ -8278,7 +8278,9 @@ static void md_encode_block_pd0(PictureControlSet* pcs, ModeDecisionContext* ctx
 
     generate_md_stage_0_cand_pd0(ctx, &fast_candidate_total_count, pcs);
 
-    if (ctx->pd0_use_src_samples) {
+    // The 8-bit neighbor pointer is refreshed only when PD0 intra search is enabled.
+    // Otherwise it can still refer to a previous picture in HBD mode decision.
+    if (!ctx->skip_intra && ctx->pd0_use_src_samples) {
         uint8_t* src_y = input_pic->y_buffer + input_origin_index;
         memcpy(
             svt_aom_na_top_ptr(ctx->recon_neigh_y, ctx->blk_org_x), src_y - input_pic->y_stride, ctx->blk_geom->bwidth);
