@@ -41,6 +41,9 @@ void    svt_aom_inv_transform_recon_wrapper(PictureControlSet* pcs, ModeDecision
                                             PlaneType component_type, uint32_t eob);
 uint8_t svt_aom_do_md_recon(PictureParentControlSet* pcs, ModeDecisionContext* ctx);
 
+void svt_aom_get_quantizer(const Quants* quants, const Dequants* deq, int plane, int dc_index, int ac_index,
+                           int16_t params[7][8], MacroblockPlane* result);
+
 extern const int av1_get_tx_scale_tab[TX_SIZES_ALL];
 #ifdef __cplusplus
 }

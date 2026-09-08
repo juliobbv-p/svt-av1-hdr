@@ -1527,6 +1527,76 @@ static INLINE uint8_t compute_cul_level_fast(const int16_t* const scan, const in
     return (uint8_t)cul_level;
 }
 
+// Sequence tables have zero deltas and are shared by concurrent pictures.
+// Select AC lanes from one row and DC from another without modifying the tables.
+void svt_aom_get_quantizer(const Quants* quants, const Dequants* deq, int plane, int dc_index, int ac_index,
+                           int16_t params[7][8], MacroblockPlane* result) {
+    assert(plane >= PLANE_Y && plane <= PLANE_V);
+    assert(dc_index >= 0 && dc_index < QINDEX_RANGE && ac_index >= 0 && ac_index < QINDEX_RANGE);
+    const int16_t* ac[7];
+    const int16_t* dc[7];
+    if (plane == 0) {
+        ac[0] = quants->y_quant[ac_index];
+        dc[0] = quants->y_quant[dc_index];
+        ac[1] = quants->y_quant_fp[ac_index];
+        dc[1] = quants->y_quant_fp[dc_index];
+        ac[2] = quants->y_round_fp[ac_index];
+        dc[2] = quants->y_round_fp[dc_index];
+        ac[3] = quants->y_quant_shift[ac_index];
+        dc[3] = quants->y_quant_shift[dc_index];
+        ac[4] = quants->y_zbin[ac_index];
+        dc[4] = quants->y_zbin[dc_index];
+        ac[5] = quants->y_round[ac_index];
+        dc[5] = quants->y_round[dc_index];
+        ac[6] = deq->y_dequant_qtx[ac_index];
+        dc[6] = deq->y_dequant_qtx[dc_index];
+    } else if (plane == 1) {
+        ac[0] = quants->u_quant[ac_index];
+        dc[0] = quants->u_quant[dc_index];
+        ac[1] = quants->u_quant_fp[ac_index];
+        dc[1] = quants->u_quant_fp[dc_index];
+        ac[2] = quants->u_round_fp[ac_index];
+        dc[2] = quants->u_round_fp[dc_index];
+        ac[3] = quants->u_quant_shift[ac_index];
+        dc[3] = quants->u_quant_shift[dc_index];
+        ac[4] = quants->u_zbin[ac_index];
+        dc[4] = quants->u_zbin[dc_index];
+        ac[5] = quants->u_round[ac_index];
+        dc[5] = quants->u_round[dc_index];
+        ac[6] = deq->u_dequant_qtx[ac_index];
+        dc[6] = deq->u_dequant_qtx[dc_index];
+    } else {
+        ac[0] = quants->v_quant[ac_index];
+        dc[0] = quants->v_quant[dc_index];
+        ac[1] = quants->v_quant_fp[ac_index];
+        dc[1] = quants->v_quant_fp[dc_index];
+        ac[2] = quants->v_round_fp[ac_index];
+        dc[2] = quants->v_round_fp[dc_index];
+        ac[3] = quants->v_quant_shift[ac_index];
+        dc[3] = quants->v_quant_shift[dc_index];
+        ac[4] = quants->v_zbin[ac_index];
+        dc[4] = quants->v_zbin[dc_index];
+        ac[5] = quants->v_round[ac_index];
+        dc[5] = quants->v_round[dc_index];
+        ac[6] = deq->v_dequant_qtx[ac_index];
+        dc[6] = deq->v_dequant_qtx[dc_index];
+    }
+    if (dc_index != ac_index) {
+        for (int i = 0; i < 7; ++i) {
+            memcpy(params[i], ac[i], sizeof(params[i]));
+            params[i][0] = dc[i][0];
+            ac[i]        = params[i];
+        }
+    }
+    result->quant_qtx       = ac[0];
+    result->quant_fp_qtx    = ac[1];
+    result->round_fp_qtx    = ac[2];
+    result->quant_shift_qtx = ac[3];
+    result->zbin_qtx        = ac[4];
+    result->round_qtx       = ac[5];
+    result->dequant_qtx     = ac[6];
+}
+
 uint8_t svt_aom_quantize_inv_quantize(PictureControlSet* pcs, ModeDecisionContext* ctx, int32_t* coeff,
                                       int32_t* quant_coeff, int32_t* recon_coeff, uint32_t qindex,
                                       int32_t segmentation_qp_offset, TxSize txsize, uint16_t* eob,
@@ -1552,72 +1622,17 @@ uint8_t svt_aom_quantize_inv_quantize(PictureControlSet* pcs, ModeDecisionContex
     if (segmentation_qp_offset != 0) {
         q_index = CLIP3(0, 255, q_index + segmentation_qp_offset);
     }
-    if (component_type != COMPONENT_LUMA) {
-        const int8_t offset = (component_type == COMPONENT_CHROMA_CB)
-            ? pcs->ppcs->frm_hdr.quantization_params.delta_q_dc[1] // we are assuming delta_q_ac == delta_q_dc
-            : pcs->ppcs->frm_hdr.quantization_params.delta_q_dc[2];
-        q_index += offset;
-        q_index = (uint32_t)CLIP3(0, 255, (int32_t)q_index);
-    }
-    if (bit_depth == EB_EIGHT_BIT) {
-        if (component_type == COMPONENT_LUMA) {
-            candidate_plane.quant_qtx       = enc_ctx->quants_8bit.y_quant[q_index];
-            candidate_plane.quant_fp_qtx    = enc_ctx->quants_8bit.y_quant_fp[q_index];
-            candidate_plane.round_fp_qtx    = enc_ctx->quants_8bit.y_round_fp[q_index];
-            candidate_plane.quant_shift_qtx = enc_ctx->quants_8bit.y_quant_shift[q_index];
-            candidate_plane.zbin_qtx        = enc_ctx->quants_8bit.y_zbin[q_index];
-            candidate_plane.round_qtx       = enc_ctx->quants_8bit.y_round[q_index];
-            candidate_plane.dequant_qtx     = enc_ctx->deq_8bit.y_dequant_qtx[q_index];
-        } else if (component_type == COMPONENT_CHROMA_CB) {
-            candidate_plane.quant_qtx       = enc_ctx->quants_8bit.u_quant[q_index];
-            candidate_plane.quant_fp_qtx    = enc_ctx->quants_8bit.u_quant_fp[q_index];
-            candidate_plane.round_fp_qtx    = enc_ctx->quants_8bit.u_round_fp[q_index];
-            candidate_plane.quant_shift_qtx = enc_ctx->quants_8bit.u_quant_shift[q_index];
-            candidate_plane.zbin_qtx        = enc_ctx->quants_8bit.u_zbin[q_index];
-            candidate_plane.round_qtx       = enc_ctx->quants_8bit.u_round[q_index];
-            candidate_plane.dequant_qtx     = enc_ctx->deq_8bit.u_dequant_qtx[q_index];
-        }
-
-        else {
-            candidate_plane.quant_qtx       = enc_ctx->quants_8bit.v_quant[q_index];
-            candidate_plane.quant_fp_qtx    = enc_ctx->quants_8bit.v_quant_fp[q_index];
-            candidate_plane.round_fp_qtx    = enc_ctx->quants_8bit.v_round_fp[q_index];
-            candidate_plane.quant_shift_qtx = enc_ctx->quants_8bit.v_quant_shift[q_index];
-            candidate_plane.zbin_qtx        = enc_ctx->quants_8bit.v_zbin[q_index];
-            candidate_plane.round_qtx       = enc_ctx->quants_8bit.v_round[q_index];
-            candidate_plane.dequant_qtx     = enc_ctx->deq_8bit.v_dequant_qtx[q_index];
-        }
-    } else {
-        if (component_type == COMPONENT_LUMA) {
-            candidate_plane.quant_qtx       = enc_ctx->quants_bd.y_quant[q_index];
-            candidate_plane.quant_fp_qtx    = enc_ctx->quants_bd.y_quant_fp[q_index];
-            candidate_plane.round_fp_qtx    = enc_ctx->quants_bd.y_round_fp[q_index];
-            candidate_plane.quant_shift_qtx = enc_ctx->quants_bd.y_quant_shift[q_index];
-            candidate_plane.zbin_qtx        = enc_ctx->quants_bd.y_zbin[q_index];
-            candidate_plane.round_qtx       = enc_ctx->quants_bd.y_round[q_index];
-            candidate_plane.dequant_qtx     = enc_ctx->deq_bd.y_dequant_qtx[q_index];
-        }
-
-        else if (component_type == COMPONENT_CHROMA_CB) {
-            candidate_plane.quant_qtx       = enc_ctx->quants_bd.u_quant[q_index];
-            candidate_plane.quant_fp_qtx    = enc_ctx->quants_bd.u_quant_fp[q_index];
-            candidate_plane.round_fp_qtx    = enc_ctx->quants_bd.u_round_fp[q_index];
-            candidate_plane.quant_shift_qtx = enc_ctx->quants_bd.u_quant_shift[q_index];
-            candidate_plane.zbin_qtx        = enc_ctx->quants_bd.u_zbin[q_index];
-            candidate_plane.round_qtx       = enc_ctx->quants_bd.u_round[q_index];
-            candidate_plane.dequant_qtx     = enc_ctx->deq_bd.u_dequant_qtx[q_index];
-        }
-
-        else {
-            candidate_plane.quant_qtx       = enc_ctx->quants_bd.v_quant[q_index];
-            candidate_plane.quant_fp_qtx    = enc_ctx->quants_bd.v_quant_fp[q_index];
-            candidate_plane.round_fp_qtx    = enc_ctx->quants_bd.v_round_fp[q_index];
-            candidate_plane.quant_shift_qtx = enc_ctx->quants_bd.v_quant_shift[q_index];
-            candidate_plane.zbin_qtx        = enc_ctx->quants_bd.v_zbin[q_index];
-            candidate_plane.round_qtx       = enc_ctx->quants_bd.v_round[q_index];
-            candidate_plane.dequant_qtx     = enc_ctx->deq_bd.v_dequant_qtx[q_index];
-        }
-    }
+    const QuantizationParams* quant_params = &pcs->ppcs->frm_hdr.quantization_params;
+    const int                 dc_index     = CLIP3(0, 255, q_index + quant_params->delta_q_dc[plane]);
+    const int                 ac_index     = CLIP3(0, 255, q_index + quant_params->delta_q_ac[plane]);
+    DECLARE_ALIGNED(16, int16_t, local_quant_params[7][8]);
+    svt_aom_get_quantizer(bit_depth == EB_EIGHT_BIT ? &enc_ctx->quants_8bit : &enc_ctx->quants_bd,
+                          bit_depth == EB_EIGHT_BIT ? &enc_ctx->deq_8bit : &enc_ctx->deq_bd,
+                          plane,
+                          dc_index,
+                          ac_index,
+                          local_quant_params,
+                          &candidate_plane);
 
     const ScanOrder* const scan_order = get_scan_order(txsize, tx_type);
 

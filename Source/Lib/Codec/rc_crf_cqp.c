@@ -544,15 +544,20 @@ void svt_av1_rc_calc_qindex_crf_cqp(PictureControlSet* pcs, SequenceControlSet* 
         chroma_qindex += scs->static_config.chroma_qindex_offsets[pcs->temporal_layer_index];
     }
 
-    if (scs->static_config.tune == TUNE_IQ) {
-        // Constant chroma boost with gradual ramp-down for very high qindex levels
+    const bool iq_444 = scs->static_config.tune == TUNE_IQ && scs->allintra &&
+        scs->static_config.encoder_color_format == EB_YUV444;
+    if (scs->static_config.tune == TUNE_IQ && !iq_444) {
+        // Constant chroma boost with gradual ramp-down for very low qindex levels.
         chroma_qindex -= CLIP3(0, 16, new_qindex / 2 - 14);
     }
-    chroma_qindex = clamp_qindex(scs, chroma_qindex);
+    // libaom's 4:4:4 IQ tuning balances luma/chroma bits by coarsening only AC.
+    // Keep DC at the configured offset to avoid increasing blocking artifacts.
+    const int32_t chroma_ac_qindex = clamp_qindex(scs, chroma_qindex + (iq_444 ? CLIP3(0, 24, new_qindex / 2) : 0));
+    chroma_qindex                  = clamp_qindex(scs, chroma_qindex);
 
     // Calculate chroma delta q for Cb and Cr
-    q_params->delta_q_dc[1] = q_params->delta_q_ac[1] = CLIP3(-64, 63, chroma_qindex - new_qindex);
-    q_params->delta_q_dc[2] = q_params->delta_q_ac[2] = CLIP3(-64, 63, chroma_qindex - new_qindex);
+    q_params->delta_q_dc[1] = q_params->delta_q_dc[2] = CLIP3(-64, 63, chroma_qindex - new_qindex);
+    q_params->delta_q_ac[1] = q_params->delta_q_ac[2] = CLIP3(-64, 63, chroma_ac_qindex - new_qindex);
     if (scs->static_config.tune == TUNE_VMAF) {
         const int   cfg_offset         = frame_is_intra_only(ppcs)
                       ? scs->static_config.key_frame_chroma_qindex_offset

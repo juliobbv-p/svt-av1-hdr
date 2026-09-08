@@ -496,7 +496,7 @@ EbErrorType svt_aom_mode_decision_context_ctor(ModeDecisionContext* ctx, Sequenc
     bool    disallow_8x8     = allintra ? svt_aom_get_disallow_8x8_allintra()
                : rtc_tune ? svt_aom_get_disallow_8x8_rtc(enc_mode, scs->max_input_luma_width, scs->max_input_luma_height)
                           : svt_aom_get_disallow_8x8_default();
-    uint8_t min_bsize        = disallow_8x8 ? 16 : disallow_4x4 ? 8 : 4;
+    uint8_t min_bsize        = color_format == EB_YUV444 ? 4 : disallow_8x8 ? 16 : disallow_4x4 ? 8 : 4;
     int     blocks_per_depth = (sb_size / min_bsize) * (sb_size / min_bsize);
     int     blocks_to_alloc  = 0;
 

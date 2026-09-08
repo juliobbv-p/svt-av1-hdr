@@ -4176,6 +4176,10 @@ static void set_param_based_on_input(SequenceControlSet* scs) {
         disallow_4x4 = svt_aom_get_disallow_4x4_default(scs->static_config.enc_mode);
         disallow_8x8 = svt_aom_get_disallow_8x8_default();
     }
+    if (scs->static_config.encoder_color_format == EB_YUV444) {
+        // QP 0 can require 4x4 coding blocks regardless of the preset.
+        disallow_4x4 = disallow_8x8 = false;
+    }
     if (scs->super_block_size == 128) {
         if (!allow_HVA_HVB && disallow_4x4) {
             scs->svt_aom_geom_idx = GEOM_10;
@@ -4842,7 +4846,7 @@ static void copy_api_from_app(SequenceControlSet* scs, EbSvtAv1EncConfiguration*
         scs->static_config.enable_qm               = 1;
         scs->static_config.min_qm_level            = 4;
         scs->static_config.max_qm_level            = 10;
-        scs->static_config.min_chroma_qm_level     = 4;
+        scs->static_config.min_chroma_qm_level     = scs->allintra && scs->chroma_format_idc == EB_YUV444 ? 2 : 4;
         scs->static_config.max_chroma_qm_level     = 10;
         scs->static_config.sharpness               = 7;
         scs->static_config.enable_variance_boost   = 1;
@@ -4855,7 +4859,7 @@ static void copy_api_from_app(SequenceControlSet* scs, EbSvtAv1EncConfiguration*
         scs->static_config.enable_qm               = 1;
         scs->static_config.min_qm_level            = 4;
         scs->static_config.max_qm_level            = 10;
-        scs->static_config.min_chroma_qm_level     = 4;
+        scs->static_config.min_chroma_qm_level     = scs->allintra && scs->chroma_format_idc == EB_YUV444 ? 2 : 4;
         scs->static_config.max_chroma_qm_level     = 10;
         scs->static_config.sharpness               = 7;
         scs->static_config.enable_variance_boost   = 1;

@@ -167,7 +167,7 @@ void svt_av1_build_quantizer(PictureParentControlSet* pcs, EbBitDepth bit_depth,
             quants->u_zbin[q][i]        = quants->u_zbin[q][1];
             quants->u_round[q][i]       = quants->u_round[q][1];
             deq->u_dequant_qtx[q][i]    = deq->u_dequant_qtx[q][1];
-            quants->v_quant[q][i]       = quants->u_quant[q][1];
+            quants->v_quant[q][i]       = quants->v_quant[q][1];
             quants->v_quant_fp[q][i]    = quants->v_quant_fp[q][1];
             quants->v_round_fp[q][i]    = quants->v_round_fp[q][1];
             quants->v_quant_shift[q][i] = quants->v_quant_shift[q][1];
@@ -210,6 +210,32 @@ static INLINE int svt_av1_still_get_qmlevel(int qindex, int min, int max) {
 
     // Clamp the result to the (min, max)
     return CLIP3(min, max, qm_level);
+}
+
+// libaom's aom_get_qmlevel_444_chroma: full-resolution chroma needs steeper
+// matrices than subsampled chroma. Retain the configured level bounds.
+static INLINE int svt_av1_still_get_chroma_qmlevel_444(int qindex, int min, int max) {
+    int level;
+    if (qindex <= 12) {
+        level = 10;
+    } else if (qindex <= 24) {
+        level = 9;
+    } else if (qindex <= 32) {
+        level = 8;
+    } else if (qindex <= 36) {
+        level = 7;
+    } else if (qindex <= 44) {
+        level = 6;
+    } else if (qindex <= 48) {
+        level = 5;
+    } else if (qindex <= 56) {
+        level = 4;
+    } else if (qindex <= 88) {
+        level = 3;
+    } else {
+        level = 2;
+    }
+    return CLIP3(min, max, level);
 }
 
 static void svt_av1_qm_init(PictureParentControlSet* pcs) {
@@ -258,18 +284,23 @@ static void svt_av1_qm_init(PictureParentControlSet* pcs) {
 
         switch (pcs->scs->static_config.tune) {
         case TUNE_IQ:
-        case TUNE_MS_SSIM:
+        case TUNE_MS_SSIM: {
+            int (*get_chroma_qmlevel)(int, int, int)     = pcs->scs->allintra &&
+                    pcs->scs->static_config.encoder_color_format == EB_YUV444
+                    ? svt_av1_still_get_chroma_qmlevel_444
+                    : svt_av1_still_get_qmlevel;
             pcs->frm_hdr.quantization_params.qm[PLANE_Y] = svt_av1_still_get_qmlevel(
                 base_qindex, min_qmlevel, max_qmlevel);
-            pcs->frm_hdr.quantization_params.qm[PLANE_U] = svt_av1_still_get_qmlevel(
+            pcs->frm_hdr.quantization_params.qm[PLANE_U] = get_chroma_qmlevel(
                 base_qindex + pcs->frm_hdr.quantization_params.delta_q_ac[PLANE_U],
                 min_chroma_qmlevel,
                 max_chroma_qmlevel);
-            pcs->frm_hdr.quantization_params.qm[PLANE_V] = svt_av1_still_get_qmlevel(
+            pcs->frm_hdr.quantization_params.qm[PLANE_V] = get_chroma_qmlevel(
                 base_qindex + pcs->frm_hdr.quantization_params.delta_q_ac[PLANE_V],
                 min_chroma_qmlevel,
                 max_chroma_qmlevel);
             break;
+        }
         default:
             pcs->frm_hdr.quantization_params.qm[PLANE_Y] = aom_get_qmlevel(base_qindex, min_qmlevel, max_qmlevel);
             pcs->frm_hdr.quantization_params.qm[PLANE_U] = aom_get_qmlevel(
@@ -1033,6 +1064,8 @@ EbErrorType svt_aom_mode_decision_configuration_kernel_iter(void* context) {
 #endif
 
     if (frm_hdr->coded_lossless) {
+        // The decoder does not apply quantization matrices to lossless segments.
+        frm_hdr->quantization_params.using_qmatrix        = 0;
         pcs->ppcs->frm_hdr.delta_q_params.delta_q_present = 0;
         frm_hdr->quantization_params.delta_q_dc[PLANE_Y]  = 0;
         frm_hdr->quantization_params.delta_q_ac[PLANE_U]  = 0;
@@ -1050,7 +1083,10 @@ EbErrorType svt_aom_mode_decision_configuration_kernel_iter(void* context) {
     // The following shortcuts are necessary to enforce the use of block_4x4, block_8x8, and Tx_4x4,
     // these cannot be controlled at the block level, so they are invoked even if only one segment is marked as lossless
     if (frm_hdr->coded_lossless /*|| (frm_hdr->segmentation_params.segmentation_enabled && has_lossless_segment)*/) {
-        pcs->mimic_only_tx_4x4                      = 1;
+        pcs->mimic_only_tx_4x4 = 1;
+        if (!scs->subsampling_x) {
+            pcs->pic_disallow_4x4 = false;
+        }
         frm_hdr->tx_mode                            = TX_MODE_SELECT;
         pcs->pic_depth_removal_level                = 0;
         pcs->pic_block_based_depth_refinement_level = 0;

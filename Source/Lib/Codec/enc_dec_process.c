@@ -1526,7 +1526,10 @@ static void set_blocks_to_be_tested(SequenceControlSet* scs, PictureControlSet* 
                             : 4;
     int max_sq_size = ctx->max_block_size;
     if (pcs->mimic_only_tx_4x4) {
-        max_sq_size = MIN(max_sq_size, 8);
+        // Chroma uses the maximum transform for each coding block. With
+        // full-resolution chroma, a 4x4 block is needed for lossless coding.
+        max_sq_size = MIN(max_sq_size, 4 << scs->subsampling_x);
+        min_sq_size = MIN(min_sq_size, max_sq_size);
     } else if (scs->static_config.max_tx_size == 32) {
         max_sq_size = MIN(max_sq_size, 32);
     } else if (pcs->slice_type == I_SLICE) {

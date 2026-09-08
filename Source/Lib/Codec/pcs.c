@@ -1057,12 +1057,18 @@ static EbErrorType picture_control_set_ctor(PictureControlSet* object_ptr, EbPtr
         : rtc_tune          ? MIN(disallow_4x4, svt_aom_get_disallow_4x4_rtc())
                             : MIN(disallow_4x4, svt_aom_get_disallow_4x4_default(init_data_ptr->enc_mode));
 
+    if (init_data_ptr->color_format == EB_YUV444) {
+        disallow_4x4 = false;
+    }
     object_ptr->disallow_4x4_all_frames = disallow_4x4;
     disallow_8x8                        = allintra ? MIN(disallow_8x8, svt_aom_get_disallow_8x8_allintra())
                                : rtc_tune          ? MIN(disallow_8x8,
                          svt_aom_get_disallow_8x8_rtc(
                              init_data_ptr->enc_mode, init_data_ptr->picture_width, init_data_ptr->picture_height))
                                                    : MIN(disallow_8x8, svt_aom_get_disallow_8x8_default());
+    if (init_data_ptr->color_format == EB_YUV444) {
+        disallow_8x8 = false;
+    }
     object_ptr->disallow_8x8_all_frames = disallow_8x8;
     /* If 4x4 blocks are disallowed for all frames, the the MI blocks only need to be allocated for
     8x8 blocks.  The mi_grid will still be 4x4 so that the data can be accessed the same way throughout

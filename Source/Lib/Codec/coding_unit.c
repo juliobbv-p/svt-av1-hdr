@@ -92,6 +92,9 @@ EbErrorType svt_aom_largest_coding_unit_ctor(SuperBlock* larget_coding_unit_ptr,
     bool     disallow_8x8 = allintra ? svt_aom_get_disallow_8x8_allintra()
             : rtc                    ? svt_aom_get_disallow_8x8_rtc(enc_mode, pcs->frame_width, pcs->frame_height)
                                      : svt_aom_get_disallow_8x8_default();
+    if (pcs->color_format == EB_YUV444) {
+        disallow_4x4 = disallow_8x8 = false;
+    }
     uint32_t tot_blk_num;
     if (sb_size_pix == 128) {
         if (disallow_8x8 && disallow_sub_16x16_nsq) {
