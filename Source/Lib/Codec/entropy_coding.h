@@ -114,6 +114,7 @@ static INLINE TxSize get_txsize_entropy_ctx(TxSize txsize) {
 //*******************************************************************************************//
 // bitwriter_buffer.h
 typedef struct AomWriteBitBuffer {
+    // NULL counts bits without writing, for capacity measurement.
     uint8_t* bit_buffer;
     uint32_t bit_offset;
 } AomWriteBitBuffer;

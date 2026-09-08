@@ -1303,6 +1303,10 @@ uint32_t svt_aom_wb_bytes_written(const AomWriteBitBuffer* wb) {
 }
 
 INLINE static void svt_aom_wb_write_bit_inlined(AomWriteBitBuffer* wb, int32_t bit) {
+    if (!wb->bit_buffer) {
+        ++wb->bit_offset;
+        return;
+    }
     const int32_t off = (int32_t)wb->bit_offset;
     const int32_t p   = off / CHAR_BIT;
     const int32_t q   = CHAR_BIT - 1 - off % CHAR_BIT;
@@ -1317,6 +1321,10 @@ INLINE static void svt_aom_wb_write_bit_inlined(AomWriteBitBuffer* wb, int32_t b
 }
 
 INLINE static void svt_aom_wb_write_literal_inlined(AomWriteBitBuffer* wb, int32_t data, int32_t bits) {
+    if (!wb->bit_buffer) {
+        wb->bit_offset += bits;
+        return;
+    }
     int32_t bit;
     for (bit = bits - 1; bit >= 0; bit--) {
         svt_aom_wb_write_bit(wb, (data >> bit) & 1);
@@ -3758,6 +3766,16 @@ static uint32_t write_frame_header_obu(SequenceControlSet* scs, PictureParentCon
     return total_size;
 }
 
+// Reserve before writing headers: tiny pictures may start with only a few bytes.
+static EbErrorType reserve_obu_buffer(OutputBitstreamUnit* output, uint32_t obu_size) {
+    const uint64_t used   = output->buffer_begin_av1 ? (uint64_t)(output->buffer_av1 - output->buffer_begin_av1) : 0;
+    const uint64_t needed = used + obu_size;
+    if (needed > UINT32_MAX) {
+        return EB_ErrorInsufficientResources;
+    }
+    return needed > output->size ? svt_realloc_output_bitstream_unit(output, (uint32_t)needed) : EB_ErrorNone;
+}
+
 EbErrorType svt_aom_write_metadata_av1(Bitstream* bitstream_ptr, SvtMetadataArrayT* metadata,
                                        const EbAv1MetadataType type) {
     EbErrorType return_error = EB_ErrorNone;
@@ -3766,18 +3784,25 @@ EbErrorType svt_aom_write_metadata_av1(Bitstream* bitstream_ptr, SvtMetadataArra
     }
 
     OutputBitstreamUnit* output_bitstream_ptr = (OutputBitstreamUnit*)bitstream_ptr->output_bitstream_ptr;
-    uint8_t*             data                 = output_bitstream_ptr->buffer_av1;
 
     for (size_t i = 0; i < metadata->sz; i++) {
         SvtMetadataT* current_metadata = metadata->metadata_array[i];
         if (current_metadata && current_metadata->payload && current_metadata->type == type) {
-            // Phase 1: measure header + payload sizes
-            uint32_t obu_header_size   = write_obu_header(OBU_METADATA, 0, data);
-            uint32_t obu_payload_size  = write_obu_metadata(current_metadata, data + obu_header_size);
+            // Metadata has a one-byte type and one byte of trailing bits.
+            if (current_metadata->sz > UINT32_MAX - 16) {
+                return EB_ErrorInsufficientResources;
+            }
+            uint32_t obu_header_size   = write_obu_header(OBU_METADATA, 0, NULL);
+            uint32_t obu_payload_size  = (uint32_t)current_metadata->sz + 2;
             size_t   length_field_size = svt_aom_uleb_size_in_bytes(obu_payload_size);
+            uint32_t total_size        = obu_header_size + (uint32_t)length_field_size + obu_payload_size;
+            return_error               = reserve_obu_buffer(output_bitstream_ptr, total_size);
+            if (return_error != EB_ErrorNone) {
+                return return_error;
+            }
+            uint8_t* data = output_bitstream_ptr->buffer_av1;
 
-            // Phase 2: write at correct offsets (re-write payload after LEB128)
-            // OBU header already at data[0]
+            write_obu_header(OBU_METADATA, 0, data);
             size_t  coded_size;
             int32_t ret = svt_aom_uleb_encode(
                 obu_payload_size, sizeof(obu_payload_size), data + obu_header_size, &coded_size);
@@ -3787,10 +3812,9 @@ EbErrorType svt_aom_write_metadata_av1(Bitstream* bitstream_ptr, SvtMetadataArra
             }
             write_obu_metadata(current_metadata, data + obu_header_size + length_field_size);
 
-            data += obu_header_size + length_field_size + obu_payload_size;
+            output_bitstream_ptr->buffer_av1 = data + total_size;
         }
     }
-    output_bitstream_ptr->buffer_av1 = data;
     return return_error;
 }
 
@@ -3804,17 +3828,15 @@ EbErrorType svt_aom_write_frame_header_av1(Bitstream* bitstream_ptr, SequenceCon
     PictureParentControlSet* ppcs                 = pcs->ppcs;
     Av1Common* const         cm                   = ppcs->av1_cm;
     uint16_t                 tile_cnt             = cm->tiles_info.tile_rows * cm->tiles_info.tile_cols;
-    uint8_t*                 data                 = output_bitstream_ptr->buffer_av1;
 
     ObuType obu_type                        = show_existing ? OBU_FRAME_HEADER : OBU_FRAME;
     int     n_log2_tiles                    = ppcs->av1_cm->log2_tile_rows + ppcs->av1_cm->log2_tile_cols;
     int     tile_start_and_end_present_flag = 0;
 
-    // Phase 1: Measure header sizes by writing to data (will be overwritten in phase 2).
-    uint32_t obu_header_size = write_obu_header(obu_type, 0, data);
-    uint32_t frame_hdr_size  = write_frame_header_obu(scs, ppcs, data + obu_header_size, show_existing, show_existing);
-    uint32_t tg_hdr_size     = write_tile_group_header(
-        data + obu_header_size + frame_hdr_size, 0, 0, n_log2_tiles, tile_start_and_end_present_flag);
+    // Measure without writing into a buffer whose capacity is not yet known.
+    uint32_t obu_header_size  = write_obu_header(obu_type, 0, NULL);
+    uint32_t frame_hdr_size   = write_frame_header_obu(scs, ppcs, NULL, show_existing, show_existing);
+    uint32_t tg_hdr_size      = write_tile_group_header(NULL, 0, 0, n_log2_tiles, tile_start_and_end_present_flag);
     uint32_t hdr_payload_size = frame_hdr_size + tg_hdr_size;
 
     // Compute tile data size (tile size prefixes + tile data).
@@ -3834,15 +3856,14 @@ EbErrorType svt_aom_write_frame_header_av1(Bitstream* bitstream_ptr, SequenceCon
 
     // Ensure buffer is large enough for the complete OBU.
     uint32_t total_obu_size = obu_header_size + (uint32_t)length_field_size + obu_payload_size;
-    uint32_t buf_needed     = total_obu_size +
-        (uint32_t)(output_bitstream_ptr->buffer_av1 - output_bitstream_ptr->buffer_begin_av1);
-    if (output_bitstream_ptr->size < buf_needed) {
-        svt_realloc_output_bitstream_unit(output_bitstream_ptr, buf_needed + 1);
-        data = output_bitstream_ptr->buffer_av1;
+    return_error            = reserve_obu_buffer(output_bitstream_ptr, total_obu_size);
+    if (return_error != EB_ErrorNone) {
+        return return_error;
     }
+    uint8_t* data = output_bitstream_ptr->buffer_av1;
 
     // Phase 2: Write everything at the correct offsets — no memmove needed.
-    // OBU header is already at data[0] from phase 1 (same content, same position).
+    write_obu_header(obu_type, 0, data);
 
     // LEB128 size field right after OBU header.
     size_t coded_size;
@@ -3882,15 +3903,21 @@ EbErrorType svt_aom_write_frame_header_av1(Bitstream* bitstream_ptr, SequenceCon
 EbErrorType svt_aom_encode_sps_av1(Bitstream* bitstream_ptr, SequenceControlSet* scs) {
     EbErrorType          return_error             = EB_ErrorNone;
     OutputBitstreamUnit* output_bitstream_ptr     = (OutputBitstreamUnit*)bitstream_ptr->output_bitstream_ptr;
-    uint8_t*             data                     = output_bitstream_ptr->buffer_av1;
     const uint8_t        enhancement_layers_count = 0; // cm->enhancement_layers_count;
 
     // Phase 1: measure
-    uint32_t obu_header_size   = write_obu_header(OBU_SEQUENCE_HEADER, 0, data);
-    uint32_t obu_payload_size  = write_sequence_header_obu(scs, data + obu_header_size, enhancement_layers_count);
+    uint32_t obu_header_size   = write_obu_header(OBU_SEQUENCE_HEADER, 0, NULL);
+    uint32_t obu_payload_size  = write_sequence_header_obu(scs, NULL, enhancement_layers_count);
     size_t   length_field_size = svt_aom_uleb_size_in_bytes(obu_payload_size);
+    return_error               = reserve_obu_buffer(output_bitstream_ptr,
+                                      obu_header_size + (uint32_t)length_field_size + obu_payload_size);
+    if (return_error != EB_ErrorNone) {
+        return return_error;
+    }
+    uint8_t* data = output_bitstream_ptr->buffer_av1;
 
-    // Phase 2: write at correct offsets (re-write payload after LEB128)
+    // Phase 2: write after reserving the complete OBU.
+    write_obu_header(OBU_SEQUENCE_HEADER, 0, data);
     size_t  coded_size;
     int32_t ret = svt_aom_uleb_encode(obu_payload_size, sizeof(obu_payload_size), data + obu_header_size, &coded_size);
     assert(ret == 0 && coded_size == length_field_size);

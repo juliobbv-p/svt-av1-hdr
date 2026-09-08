@@ -64,8 +64,11 @@ EbErrorType svt_aom_output_bitstream_reset(OutputBitstreamUnit* bitstream_ptr) {
 EbErrorType svt_realloc_output_bitstream_unit(OutputBitstreamUnit* output_bitstream_ptr, uint32_t sz) {
     if (output_bitstream_ptr && sz > 0) {
         // Must add offset to realloc'd buffer to save any previously written bits
-        uint64_t offset = output_bitstream_ptr->buffer_av1 - output_bitstream_ptr->buffer_begin_av1;
-        assert(output_bitstream_ptr->buffer_av1 >= output_bitstream_ptr->buffer_begin_av1);
+        uint64_t offset = output_bitstream_ptr->buffer_begin_av1
+            ? (uint64_t)(output_bitstream_ptr->buffer_av1 - output_bitstream_ptr->buffer_begin_av1)
+            : 0;
+        assert(!output_bitstream_ptr->buffer_begin_av1 ||
+               output_bitstream_ptr->buffer_av1 >= output_bitstream_ptr->buffer_begin_av1);
         output_bitstream_ptr->size = sz;
         EB_REALLOC_ARRAY(output_bitstream_ptr->buffer_begin_av1, output_bitstream_ptr->size);
         output_bitstream_ptr->buffer_av1 = output_bitstream_ptr->buffer_begin_av1 + offset;
