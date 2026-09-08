@@ -42,6 +42,7 @@ if(CMAKE_C_COMPILER_ID STREQUAL "Intel")
 endif()
 
 set(all_files
+    ac_bias_avx512.c
     cdef_avx512.c
     cdef_block_avx512.c
     compute_sad_intrin_avx512.c
@@ -50,6 +51,8 @@ set(all_files
     copy_wxh_avx512.c
     convolve_avx512.h
     encodetxb_avx512.c
+    hadamard_path_avx512.c
+    hadamard_path_avx512.h
     highbd_fwd_txfm_AVX512.c
     lowbd_fwd_txfm2d_avx512.c
     highbd_intra_pred_avx512.c

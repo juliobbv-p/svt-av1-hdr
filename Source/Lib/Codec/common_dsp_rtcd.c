@@ -436,6 +436,7 @@ EbCpuFlags svt_aom_get_cpu_flags_to_use() { return 0; }
     } while (0)
 
 #ifdef ARCH_X86_64
+#define SET_AVX512(ptr, c, avx512)                            SET_FUNCTIONS(ptr, c, 0, 0, 0, 0, 0, 0, 0, 0, 0, avx512)
 #define SET_SSE2(ptr, c, sse2)                                  SET_FUNCTIONS_AVX2(ptr, c, 0, 0, sse2, 0, 0, 0, 0, 0, 0, 0)
 #define SET_SSE2_AVX2(ptr, c, sse2, avx2)                       SET_FUNCTIONS_AVX2(ptr, c, 0, 0, sse2, 0, 0, 0, 0, 0, avx2, 0)
 #define SET_SSE2_AVX512(ptr, c, sse2, avx512)                   SET_FUNCTIONS_AVX2(ptr, c, 0, 0, sse2, 0, 0, 0, 0, 0, 0, avx512)
@@ -1075,20 +1076,20 @@ void svt_aom_setup_common_rtcd_internal(EbCpuFlags flags) {
     SET_AVX2(svt_aom_hadamard_16x16, svt_aom_hadamard_16x16_c, svt_aom_hadamard_16x16_avx2);
     SET_SSE2(svt_aom_hadamard_8x8, svt_aom_hadamard_8x8_c, svt_aom_hadamard_8x8_sse2);
     SET_SSE2(svt_aom_hadamard_4x4, svt_aom_hadamard_4x4_c, svt_aom_hadamard_4x4_sse2);
-    SET_ONLY_C(svt_av1_hadamard_satd_32x32, svt_av1_hadamard_satd_32x32_c);
-    SET_ONLY_C(svt_av1_hadamard_satd_16x16, svt_av1_hadamard_satd_16x16_c);
-    SET_ONLY_C(svt_av1_hadamard_satd_8x8, svt_av1_hadamard_satd_8x8_c);
-    SET_ONLY_C(svt_av1_hadamard_satd_4x4, svt_av1_hadamard_satd_4x4_c);
-    SET_ONLY_C(svt_psy_distortion, svt_psy_distortion_c);
+    SET_AVX2_AVX512(svt_av1_hadamard_satd_32x32, svt_av1_hadamard_satd_32x32_c, svt_av1_hadamard_satd_32x32_avx2, svt_av1_hadamard_satd_32x32_avx512);
+    SET_AVX2_AVX512(svt_av1_hadamard_satd_16x16, svt_av1_hadamard_satd_16x16_c, svt_av1_hadamard_satd_16x16_avx2, svt_av1_hadamard_satd_16x16_avx512);
+    SET_AVX2_AVX512(svt_av1_hadamard_satd_8x8, svt_av1_hadamard_satd_8x8_c, svt_av1_hadamard_satd_8x8_avx2, svt_av1_hadamard_satd_8x8_avx512);
+    SET_AVX2_AVX512(svt_av1_hadamard_satd_4x4, svt_av1_hadamard_satd_4x4_c, svt_av1_hadamard_satd_4x4_avx2, svt_av1_hadamard_satd_4x4_avx512);
+    SET_AVX2_AVX512(svt_psy_distortion, svt_psy_distortion_c, svt_psy_distortion_avx2, svt_psy_distortion_avx512);
 #if CONFIG_ENABLE_HIGH_BIT_DEPTH
     SET_ONLY_C(svt_aom_highbd_hadamard_32x32, svt_aom_highbd_hadamard_32x32_c);
     SET_ONLY_C(svt_aom_highbd_hadamard_16x16, svt_aom_highbd_hadamard_16x16_c);
     SET_AVX2(svt_aom_highbd_hadamard_8x8, svt_aom_highbd_hadamard_8x8_c, svt_aom_highbd_hadamard_8x8_avx2);
-    SET_ONLY_C(svt_av1_highbd_hadamard_satd_32x32, svt_av1_highbd_hadamard_satd_32x32_c);
-    SET_ONLY_C(svt_av1_highbd_hadamard_satd_16x16, svt_av1_highbd_hadamard_satd_16x16_c);
-    SET_ONLY_C(svt_av1_highbd_hadamard_satd_8x8, svt_av1_highbd_hadamard_satd_8x8_c);
-    SET_ONLY_C(svt_av1_highbd_hadamard_satd_4x4, svt_av1_highbd_hadamard_satd_4x4_c);
-    SET_ONLY_C(svt_psy_distortion_hbd, svt_psy_distortion_hbd_c);
+    SET_AVX2_AVX512(svt_av1_highbd_hadamard_satd_32x32, svt_av1_highbd_hadamard_satd_32x32_c, svt_av1_highbd_hadamard_satd_32x32_avx2, svt_av1_highbd_hadamard_satd_32x32_avx512);
+    SET_AVX2_AVX512(svt_av1_highbd_hadamard_satd_16x16, svt_av1_highbd_hadamard_satd_16x16_c, svt_av1_highbd_hadamard_satd_16x16_avx2, svt_av1_highbd_hadamard_satd_16x16_avx512);
+    SET_AVX2_AVX512(svt_av1_highbd_hadamard_satd_8x8, svt_av1_highbd_hadamard_satd_8x8_c, svt_av1_highbd_hadamard_satd_8x8_avx2, svt_av1_highbd_hadamard_satd_8x8_avx512);
+    SET_AVX2_AVX512(svt_av1_highbd_hadamard_satd_4x4, svt_av1_highbd_hadamard_satd_4x4_c, svt_av1_highbd_hadamard_satd_4x4_avx2, svt_av1_highbd_hadamard_satd_4x4_avx512);
+    SET_AVX2_AVX512(svt_psy_distortion_hbd, svt_psy_distortion_hbd_c, svt_psy_distortion_hbd_avx2, svt_psy_distortion_hbd_avx512);
 #endif
 
 #elif defined ARCH_AARCH64
