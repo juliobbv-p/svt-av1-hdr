@@ -524,7 +524,9 @@ static EbErrorType load_default_buffer_configuration_settings(SequenceControlSet
         scs->picture_control_set_pool_init_count       = 4;
         scs->pa_reference_picture_buffer_init_count    = 4;
         scs->tpl_reference_picture_buffer_init_count   = 0;
-        scs->output_recon_buffer_fifo_init_count       = 1;
+        // The single-thread dispatcher must queue both the image and recon EOS
+        // before returning control to the application to drain either buffer.
+        scs->output_recon_buffer_fifo_init_count       = scs->lp == 1 ? 2 : 1;
         scs->reference_picture_buffer_init_count       = 2;
         scs->picture_control_set_pool_init_count_child = 1;
         scs->enc_dec_pool_init_count                   = 1;
