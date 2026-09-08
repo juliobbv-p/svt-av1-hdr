@@ -113,6 +113,9 @@ typedef struct OdEcEnc {
     unsigned char* buf;
     /*Write pointer: next byte to write. Invariant: ptr = buf + (bytes written).*/
     unsigned char* ptr;
+    /*Allocation limit and owner, including room for full-width byte flushes.*/
+    unsigned char*       end;
+    OutputBitstreamUnit* buffer_parent;
 #if OD_MEASURE_EC_OVERHEAD
     double entropy;
     int    nb_symbols;
@@ -223,22 +226,21 @@ typedef struct AomWriter {
     OdEcEnc  ec;
     uint32_t allow_update_cdf;
     uint32_t pos;
-    // save a pointer to the container holding the buffer, in case the buffer must be resized
-    OutputBitstreamUnit* buffer_parent;
 } AomWriter;
 
 static INLINE void aom_start_encode(AomWriter* br, OutputBitstreamUnit* source) {
-    br->buffer_parent = source;
-    br->pos           = 0;
+    br->ec.buffer_parent = source;
+    br->pos              = 0;
     // Borrow tile buffer: EC writes directly to OutputBitstreamUnit's buffer
     br->ec.buf = source->buffer_begin_av1;
+    br->ec.end = br->ec.buf ? br->ec.buf + source->size : NULL;
     svt_od_ec_enc_reset(&br->ec);
 }
 
 EbErrorType svt_realloc_output_bitstream_unit(OutputBitstreamUnit* output_bitstream_ptr, uint32_t sz);
 
 /*Ensures the EC buffer has at least min_free bytes of free space.
-  Reallocs through the AomWriter's buffer_parent (OutputBitstreamUnit).
+  Reallocs through the EC's buffer_parent (OutputBitstreamUnit).
   Should be called before encoding each SB.*/
 EbErrorType svt_aom_ec_ensure_capacity(AomWriter* w, uint32_t min_free);
 

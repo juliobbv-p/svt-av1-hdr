@@ -76,6 +76,27 @@ EbErrorType svt_realloc_output_bitstream_unit(OutputBitstreamUnit* output_bitstr
     return EB_ErrorNone;
 }
 
+static EbErrorType od_ec_ensure_capacity(OdEcEnc* enc, uint32_t min_free) {
+    OutputBitstreamUnit* parent = enc->buffer_parent;
+    const uint64_t       offs   = enc->buf ? (uint64_t)(enc->ptr - enc->buf) : 0;
+    const uint64_t       needed = offs + min_free;
+    if (enc->error || !parent || needed > UINT32_MAX) {
+        enc->error = -1;
+        return EB_ErrorInsufficientResources;
+    }
+    if (needed > parent->size) {
+        const EbErrorType ret = svt_realloc_output_bitstream_unit(parent, (uint32_t)needed);
+        if (ret != EB_ErrorNone) {
+            enc->error = -1;
+            return ret;
+        }
+        enc->buf = parent->buffer_begin_av1;
+        enc->ptr = enc->buf + offs;
+        enc->end = enc->buf + parent->size;
+    }
+    return EB_ErrorNone;
+}
+
 // ptr points one past the last written byte; propagate carry backward
 static inline void propagate_carry_bwd(unsigned char* ptr) {
     while (!++*--ptr) {}
@@ -111,6 +132,13 @@ static inline void propagate_carry_bwd(unsigned char* ptr) {
   pressure on the hot (no-flush) path.
   Returns the residual low value after flushing.*/
 static NOINLINE void od_ec_enc_flush(OdEcEnc* enc, OdEcWindow low, unsigned rng, int c, int d) {
+    // SB reservations are estimates. Guard the full eight-byte store even when
+    // a lossless/high-profile SB exceeds the estimate or only a few bytes remain.
+    if (EB_UNLIKELY(!enc->end || enc->end - enc->ptr < 8)) {
+        if (od_ec_ensure_capacity(enc, 4096) != EB_ErrorNone) {
+            return;
+        }
+    }
     // Need to add 1 byte here since enc->cnt always counts 1 byte less
     // (enc->cnt = -9) to ensure correct operation
     int s              = c + d;
@@ -180,7 +208,9 @@ static inline void svt_od_ec_enc_normalize(OdEcEnc* enc, OdEcWindow low, unsigne
   The EC does not own a buffer; it borrows one from the OutputBitstreamUnit
   via aom_start_encode(). This just zeroes the state.*/
 void svt_od_ec_enc_init(OdEcEnc* enc) {
-    enc->buf = NULL;
+    enc->buf           = NULL;
+    enc->end           = NULL;
+    enc->buffer_parent = NULL;
     svt_od_ec_enc_reset(enc);
 }
 
@@ -202,32 +232,18 @@ void svt_od_ec_enc_reset(OdEcEnc* enc) {
 /*Frees the buffers used by the encoder.*/
 void svt_od_ec_enc_clear(OdEcEnc* enc) {
     // EC borrows its buffer from OutputBitstreamUnit; nothing to free.
-    enc->buf = NULL;
-    enc->ptr = NULL;
+    enc->buf           = NULL;
+    enc->ptr           = NULL;
+    enc->end           = NULL;
+    enc->buffer_parent = NULL;
 }
 
 /*Ensures the EC buffer has at least min_free bytes of free space.
-  Reallocs through the AomWriter's buffer_parent (OutputBitstreamUnit)
+  Reallocs through the EC's buffer_parent (OutputBitstreamUnit)
   since EC borrows that buffer.  Should be called before encoding each SB
-  to move capacity checks out of the per-symbol hot path.*/
+  to avoid repeated growth within a SB. Byte flushing also checks capacity.*/
 EbErrorType svt_aom_ec_ensure_capacity(AomWriter* w, uint32_t min_free) {
-    EbErrorType          ret    = EB_ErrorNone;
-    OutputBitstreamUnit* parent = w->buffer_parent;
-    OdEcEnc*             enc    = &w->ec;
-    uint32_t             offs   = (uint32_t)(enc->ptr - enc->buf);
-    uint32_t             needed = offs + min_free;
-    if (needed > parent->size) {
-        // Realloc through the OutputBitstreamUnit that owns the buffer
-        ret = svt_realloc_output_bitstream_unit(parent, needed);
-        if (ret != EB_ErrorNone) {
-            enc->error = -1;
-        } else {
-            // Update EC's borrowed pointers
-            enc->buf = parent->buffer_begin_av1;
-            enc->ptr = enc->buf + offs;
-        }
-    }
-    return ret;
+    return od_ec_ensure_capacity(&w->ec, min_free);
 }
 
 /*Encode a single binary value with 1/2 probability.
@@ -310,7 +326,7 @@ void svt_od_ec_encode_cdf_q15(OdEcEnc* enc, int s, const uint16_t* icdf, int nsy
   Return: A pointer to the start of the final buffer, or NULL if there was an
            encoding error.*/
 unsigned char* svt_od_ec_enc_done(OdEcEnc* enc, uint32_t* nbytes) {
-    if (enc->error) {
+    if (od_ec_ensure_capacity(enc, 8) != EB_ErrorNone) {
         return NULL;
     }
 #if OD_MEASURE_EC_OVERHEAD

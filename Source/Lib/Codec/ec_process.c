@@ -202,7 +202,7 @@ EbErrorType svt_aom_entropy_coding_kernel_iter(void* context) {
                 EbPictureBufferDesc* coeff_picture_ptr = pcs->ppcs->enc_dec_ptr->quantized_coeff[sb_index];
                 context_ptr->coded_area_sb             = 0;
                 context_ptr->coded_area_sb_uv          = 0;
-                // Ensure EC buffer has room for worst-case SB output (4 bytes/pixel)
+                // Reserve typical SB output; byte flushing grows safely if needed.
                 EbErrorType ret = svt_aom_ec_ensure_capacity(&pcs->ec_info[tile_idx]->ec->ec_writer,
                                                              sb_size * sb_size * 4);
                 if (ret != EB_ErrorNone) {
