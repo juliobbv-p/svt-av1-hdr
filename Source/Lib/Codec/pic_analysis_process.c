@@ -1840,6 +1840,12 @@ static void vmaf_unsharp_apply_frame(const uint8_t* src, const uint8_t* blur_pla
  *
  ********************************************************************************/
 static void vmaf_preprocess_frame(PictureAnalysisContext* pa_ctx, PictureParentControlSet* pcs) {
+    const EbSvtAv1EncConfiguration* config = &pcs->scs->static_config;
+    pcs->vmaf_sharpening_amount            = 0;
+    // Sharpening modifies the source and must not run for lossless coding.
+    if (config->lossless || (config->rate_control_mode == 0 && config->qp == 0 && !config->use_qp_file)) {
+        return;
+    }
     EbPictureBufferDesc* pic_ptr    = pcs->enhanced_pic;
     const int            pic_width  = pic_ptr->width;
     const int            pic_height = pic_ptr->height;

@@ -181,6 +181,15 @@ void svt_av1_variance_adjust_qp(PictureControlSet* pcs) {
     PictureParentControlSet* ppcs = pcs->ppcs;
     SequenceControlSet*      scs  = ppcs->scs;
 
+    // Qindex zero must remain lossless, including during an encode-loop recode.
+    if (ppcs->frm_hdr.quantization_params.base_q_idx == 0) {
+        ppcs->frm_hdr.delta_q_params.delta_q_present = 0;
+        for (int sb_addr = 0; sb_addr < pcs->sb_total_count; ++sb_addr) {
+            pcs->sb_ptr_array[sb_addr]->qindex = 0;
+        }
+        return;
+    }
+
     ppcs->frm_hdr.delta_q_params.delta_q_present = 1;
 
     // super res pictures scaled with different sb count, should use sb_total_count for each picture
@@ -225,7 +234,7 @@ void svt_av1_variance_adjust_qp(PictureControlSet* pcs) {
 #endif
         // don't clamp qindex on valid deltaq range yet
         // we'll do it after adjusting frame qp to maximize deltaq frame range
-        // q_index 0 is lossless, and is currently not supported in SVT-AV1
+        // Do not introduce lossless superblocks into a lossy frame.
         sb_ptr->qindex = CLIP3(1, MAXQ, sb_ptr->qindex - boost);
 
         // record last seen min and max qindexes for frame qp readjusting
@@ -260,7 +269,7 @@ void svt_av1_variance_adjust_qp(PictureControlSet* pcs) {
         offset     = AOMMIN(offset, VAR_BOOST_MAX_DELTAQ_RANGE >> 1);
         offset     = AOMMAX(offset, -VAR_BOOST_MAX_DELTAQ_RANGE >> 1);
 
-        // q_index 0 is lossless, and is currently not supported in SVT-AV1
+        // Do not introduce lossless superblocks into a lossy frame.
         uint8_t normalized_qindex = CLIP3(1, MAXQ, normalized_base_q_idx + offset);
 #if DEBUG_VAR_BOOST_STATS
         SVT_DEBUG("%4d ", normalized_qindex);
@@ -511,6 +520,9 @@ static void sb_setup_lambda(PictureControlSet* pcs, SuperBlock* sb_ptr) {
 void svt_aom_sb_qp_derivation_tpl_la(PictureControlSet* pcs) {
     PictureParentControlSet* ppcs = pcs->ppcs;
     SequenceControlSet*      scs  = ppcs->scs;
+    if (ppcs->frm_hdr.quantization_params.base_q_idx == 0) {
+        return;
+    }
     if (ppcs->r0_delta_qp_quant) {
         ppcs->frm_hdr.delta_q_params.delta_q_present = 1;
     }
@@ -597,6 +609,13 @@ void svt_av1_rc_init_sb_qindex(PictureControlSet* pcs, SequenceControlSet* scs) 
     FrameHeader*             frm_hdr = &ppcs->frm_hdr;
 
     frm_hdr->delta_q_params.delta_q_present = 0;
+
+    if (frm_hdr->quantization_params.base_q_idx == 0) {
+        for (int sb_addr = 0; sb_addr < pcs->sb_total_count; ++sb_addr) {
+            pcs->sb_ptr_array[sb_addr]->qindex = 0;
+        }
+        return;
+    }
 
     // cyclic refresh is mutually exclusive with other AQ modes and overrides SB qindexes
     // as it is attempted always in CBR mode - make it consistent and not mix with other AQ

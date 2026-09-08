@@ -1834,8 +1834,9 @@ static void encode_b(PictureControlSet* pcs, EncDecContext* ctx, BlkStruct* blk_
 
     /* ED should use the skip decision from MD. If MD signals 0 coeffs, the TX will
     be bypassed unless MD did not perform chroma (blk_skip_decision) or the block is an
-    INTRA block (since the prediction at MD may not be conformant). */
-    ctx->md_skip_blk         = md_ctx->blk_skip_decision
+    INTRA block (since the prediction at MD may not be conformant). Lossless coding
+    must recompute the residual: 8-bit MD may miss nonzero low bits of 10-bit input. */
+    ctx->md_skip_blk         = !svt_av1_is_lossless_segment(pcs, blk_ptr->segment_id) && md_ctx->blk_skip_decision
                 ? ((is_intra_mode(blk_ptr->block_mi.mode) || blk_ptr->block_has_coeff) ? 0 : 1)
                 : 0;
     blk_ptr->block_has_coeff = 0;

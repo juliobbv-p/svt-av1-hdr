@@ -360,6 +360,7 @@ static int32_t av1_write_coeffs_txb_1d(PictureParentControlSet* ppcs, FRAME_CONT
     int32_t      c;
     const TxSize txs_ctx = get_txsize_entropy_ctx(tx_size);
     TxType       tx_type = component_type == COMPONENT_LUMA ? blk_ptr->tx_type[txb_index] : blk_ptr->tx_type_uv;
+    assert(!ppcs->frm_hdr.coded_lossless || (tx_type == DCT_DCT && tx_size == TX_4X4));
 
     assert(txs_ctx < TX_SIZES);
 

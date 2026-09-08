@@ -3321,8 +3321,10 @@ static void derive_vq_params(SequenceControlSet* scs) {
  */
 static void derive_tf_params(SequenceControlSet* scs) {
     const uint32_t hierarchical_levels = scs->static_config.hierarchical_levels;
-    // Do not perform TF if LD or 1 Layer or 1st pass
-    const bool    do_tf    = scs->static_config.enable_tf && hierarchical_levels >= 1 && !scs->static_config.lossless;
+    // Filtering changes the source even when every coded frame uses qindex zero.
+    const bool qp0 = scs->static_config.rate_control_mode == 0 && scs->static_config.qp == 0 &&
+        !scs->static_config.use_qp_file;
+    const bool do_tf = scs->static_config.enable_tf && hierarchical_levels >= 1 && !scs->static_config.lossless && !qp0;
     const EncMode enc_mode = scs->static_config.enc_mode;
     uint8_t       tf_level = 0;
     if (scs->static_config.pred_structure == LOW_DELAY) {

@@ -7209,7 +7209,11 @@ void svt_aom_sig_deriv_enc_dec_common(SequenceControlSet* scs, PictureControlSet
         : rtc_tune ? get_max_block_size_rtc(pcs, ctx)
                    : get_max_block_size_default(pcs, ctx);
     set_depth_removal_level_controls(pcs, ctx, pcs->pic_depth_removal_level);
-    if (rtc_tune) {
+    if (pcs->mimic_only_tx_4x4) {
+        // SB-level adaptation must not re-enable the light path: it assumes
+        // one luma transform and cannot split an 8x8 block into lossless 4x4 TUs.
+        set_lpd1_ctrls(ctx, 0);
+    } else if (rtc_tune) {
         int lpd1_lvl = pcs->pic_lpd1_lvl;
         // For cyclic-refresh SBs signaled by negative delta-QP, use a conservative LPD1
         if (lpd1_lvl && ctx->sb_ptr->qindex < pcs->ppcs->frm_hdr.quantization_params.base_q_idx) {
@@ -7252,7 +7256,7 @@ void svt_aom_sig_deriv_enc_dec_common(SequenceControlSet* scs, PictureControlSet
             ctx->pd1_lvl_refinement = 2;
         }
     }
-    if (!ctx->subsampling_x) {
+    if (!ctx->subsampling_x || pcs->mimic_only_tx_4x4) {
         ctx->pd1_lvl_refinement = 0;
     }
     svt_aom_set_nsq_geom_ctrls(ctx, pcs->nsq_geom_level, NULL, NULL, NULL);
