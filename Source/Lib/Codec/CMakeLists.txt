@@ -236,6 +236,7 @@ set(all_files
         ac_bias.c
         ac_bias.h
         q_matrices.h
+        qm_psnr.h
         random.h
         ransac.c
         ransac.h

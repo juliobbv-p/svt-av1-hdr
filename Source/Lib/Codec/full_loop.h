@@ -22,6 +22,17 @@
 extern "C" {
 #endif
 
+bool         svt_use_qmpsnr(PictureControlSet* pcs, ModeDecisionContext* ctx, int plane, bool tx_search);
+const QmVal* svt_get_qmpsnr_matrix(PictureControlSet* pcs, ModeDecisionContext* ctx, TxSize tx_size, TxType tx_type,
+                                   int plane, bool tx_search);
+
+// Partial transforms discard residual energy which spatial SSE measures
+// QM-PSNR needs the full coefficient region, including when the quantized EOB is zero
+static INLINE TxCoeffShape svt_get_qmpsnr_coeff_shape(PictureControlSet* pcs, ModeDecisionContext* ctx, int plane,
+                                                      TxCoeffShape shape, bool tx_search) {
+    return svt_use_qmpsnr(pcs, ctx, plane, tx_search) ? DEFAULT_SHAPE : shape;
+}
+
 void    svt_aom_full_loop_chroma_light_pd1(PictureControlSet* pcs, ModeDecisionContext* ctx,
                                            ModeDecisionCandidateBuffer* cand_bf, EbPictureBufferDesc* input_pic,
                                            uint32_t input_cb_origin_in_index, uint32_t blk_chroma_origin_index,

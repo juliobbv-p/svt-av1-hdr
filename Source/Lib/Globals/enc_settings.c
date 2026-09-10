@@ -981,6 +981,11 @@ EbErrorType svt_av1_verify_settings(SequenceControlSet* scs) {
         return_error = EB_ErrorBadParameter;
     }
 
+    if (config->enable_qmpsnr < -1 || config->enable_qmpsnr > 1) {
+        SVT_ERROR("Enable-qmpsnr must be -1 (automatic), 0 or 1\n");
+        return_error = EB_ErrorBadParameter;
+    }
+
     if (config->complex_hvs > 1) {
         SVT_ERROR("Complex-hvs must be between 0 and 1\n");
         return_error = EB_ErrorBadParameter;
@@ -1182,6 +1187,7 @@ EbErrorType svt_av1_set_default_params(EbSvtAv1EncConfiguration* config_ptr) {
     config_ptr->alt_ssim_tuning          = false;
     config_ptr->tx_bias                  = 0;
     config_ptr->complex_hvs              = 0;
+    config_ptr->enable_qmpsnr            = -1;
     config_ptr->noise_adaptive_filtering = 2;
     config_ptr->cdef_scaling             = 15;
     return return_error;
@@ -2563,6 +2569,7 @@ EB_API EbErrorType svt_av1_enc_parse_parameter(EbSvtAv1EncConfiguration* config_
         {"sharpness", &config_struct->sharpness},
         {"startup-qp-offset", &config_struct->startup_qp_offset},
         {"noise-size", &config_struct->noise_size},
+        {"enable-qmpsnr", &config_struct->enable_qmpsnr},
     };
 
     const size_t int8_opts_size = sizeof(int8_opts) / sizeof(int8_opts[0]);

@@ -4967,6 +4967,10 @@ static void copy_api_from_app(SequenceControlSet* scs, EbSvtAv1EncConfiguration*
     // CDEF scaling
     scs->static_config.cdef_scaling = config_struct->cdef_scaling;
 
+    // Resolve the metric after tune selection, preserving an explicit disable.
+    scs->static_config.enable_qmpsnr = config_struct->enable_qmpsnr == -1 ? scs->static_config.tune == TUNE_IQ
+                                                                          : config_struct->enable_qmpsnr;
+
     // Override settings for Still IQ tune
     if (scs->static_config.tune == TUNE_IQ) {
         SVT_WARN(

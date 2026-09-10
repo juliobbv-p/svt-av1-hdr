@@ -1182,6 +1182,14 @@ typedef struct EbSvtAv1EncConfiguration {
      */
     uint8_t noise_chroma_from_luma;
 
+    /*
+     * QM-weighted transform distortion:
+     * -1: automatic (on for tune IQ),
+     *  0: PSNR,
+     *  1: QM-PSNR.
+     * */
+    int8_t enable_qmpsnr;
+
     // clang-format off
     /* Add 128 Byte Padding to Struct to avoid changing the size of the public configuration struct */
     uint8_t padding[128
@@ -1207,6 +1215,7 @@ typedef struct EbSvtAv1EncConfiguration {
         - sizeof(bool) // color_range_provided
         - sizeof(int8_t) // noise_size
         - sizeof(uint8_t) // noise_chroma_from_luma
+        - sizeof(int8_t) // enable_qmpsnr
     ];
     // clang-format on
 } EbSvtAv1EncConfiguration;
