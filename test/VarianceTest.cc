@@ -839,6 +839,42 @@ const TestParams kArraySubpelVariance_sse2[] = {
 INSTANTIATE_TEST_SUITE_P(SSE2, SubpelVarianceTest,
                          ::testing::ValuesIn(kArraySubpelVariance_sse2));
 
+TEST(SubpelVarianceTest, Sse2HandlesUnalignedDst) {
+    constexpr int width = 16;
+    constexpr int height = 16;
+    constexpr int source_stride = width;
+    constexpr int reference_stride = width + 1;
+    const size_t dst_size = width * height + 1;
+    const size_t src_size = reference_stride * height;
+
+    uint8_t *dst_storage =
+        reinterpret_cast<uint8_t *>(svt_aom_memalign(32, dst_size));
+    uint8_t *src = reinterpret_cast<uint8_t *>(svt_aom_memalign(32, src_size));
+    ASSERT_NE(dst_storage, nullptr);
+    ASSERT_NE(src, nullptr);
+
+    uint8_t *dst = dst_storage + 1;
+    for (size_t i = 0; i < dst_size - 1; ++i) {
+        dst[i] = static_cast<uint8_t>(i * 17);
+    }
+    for (size_t i = 0; i < src_size; ++i) {
+        src[i] = static_cast<uint8_t>(i * 29);
+    }
+
+    unsigned int expected_sse;
+    unsigned int actual_sse;
+    const unsigned int expected = svt_aom_sub_pixel_variance16x16_c(
+        src, reference_stride, 0, 0, dst, source_stride, &expected_sse);
+    const unsigned int actual = svt_aom_sub_pixel_variance16x16_sse2(
+        src, reference_stride, 0, 0, dst, source_stride, &actual_sse);
+
+    EXPECT_EQ(expected_sse, actual_sse);
+    EXPECT_EQ(expected, actual);
+
+    svt_aom_free(dst_storage);
+    svt_aom_free(src);
+}
+
 const TestParams kArraySubpelVariance_ssse3[] = {
     // clang-format off
     { 7, 7, &svt_aom_sub_pixel_variance128x128_ssse3, 0,
