@@ -193,7 +193,7 @@ SECTION .text
 .x_zero_y_zero_loop:
 %if %1 == 16
   movu                 m0, [srcq]
-  mova                 m1, [dstq]
+  movu                 m1, [dstq]
 %if %2 == 1 ; avg
   pavgb                m0, [secq]
   punpckhbw            m3, m1, m5
